@@ -1,0 +1,2 @@
+Add LoadPath "%current directory%" as Local.
+Add LoadPath "/usr/lib/coq/theories/" as Coq.

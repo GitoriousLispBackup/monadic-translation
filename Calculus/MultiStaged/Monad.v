@@ -1,6 +1,7 @@
 Require Import Coq.Lists.List.
 Require Import Coq.Arith.Arith.
 Require Import Coq.Arith.MinMax.
+Require Import Coq.Bool.Bool.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import "Misc/Library".
@@ -9,6 +10,18 @@ Require Import "Calculus/Definitions".
 Require Import "Calculus/Monad".
 Require Import "Calculus/MultiStaged/Definitions".
 Require Import "Calculus/MultiStaged/Properties".
+
+(**
+  There are two kind of variables:
+  - Source variables, corresponding to variables
+  already existing in expression
+  - Hole variables, corresponding to variables
+  created to put unbox content outside expression.
+
+  hole_var and source_var enable us to have disjoint sets
+ *)
+Definition hole_var (x:nat) : nat := (2*x+1)%nat.
+Definition source_var (x:nat) : nat := (2*x)%nat.
 
 (* Monad R T <: StagedMonad (Calculus R) T. *)
 Module Type Monad (R:Replacement) (T:StagedCalculus).
@@ -38,25 +51,21 @@ Module Type Monad (R:Replacement) (T:StagedCalculus).
 
   (** Var Translation *)
   Parameter cast_var: S.var -> T.var.
-  Definition is_cast_var (x:T.var) : Prop := exists y, cast_var y = x.
 
   (** Abstract Reduction step *)
   Parameter astep : relation T.state.
 
-
   (** Substitution Properties *)
   Parameter ssubst_ret :
-    forall (n:nat) (ss:StageSet.t) (x:var) (e v:expr),
-     is_cast_var x ->
-     ssubst n ss x (ret e) v = ret (ssubst n ss x e v).
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (ret e) v = ret (ssubst n ss (cast_var x) e v).
 
   Parameter ssubst_bind :
-    forall (n:nat) (ss:StageSet.t) (x:var) (e1 v:expr) (e2: expr -> expr),
-     is_cast_var x ->
-     ((fun v2 => ssubst n ss x (e2 v2) v) = 
-       fun v2 => e2 (ssubst n ss x v2 v)) ->
-     ssubst n ss x (bind e1 e2) v = 
-       bind (ssubst n ss x e1 v) e2.
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 v:expr) (e2: expr -> expr),
+     ((fun v2 => ssubst n ss (cast_var x) (e2 v2) v) = 
+       fun v2 => e2 (ssubst n ss (cast_var x) v2 v)) ->
+     ssubst n ss (cast_var x) (bind e1 e2) v = 
+       bind (ssubst n ss (cast_var x) e1 v) e2.
 
 (*  Parameter ssubst_bind_2 :
     forall (n:nat) (ss:StageSet.t) (x:var) (e1 v:expr) (e2: expr -> expr),
@@ -64,23 +73,21 @@ Module Type Monad (R:Replacement) (T:StagedCalculus).
        bind e1 (fun v2 => e2 (ssubst n ss x v2 v)).*)
 
   Parameter ssubst_eabs :
-    forall (n:nat) (ss:StageSet.t) (x y:var) (e v:expr),
-     is_cast_var x ->
-     ssubst n ss x (cast_eabs y e) v = 
-     cast_eabs y (ssubst n (if beq_var x y 
-        then (StageSet.add n ss) else ss) x e v).
+    forall (n:nat) (ss:StageSet.t) (x y:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_eabs (cast_var y) e) v = 
+     cast_eabs (cast_var y) (ssubst n (if S.beq_var x y 
+        then (StageSet.add n ss) else ss) (cast_var x) e v).
 
   Parameter ssubst_efix :
-    forall (n:nat) (ss:StageSet.t) (x f y:var) (e v:expr),
-     is_cast_var x ->
-     ssubst n ss x (cast_efix f y e) v = 
-     cast_efix f y (ssubst n (if orb (beq_var x f) (beq_var x y) 
-        then (StageSet.add n ss) else ss) x e v).
+    forall (n:nat) (ss:StageSet.t) (x f y:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_efix (cast_var f) (cast_var y) e) v = 
+     cast_efix (cast_var f) (cast_var y) (ssubst n (if orb (S.beq_var x f) (S.beq_var x y) 
+        then (StageSet.add n ss) else ss) (cast_var x) e v).
 
   Parameter ssubst_eref :
-    forall (n:nat) (ss:StageSet.t) (x:var) (e v:expr),
-     is_cast_var x ->
-     ssubst n ss x (cast_eref e) v = cast_eref (ssubst n ss x e v).
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_eref e) v
+       = cast_eref (ssubst n ss (cast_var x) e v).
 
 End Monad.
 
@@ -98,7 +105,7 @@ Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
     match c with
     | nil => e
     | (e1, x) :: c => M.bind e1 (fun v => 
-            M.cast_eabs (M.cast_var x) (fill c v))
+            M.cast_eabs (M.cast_var (hole_var x)) (fill c v))
     end.
 
   Fixpoint merge (cs1 cs2:t_stack) :=
@@ -167,7 +174,7 @@ Module ContextExtensions (R:Replacement) (T:StagedCalculus) (M:Monad R T).
     (x:M.S.var) (c:t) (v:expr) : t :=
     match c with
     | nil => nil
-    | (eh,h) :: c => (ssubst n ss (M.cast_var x) eh v, h) ::
+    | (eh,h) :: c => (ssubst n ss (M.cast_var (hole_var x)) eh v, h) ::
         (ssubst_context n (if beq_nat x h
         then (StageSet.add n ss) else ss) x c v)
     end.
@@ -194,13 +201,15 @@ Module Translation (R:Replacement)
   Fixpoint trans (e:S.expr) : T.expr * Context.t_stack :=
     match e with
     | EConst i => (M.ret (M.cast_econst i), Context.empty)
-    | EVar y => (M.ret (M.cast_evar (M.cast_var y)), Context.empty)
+    | EVar y => (M.ret (M.cast_evar (M.cast_var (source_var y))), Context.empty)
     | EAbs y e => 
         let (e,cs) := trans e in
-        (M.ret (M.cast_eabs (M.cast_var y) e), cs)
+        (M.ret (M.cast_eabs (M.cast_var (source_var y)) e), cs)
     | EFix f y e => 
         let (e,cs) := trans e in
-        (M.ret (M.cast_efix (M.cast_var f) (M.cast_var y) e), cs)
+        (M.ret (M.cast_efix 
+            (M.cast_var (source_var f)) 
+            (M.cast_var (source_var y)) e), cs)
     | EApp e1 e2 => 
         let (e1, cs1) := trans e1 in
         let (e2, cs2) := trans e2 in
@@ -231,7 +240,7 @@ Module Translation (R:Replacement)
     | EUnbox e =>
        let (e', cs) := trans e in
        let h := M.S.fresh e in
-       (M.cast_eunbox (M.cast_evar (M.cast_var h)), ((e', h) :: nil) :: cs)
+       (M.cast_eunbox (M.cast_evar (M.cast_var (hole_var h))), ((e', h) :: nil) :: cs)
     | ERun e =>
         let (e,cs) := trans e in
         (M.bind e (fun v => M.cast_erun v), cs)
@@ -417,7 +426,7 @@ Module TranslationProperties (R:Replacement)
               (ContextExtensions.ssubst_stack 
                  (pred n) StageSet.empty h (c1' :: cs1') eh) cs2 /\
             admin
-               (M.ssubst n StageSet.empty (M.cast_var h) e1' eh) e2'
+               (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' eh) e2'
           ) /\
           (~T.svalue 0 eh -> exists eh',
             rstep (M1', eh) (M2', eh') /\
@@ -453,20 +462,17 @@ Module TranslationProperties (R:Replacement)
       split ; [trivial|].
       split ; [trivial|].
 
-      assert(M.is_cast_var (M.cast_var v0)).
-      exists v0 ; reflexivity.
-
       rewrite M.ssubst_ret, M.ssubst_eabs.
       apply Admin_ret, Admin_abs.
 
-      (* Assert to prove *)
-      assert(T.beq_var (M.cast_var v0) (M.cast_var v) = false).
-        admit.
+      assert(S.beq_var (hole_var v0) (source_var v) = false).
+        apply beq_nat_false_iff.
+        unfold hole_var, source_var.
+        omega.
 
-      rewrite H6 ; assumption.
+      simpl in H5.
+      rewrite H5 ; assumption.
       assumption.
-      assumption.
-      destruct H1 ; exists x ; assumption.
 
 
     (* Case EFix *)
@@ -489,21 +495,18 @@ Module TranslationProperties (R:Replacement)
       split ; [trivial|].
       split ; [trivial|].
 
-      assert(M.is_cast_var (M.cast_var v1)).
-        exists v1 ; reflexivity.
-
       rewrite M.ssubst_ret, M.ssubst_efix.
       apply Admin_ret, Admin_fix.
 
-      (* Assert to prove *)
-      assert(orb (T.beq_var (M.cast_var v1) (M.cast_var v)) 
-          (T.beq_var (M.cast_var v1) (M.cast_var v0)) = false).
-        admit.
-      rewrite H6 ; assumption.
+      assert(orb (S.beq_var (hole_var v1) (source_var v)) 
+          (S.beq_var (hole_var v1) (source_var v0)) = false).
+        apply orb_false_intro ; apply beq_nat_false_iff ;
+        unfold hole_var, source_var ; omega.
+
+      simpl in H5.
+      rewrite H5 ; assumption.
 
       assumption.
-      assumption.
-      destruct H1 ; exists x ; assumption.
 
     (* Case EApp *)
     admit.
@@ -545,26 +548,19 @@ Module TranslationProperties (R:Replacement)
         split ; [trivial|].
         split ; [trivial|].
 
-        assert(M.is_cast_var (M.cast_var v)).
-          exists v ; reflexivity.
-
         rewrite M.ssubst_bind.
         apply Admin_bind.
         assumption.
         intros.
         apply Admin_refl.
-        assumption.
 
         assert (
-         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var v) (M.cast_eref v2) e0) =
-         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var v) v2 e0))).
+         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) e0) =
+         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 e0))).
           apply functional_extensionality.
           intros ; apply M.ssubst_eref.
         assumption.
-        rewrite H6.
-        reflexivity.
-
-        destruct H1 ; exists x ; assumption.
+        assumption.
 
     (* Case EDeref *)
     admit.

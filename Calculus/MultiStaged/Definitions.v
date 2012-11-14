@@ -273,33 +273,6 @@ Module Calculus (Repl:Replacement) <: ReplacementCalculus Repl.
 
   Include (ReplacementCalculus Repl).
 
-(*
-  Module CRaw := CalculusRaw Repl.
-
-  Include Repl.
-  Import CRaw.
-  
-  Module MemoryType := MemoryType.
-  Module Memory := Memory.
-
-  Definition var := var.
-  Definition const := const.
-  Definition location := location.
-  Definition expr := expr.
-
-  Definition svalue := svalue.
-  Definition ssticks := ssticks.
-
-  Definition state := state.
-
-  Definition ssubst := ssubst.
-  Definition sstep := sstep.
-
-  Definition depth := depth.
-  Definition fresh := fresh.
-
-  Definition beq_var := beq_nat.
-  *)
 End Calculus.
 
 (** * Lisp-Like Calculus *)

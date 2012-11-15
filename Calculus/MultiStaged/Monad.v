@@ -2,6 +2,7 @@ Require Import Coq.Lists.List.
 Require Import Coq.Arith.Arith.
 Require Import Coq.Arith.MinMax.
 Require Import Coq.Bool.Bool.
+Require Import Coq.Logic.Classical.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import "Misc/Library".
@@ -294,7 +295,7 @@ Module TranslationProperties (R:Replacement)
 
   Module Translation := Translation R T M.
   Module ContextProperties := ContextProperties R T M.
-  Module CalculusProperties := CalculusProperties R.
+  Module CalculusProperties := CalculusProperties R M.S.
   Import Translation.
   Import M.S.
 
@@ -382,6 +383,50 @@ Module TranslationProperties (R:Replacement)
     destruct (trans e).
     rewrite <- H.
     apply CalculusProperties.depth_svalue.
+  Qed.
+
+  Lemma context_merge_not_nil:
+    forall (t1 t2:Context.t_stack),
+    In nil (Context.merge t1 t2) -> In nil t1 \/ In nil t2.
+  Proof.
+    induction t1 ; intros.
+    tauto.
+    destruct t2 ; simpl in *|-*.
+    tauto.
+    destruct H.
+    apply app_eq_nil in H.
+    tauto.
+    apply IHt1 in H.
+    tauto.
+  Qed.
+
+  Lemma context_stack_not_nil:
+    forall (e:expr),
+    let (_, cs) := trans e in
+    ~ In nil cs.
+  Proof.
+    intros ;
+    induction e ; simpl ; auto ;
+
+    try( destruct (trans e) ; auto ; fail) ;
+
+    try(destruct (trans e1) ; destruct (trans e2 ) ;
+    unfold not ; intros ;
+    apply context_merge_not_nil in H ;
+    tauto ; fail).
+
+    destruct (trans e).
+    destruct t ; simpl.
+    tauto.
+    unfold not ; intros ; apply IHe.
+    simpl ; auto.
+    
+    destruct (trans e).
+    unfold not ; intros ; apply IHe.
+    simpl in *|-*.
+    destruct H.
+    inversion H.
+    assumption.
   Qed.
 
   (*Inductive indep_context_vars (e:expr) : Context.t -> Type :=
@@ -569,7 +614,49 @@ Module TranslationProperties (R:Replacement)
     admit.
 
     (* Case EBox *)
-    admit.
+    
+    specialize (length_svalue e1 0) ; intros.
+    specialize (context_stack_not_nil e1) ; intros.
+    destruct (trans e1).
+    destruct t ; simpl in *|-* ; intros.
+
+      (* Case of empty stack. Impossible *)
+      inversion H1 ; subst ; simpl in *|-*.
+      destruct H.
+      assert(svalue 1 e1).
+      apply H ; omega.
+      specialize (CalculusProperties.svalue_not_sprogresses 1 M1 e1 H3 (M2,e3) H4) ; intros.
+      contradiction.
+
+      (* Case of stack > 0 *)
+      destruct t0 ; simpl in *|-*.
+
+        (* Case of length(stack) = 1 *)
+        inversion H1 ; subst ; simpl in *|-*.
+        specialize (IHe1 e3 M1 M2 H4).
+        destruct t.
+
+          (* Case stack = [[]] Impossible *)
+          exfalso ; apply H0 ; left ; reflexivity.
+   
+          (* Case stack = [a :: lst] *)
+          destruct p ; clear H0.
+          destruct (trans e3).
+          destruct IHe1.
+          assert(T.svalue 0 e0 \/ ~T.svalue 0 e0).
+          apply classic.
+          destruct H3.
+
+            (* Case svalue *)
+            specialize (H0 H3).
+            destruct H0 ; subst.
+            destruct H5 ; simpl in *|-*.
+
+            (* Case not svalue *)
+
+        (* Case of length(stack) > 1 *)
+
+    fail.
 
     (* Case EUnbox *)
     admit.

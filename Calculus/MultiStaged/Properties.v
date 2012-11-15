@@ -8,10 +8,11 @@ Require Import "Calculus/Sets".
 Require Import "Calculus/Terminology".
 Require Import "Calculus/MultiStaged/Definitions".
 
-(** * Calculus Properties *)
-Module CalculusProperties (Repl:Replacement).
 
-  Module Calculus := Calculus Repl.
+(** * Calculus Properties *)
+Module CalculusProperties (Repl:Replacement) 
+  (Calculus: ReplacementCalculus Repl).
+
   Module Terminology := StagedTerminology Calculus.
   Import Calculus.CRaw.
   Import Calculus.
@@ -289,6 +290,14 @@ Module CalculusProperties (Repl:Replacement).
   Qed.
 
 End CalculusProperties.
+
+Module ReplacementProperties (Repl:Replacement).
+
+  Module Calculus := Calculus Repl.
+
+  Include (CalculusProperties Repl Calculus).
+
+End ReplacementProperties.
 
 (** * Lisp-Like Calculus Properties *)
 Module LispLikeCalculusProperties.

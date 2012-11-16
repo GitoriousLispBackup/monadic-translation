@@ -60,6 +60,7 @@ End Monad.
 Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
 
   Import T.
+  Import M.
 
   Definition t : Type := list (expr * M.S.var).
   Definition t_stack : Type := list t.
@@ -82,46 +83,30 @@ Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
     end.
 
   Fixpoint shift (cs:t_stack) : t * t_stack :=
-   match cs with
-   | nil => (nil, nil)
-   | a :: nil => (a, nil)
-   | a :: cs => let (c, cs) := shift cs in
-      (c, a :: cs)
-   end.
+    match cs with
+    | nil => (nil, nil)
+    | a :: nil => (a, nil)
+    | a :: cs => let (c, cs) := shift cs in
+       (c, a :: cs)
+    end.
 
   Fixpoint unshift (cs:t_stack) (c:t) : t_stack :=
-   match cs with
-   | nil => c :: nil
-   | a :: cs => a :: (unshift cs c)
-   end.
+    match cs with
+    | nil => c :: nil
+    | a :: cs => a :: (unshift cs c)
+    end.
 
-End Context.
+  Fixpoint context_hole_set (c:t) : VarSet.t :=
+    match c with
+    | nil => VarSet.empty
+    | (e1, x) :: c => VarSet.add x (context_hole_set c)
+    end.
 
-Module ContextProperties (R:Replacement) (T:StagedCalculus) (M:Monad R T).
-
-  Module Context := Context R T M.
-  Import Context.
-
-  
-  Lemma merge_length:
-    forall (cs1 cs2:t_stack),
-    length (merge cs1 cs2) = max (length cs1) (length cs2).
-  Proof.
-    induction cs1 ; simpl ; intros.
-    reflexivity.
-    destruct cs2 ; simpl.
-    reflexivity.
-    rewrite IHcs1.
-    reflexivity.
-  Qed.
-
-End ContextProperties.
-
-Module ContextExtensions (R:Replacement) (T:StagedCalculus) (M:Monad R T).
-
-  Module Context := Context R T M.
-  Import Context.
-  Import T.
+  Fixpoint stack_hole_set (cs:t_stack) : VarSet.t :=
+    match cs with
+    | nil => VarSet.empty
+    | c :: cs => VarSet.union (context_hole_set c) (stack_hole_set cs)
+    end.
 
   Inductive congr_context (rel:relation expr) : relation t :=
     | CongrCtx_nil: congr_context rel nil nil
@@ -152,7 +137,7 @@ Module ContextExtensions (R:Replacement) (T:StagedCalculus) (M:Monad R T).
        (ssubst_stack n ss x cs v)
     end.
 
-End ContextExtensions.
+End Context.
 
 (* Translation R T <: StagedTranslation (Calculus R) T. *)
 Module Translation (R:Replacement) 
@@ -160,7 +145,6 @@ Module Translation (R:Replacement)
 
   Module S := M.S.
   Module Context := Context R T M.
-  Module ContextExtensions := ContextExtensions R T M.
   Import S.CRaw.
 
   Fixpoint trans (e:S.expr) : T.expr * Context.t_stack :=
@@ -265,9 +249,9 @@ Module Translation (R:Replacement)
         admin (M.cast_eunbox (M.cast_ebox (trans_expr e))) (trans_expr e).
 
   Definition admin_context : relation Context.t := 
-    ContextExtensions.congr_context admin.
+    Context.congr_context admin.
   Definition admin_stack : relation Context.t_stack := 
-    ContextExtensions.congr_stack admin.
+    Context.congr_stack admin.
 
   (** ** Relative Abstract Reduction Step *)
   Inductive rstep : relation T.state :=
@@ -290,16 +274,11 @@ Module Type MonadProperties (R:Replacement)
      ssubst n ss (cast_var x) (ret e) v = ret (ssubst n ss (cast_var x) e v).
 
   Parameter ssubst_bind :
-    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 v:expr) (e2: expr -> expr),
-     ((fun v2 => ssubst n ss (cast_var x) (e2 v2) v) = 
-       fun v2 => e2 (ssubst n ss (cast_var x) v2 v)) ->
-     ssubst n ss (cast_var x) (bind e1 e2) v = 
-       bind (ssubst n ss (cast_var x) e1 v) e2.
-
-(*  Parameter ssubst_bind_2 :
-    forall (n:nat) (ss:StageSet.t) (x:var) (e1 v:expr) (e2: expr -> expr),
-     ssubst n ss x (bind e1 e2) v = 
-       bind e1 (fun v2 => e2 (ssubst n ss x v2 v)).*)
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 v:expr) (f1 f2: expr -> expr),
+     ((fun v2 => ssubst n ss (cast_var x) (f1 v2) v) = 
+       fun v2 => f2 (ssubst n ss (cast_var x) v2 v)) ->
+     ssubst n ss (cast_var x) (bind e1 f1) v = 
+       bind (ssubst n ss (cast_var x) e1 v) f2.
 
   Parameter ssubst_eabs :
     forall (n:nat) (ss:StageSet.t) (x y:S.var) (e v:expr),
@@ -312,6 +291,12 @@ Module Type MonadProperties (R:Replacement)
      ssubst n ss (cast_var x) (cast_efix (cast_var f) (cast_var y) e) v = 
      cast_efix (cast_var f) (cast_var y) (ssubst n (if orb (S.beq_var x f) (S.beq_var x y) 
         then (StageSet.add n ss) else ss) (cast_var x) e v).
+
+  Parameter ssubst_eapp :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 e2 v:expr),
+     ssubst n ss (cast_var x) (cast_eapp e1 e2) v
+       = cast_eapp (ssubst n ss (cast_var x) e1 v) 
+         (ssubst n ss (cast_var x) e2 v).
 
   Parameter ssubst_eref :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
@@ -327,14 +312,77 @@ Module Type MonadProperties (R:Replacement)
 
 End MonadProperties.
 
+Module ContextProperties (R:Replacement) (T:StagedCalculus) 
+    (M:Monad R T) (MP:MonadProperties R T M).
+
+  Module Context := Context R T M.
+  Import MP.Translation.
+  Import M.
+  Import Context.
+  
+  Lemma merge_length:
+    forall (cs1 cs2:t_stack),
+    length (merge cs1 cs2) = max (length cs1) (length cs2).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    reflexivity.
+    destruct cs2 ; simpl.
+    reflexivity.
+    rewrite IHcs1.
+    reflexivity.
+  Qed.
+
+  Lemma fill_ssubst:
+    forall (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
+    S.svalue 0 v -> VarSet.mem x (context_hole_set c) = false ->
+      fill (ssubst_context n ss x c (ret (phi v))) 
+      (ssubst n ss (M.cast_var (hole_var x)) e (ret (phi v))) = 
+      ssubst n ss (cast_var (hole_var x)) (fill c e) (ret (phi v)).
+    intros.
+    induction c ; simpl.
+    reflexivity.
+
+    destruct a ; simpl in *|-*.
+    assert(H1 := H0).
+    apply VarSetProperties.add_mem_6 in H0.
+    apply beq_nat_false_iff in H0.
+    rewrite beq_nat_sym in H0.
+    rewrite H0.
+    rewrite IHc.
+    rewrite MP.ssubst_bind with (f2 :=(fun v1 : T.expr =>
+     cast_eapp
+     (cast_eabs (cast_var (hole_var v0))
+        (ssubst n ss (cast_var (hole_var x)) (fill c e) (ret (phi v)))) v1)).
+    reflexivity.
+
+    apply functional_extensionality.
+    intros.
+    rewrite MP.ssubst_eapp.
+    rewrite MP.ssubst_eabs.
+    assert(S.beq_var (hole_var x) (hole_var v0) = false).
+    apply beq_nat_false_iff.
+    apply beq_nat_false_iff in H0.
+    unfold not ; intros ; apply H0.
+    unfold hole_var in H2.
+    omega.
+    rewrite H2.
+    reflexivity.
+    apply VarSetProperties.add_mem_5 in H1.
+    assumption.
+  Qed.
+
+
+End ContextProperties.
+
 Module TranslationProperties (R:Replacement) 
     (T:StagedCalculus) (M:Monad R T) (MP:MonadProperties R T M). 
 
   Module Translation := MP.Translation.
-  Module ContextProperties := ContextProperties R T M.
+  Module ContextProperties := ContextProperties R T M MP.
   Module CalculusProperties := CalculusProperties R M.S.
   Import Translation.
   Import M.S.
+  Import M.
 
   Lemma admin_context_expr:
     forall (k1 k2:Context.t) (e1 e2:T.expr),
@@ -366,7 +414,7 @@ Module TranslationProperties (R:Replacement)
     simpl ; assumption.
 
     destruct a ; inversion H ; subst.
-    simpl ; apply ContextExtensions.CongrCtx_cons.
+    simpl ; apply Context.CongrCtx_cons.
     apply IHk1 ; assumption.
     assumption.
   Qed.
@@ -385,7 +433,7 @@ Module TranslationProperties (R:Replacement)
      destruct cs3 ;
      inversion H0 ; subst.
      assumption.
-     apply ContextExtensions.CongrStack_context.
+     apply Context.CongrStack_context.
      apply IHcs1 ; assumption.
      apply admin_context_context ;
      [inversion H | inversion H0] ; subst ;
@@ -488,18 +536,6 @@ Module TranslationProperties (R:Replacement)
     assumption.
   Qed.
 
-  (*Inductive indep_context_vars (e:expr) : Context.t -> Type :=
-    | IndepContextVars_nil : indep_context_vars e nil
-    | IndepContextVars_cons : forall (h:var) (eh:expr) (c:Context.t), vars e x 
-
-  Inductive indep_stack_vars (e:expr) : Context.t_stack -> Type :=
-    | IndepStackVars_nil : indep_stack_vars e nil
-    | IndepStackVars_cons : forall (c:Context.t) (cs:Context.t_stack),
-        indep_context_vars e c -> indep_stack_vars e cs -> 
-        indep_stack_vars e cs.*)
-
-  (*Lemma trans_indep_stack: .*)
-
   (* En gros, on distingue 2 mondes de variables:
     - les variables traduites (cast_var) qui sont celles 
    des expressions initiales et celles créées pour le contexte
@@ -530,7 +566,7 @@ Module TranslationProperties (R:Replacement)
             t_eh = trans_expr eh /\ 
             M1 = M2 /\ 
             admin_stack 
-              (ContextExtensions.ssubst_stack 
+              (Context.ssubst_stack 
                  (pred n) StageSet.empty h (c1' :: cs1') t_eh) cs2 /\
             admin
                (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' t_eh) e2'
@@ -659,7 +695,7 @@ Module TranslationProperties (R:Replacement)
         destruct H1 ; destruct H3 ; destruct H4.
         repeat(split ; auto).
 
-        rewrite MP.ssubst_bind.
+        rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr => cast_eref v0)).
         apply Admin_bind.
         assumption.
         intros.
@@ -720,19 +756,22 @@ Module TranslationProperties (R:Replacement)
             inversion H5 ; subst.
             inversion H3 ; subst ; clear H5 H3.
             simpl.
-            
+            admit.
+
+(*
             apply Rel_step with (e1:=Context.fill 
-               (ContextExtensions.ssubst_context 0 StageSet.empty v t (trans_expr x))
-               (M.ret (M.cast_ebox e))).
+               (Context.ssubst_context 0 StageSet.empty v t (trans_expr x))
+               (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
+               (M.ret (M.cast_ebox e)) (trans_expr x))).
             assert(H9 := H0).
             apply svalue_phi in H9.
             rewrite H9. 
             apply MP.astep_ssubst_1.
             assumption.
+            rewrite ContextProperties.fill_ssubst.
 
             (* To prove *)
-            admit.
-            admit.
+            fail.*)
 
             (* Case not svalue *)
             admit.

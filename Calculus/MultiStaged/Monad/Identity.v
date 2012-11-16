@@ -50,7 +50,7 @@ Module Type IdentityMonad (R:Replacement) (T:ReplacementCalculus R) <: (Monad R 
 
 End IdentityMonad.
 
-Module IdentityMonadProperties (R:Replacement) 
+Module Type IdentityMonadProperties (R:Replacement) 
   (T:ReplacementCalculus R) (M:IdentityMonad R T) <: MonadProperties R T M.
 
   Module Translation := Translation R T M.
@@ -67,27 +67,22 @@ Module IdentityMonadProperties (R:Replacement)
   Qed.
 
   Lemma ssubst_bind :
-    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 v:expr) (e2: expr -> expr),
-     ((fun v2 => ssubst n ss (cast_var x) (e2 v2) v) = 
-       fun v2 => e2 (ssubst n ss (cast_var x) v2 v)) ->
-     ssubst n ss (cast_var x) (bind e1 e2) v = 
-       bind (ssubst n ss (cast_var x) e1 v) e2.
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 v:expr) (f1 f2: expr -> expr),
+     ((fun v2 => ssubst n ss (cast_var x) (f1 v2) v) = 
+       fun v2 => f2 (ssubst n ss (cast_var x) v2 v)) ->
+     ssubst n ss (cast_var x) (bind e1 f1) v = 
+       bind (ssubst n ss (cast_var x) e1 v) f2.
   Proof.
-    intros.
+ intros.
     unfold bind.
-    assert(forall v2, ((fun v2 : expr => ssubst n ss (cast_var x) (e2 v2) v) v2 =
-     (fun v2 : expr => e2 (ssubst n ss (cast_var x) v2 v)) v2)).
+    assert(forall v2, ((fun v2 : expr => ssubst n ss (cast_var x) (f1 v2) v) v2 =
+     (fun v2 : expr => f2 (ssubst n ss (cast_var x) v2 v)) v2)).
       apply equal_f.
       assumption.
     specialize (H0 e1).
     simpl in H0.
     assumption.
   Qed.
-
-(*  Parameter ssubst_bind_2 :
-    forall (n:nat) (ss:StageSet.t) (x:var) (e1 v:expr) (e2: expr -> expr),
-     ssubst n ss x (bind e1 e2) v = 
-       bind e1 (fun v2 => e2 (ssubst n ss x v2 v)).*)
 
   Lemma ssubst_eabs :
     forall (n:nat) (ss:StageSet.t) (x y:S.var) (e v:expr),
@@ -103,6 +98,15 @@ Module IdentityMonadProperties (R:Replacement)
      ssubst n ss (cast_var x) (cast_efix (cast_var f) (cast_var y) e) v = 
      cast_efix (cast_var f) (cast_var y) (ssubst n (if orb (S.beq_var x f) (S.beq_var x y) 
         then (StageSet.add n ss) else ss) (cast_var x) e v).
+  Proof.
+    reflexivity.
+  Qed.
+
+  Lemma ssubst_eapp :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 e2 v:expr),
+     ssubst n ss (cast_var x) (cast_eapp e1 e2) v
+       = cast_eapp (ssubst n ss (cast_var x) e1 v) 
+         (ssubst n ss (cast_var x) e2 v).
   Proof.
     reflexivity.
   Qed.

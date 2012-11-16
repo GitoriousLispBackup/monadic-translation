@@ -83,6 +83,15 @@ Module NatSetProperties.
     rewrite add_mem_4 in H ; assumption.
   Qed.
 
+  Lemma add_mem_6:
+    forall (lst:t) (n m:nat),
+    mem n (add m lst) = false -> m <> n.
+  Proof.
+    intros ; case_beq_nat m n.
+    rewrite add_mem_3 in H ; inversion H.
+    rewrite add_mem_4 in H ; assumption.
+  Qed.
+
   Lemma remove_mem_1:
     forall (lst:t) (n m:nat),
     m <> n -> mem n (remove m lst) = mem n lst.

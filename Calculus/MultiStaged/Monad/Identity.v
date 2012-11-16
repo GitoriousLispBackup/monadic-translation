@@ -16,7 +16,7 @@ Require Import "Calculus/MultiStaged/Monad".
   verifies required algebraic properties.
 *)
 
-Module IdentityMonad (R:Replacement) (T:ReplacementCalculus R) <: (Monad R T).
+Module Type IdentityMonad (R:Replacement) (T:ReplacementCalculus R) <: (Monad R T).
 
   Import T.CRaw.
 
@@ -47,6 +47,16 @@ Module IdentityMonad (R:Replacement) (T:ReplacementCalculus R) <: (Monad R T).
 
   (** Abstract Reduction step *)
   Definition astep : relation state := sstep 0.
+
+End IdentityMonad.
+
+Module IdentityMonadProperties (R:Replacement) 
+  (T:ReplacementCalculus R) (M:IdentityMonad R T) <: MonadProperties R T M.
+
+  Module Translation := Translation R T M.
+  Import Translation.
+  Import T.
+  Import M.
 
   (** Substitution Properties *)
   Lemma ssubst_ret :
@@ -105,4 +115,14 @@ Module IdentityMonad (R:Replacement) (T:ReplacementCalculus R) <: (Monad R T).
     reflexivity.
   Qed.
 
-End IdentityMonad.
+  (** Abstract Reduction Properties *)
+
+  Lemma astep_ssubst_1 :
+    forall (v:S.expr) (e:expr) (M1 M2:Memory.t) (f:expr -> expr),
+    S.svalue 0 v -> astep (M1, (f (phi v))) (M2, e) ->
+    astep (M1, (bind (ret (phi v)) f)) (M2, e).
+  Proof.
+    intros ; assumption.
+  Qed.
+
+End IdentityMonadProperties.

@@ -310,6 +310,12 @@ Module Type MonadProperties (R:Replacement)
     S.svalue 0 v -> astep (M1, (f (phi v))) (M2, e) ->
     astep (M1, (bind (ret (phi v)) f)) (M2, e).
 
+  Parameter astep_app_abs :
+    forall (v:S.expr) (x:S.var) (e:expr) (M:Memory.t),
+    S.svalue 0 v -> astep (M, cast_eapp
+      (cast_eabs (cast_var x) e) (phi v))
+      (M, ssubst 0 StageSet.empty (cast_var x) e (phi v)).
+
 End MonadProperties.
 
 Module ContextProperties (R:Replacement) (T:StagedCalculus) 
@@ -335,9 +341,9 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
   Lemma fill_ssubst:
     forall (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
     S.svalue 0 v -> VarSet.mem x (context_hole_set c) = false ->
-      fill (ssubst_context n ss x c (ret (phi v))) 
-      (ssubst n ss (M.cast_var (hole_var x)) e (ret (phi v))) = 
-      ssubst n ss (cast_var (hole_var x)) (fill c e) (ret (phi v)).
+      fill (ssubst_context n ss x c (phi v)) 
+      (ssubst n ss (M.cast_var (hole_var x)) e (phi v)) = 
+      ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v).
     intros.
     induction c ; simpl.
     reflexivity.
@@ -352,7 +358,7 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
     rewrite MP.ssubst_bind with (f2 :=(fun v1 : T.expr =>
      cast_eapp
      (cast_eabs (cast_var (hole_var v0))
-        (ssubst n ss (cast_var (hole_var x)) (fill c e) (ret (phi v)))) v1)).
+        (ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v))) v1)).
     reflexivity.
 
     apply functional_extensionality.
@@ -535,6 +541,44 @@ Module TranslationProperties (R:Replacement)
     inversion H.
     assumption.
   Qed.
+(*
+  Lemma context_independant:
+    forall (e:expr),
+      let (_, cs) := trans e in
+      match cs with
+      | ((eh, h) :: c) :: cs => VarSet.mem h (Context.context_hole_set c) = false
+      | _ => True 
+      end.
+  Proof.
+    induction e ; simpl ; intros ; auto ;
+    try(destruct (trans e) ; assumption).
+
+    destruct (trans e1).
+    destruct (trans e2).
+    destruct t ; simpl.
+    assumption.
+    destruct t0 ; simpl.
+    assumption.
+    destruct t ; simpl.
+    assumption.
+    destruct p.
+    destruct t0 ; simpl.
+    rewrite app_nil_r ; assumption.
+    destruct p.
+    simpl.
+    
+  Qed.
+
+  Lemma context_stack_independant:
+    forall (e:expr),
+      let (_, cs) := trans e in
+      match cs with
+      | ((eh, h) :: c) :: cs => VarSet.mem h (Context.stack_hole_set cs) = false
+      | _ => True 
+      end.
+  Proof.
+
+  Qed.*)
 
   (* En gros, on distingue 2 mondes de variables:
     - les variables traduites (cast_var) qui sont celles 
@@ -567,9 +611,9 @@ Module TranslationProperties (R:Replacement)
             M1 = M2 /\ 
             admin_stack 
               (Context.ssubst_stack 
-                 (pred n) StageSet.empty h (c1' :: cs1') t_eh) cs2 /\
+                 (pred n) StageSet.empty h (c1' :: cs1') (phi eh)) cs2 /\
             admin
-               (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' t_eh) e2'
+               (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' (phi eh)) e2'
           \/ 
             exists eh', let t_eh' := trans_expr eh' in
             rstep (M1', t_eh) (M2', t_eh') /\
@@ -702,8 +746,8 @@ Module TranslationProperties (R:Replacement)
         apply Admin_refl.
 
         assert (
-         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) e0) =
-         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 e0))).
+         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) (phi x)) =
+         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 (phi x)))).
           apply functional_extensionality.
           intros ; apply MP.ssubst_eref.
         assumption.
@@ -744,6 +788,7 @@ Module TranslationProperties (R:Replacement)
    
           (* Case stack = [a :: lst] *)
           destruct p ; clear H0.
+          unfold trans_expr ; simpl.
           destruct (trans e3).
           destruct IHe1.
           destruct H0.
@@ -756,22 +801,26 @@ Module TranslationProperties (R:Replacement)
             inversion H5 ; subst.
             inversion H3 ; subst ; clear H5 H3.
             simpl.
-            admit.
 
-(*
             apply Rel_step with (e1:=Context.fill 
-               (Context.ssubst_context 0 StageSet.empty v t (trans_expr x))
+               (Context.ssubst_context 0 StageSet.empty v t (phi x))
                (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
-               (M.ret (M.cast_ebox e)) (trans_expr x))).
+               (M.ret (M.cast_ebox e)) (phi x))).
             assert(H9 := H0).
             apply svalue_phi in H9.
             rewrite H9. 
             apply MP.astep_ssubst_1.
             assumption.
             rewrite ContextProperties.fill_ssubst.
+            apply MP.astep_app_abs.
+            assumption.
+            assumption.
 
             (* To prove *)
-            fail.*)
+            admit.
+
+            (* To prove *)
+            fail.
 
             (* Case not svalue *)
             admit.

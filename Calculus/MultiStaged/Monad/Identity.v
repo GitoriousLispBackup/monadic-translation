@@ -61,22 +61,24 @@ Module Type IdentityMonadProperties (R:Replacement)
   (** Substitution Properties *)
   Lemma ssubst_ret :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
-     ssubst n ss (cast_var x) (ret e) v = ret (ssubst n ss (cast_var x) e v).
+     ssubst n ss (cast_var x) (ret e) v = 
+	ret (ssubst n ss (cast_var x) e v).
   Proof.
     reflexivity.
   Qed.
 
   Lemma ssubst_bind :
-    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 v:expr) (f1 f2: expr -> expr),
+    forall (n:nat) (ss:StageSet.t) (x:S.var) 
+	(e1 v:expr) (f1 f2: expr -> expr),
      ((fun v2 => ssubst n ss (cast_var x) (f1 v2) v) = 
        fun v2 => f2 (ssubst n ss (cast_var x) v2 v)) ->
      ssubst n ss (cast_var x) (bind e1 f1) v = 
        bind (ssubst n ss (cast_var x) e1 v) f2.
   Proof.
- intros.
+    intros.
     unfold bind.
-    assert(forall v2, ((fun v2 : expr => ssubst n ss (cast_var x) (f1 v2) v) v2 =
-     (fun v2 : expr => f2 (ssubst n ss (cast_var x) v2 v)) v2)).
+    assert(forall v2, ((fun v2 => ssubst n ss (cast_var x) (f1 v2) v) v2 =
+     (fun v2 => f2 (ssubst n ss (cast_var x) v2 v)) v2)).
       apply equal_f.
       assumption.
     specialize (H0 e1).
@@ -96,7 +98,8 @@ Module Type IdentityMonadProperties (R:Replacement)
   Lemma ssubst_efix :
     forall (n:nat) (ss:StageSet.t) (x f y:S.var) (e v:expr),
      ssubst n ss (cast_var x) (cast_efix (cast_var f) (cast_var y) e) v = 
-     cast_efix (cast_var f) (cast_var y) (ssubst n (if orb (S.beq_var x f) (S.beq_var x y) 
+     cast_efix (cast_var f) (cast_var y) 
+	(ssubst n (if orb (S.beq_var x f) (S.beq_var x y) 
         then (StageSet.add n ss) else ss) (cast_var x) e v).
   Proof.
     reflexivity.

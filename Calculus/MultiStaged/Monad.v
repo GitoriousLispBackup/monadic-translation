@@ -148,7 +148,7 @@ Module Translation (R:Replacement)
   Module Context := Context R T M.
   Import S.CRaw.
 
-  Fixpoint trans (e:S.expr) (acc:nat -> nat) : T.expr * Context.t_stack :=
+  Fixpoint trans (e:S.expr) (acc:Splitter.t) : T.expr * Context.t_stack :=
     match e with
     | EConst i => (M.ret (M.cast_econst i), Context.empty)
     | EVar y => (M.ret (M.cast_evar (M.cast_var (source_var y))), Context.empty)
@@ -161,8 +161,8 @@ Module Translation (R:Replacement)
             (M.cast_var (source_var f)) 
             (M.cast_var (source_var y)) e), cs)
     | EApp e1 e2 => 
-        let (e1, cs1) := trans e1 (fun n => acc (2*n)%nat) in
-        let (e2, cs2) := trans e2 (fun n => acc (2*n+1)%nat) in
+        let (e1, cs1) := trans e1 (Splitter.left acc) in
+        let (e2, cs2) := trans e2 (Splitter.right acc) in
         (M.bind e1
         (fun v1 => M.bind e2
         (fun v2 => M.cast_eapp v1 v2)), 
@@ -175,8 +175,8 @@ Module Translation (R:Replacement)
         let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_ederef v), cs)
     | EAssign e1 e2 =>
-        let (e1, cs1) := trans e1 (fun n => acc (2*n)%nat) in
-        let (e2, cs2) := trans e2 (fun n => acc (2*n+1)%nat) in
+        let (e1, cs1) := trans e1 (Splitter.left acc) in
+        let (e2, cs2) := trans e2 (Splitter.right acc) in
         (M.bind e1
         (fun v1 => M.bind e2
         (fun v2 => M.cast_eassign v1 v2)), 
@@ -188,9 +188,9 @@ Module Translation (R:Replacement)
         | c :: cs => (Context.fill c (M.ret (M.cast_ebox e)), cs)
         end
     | EUnbox e =>
-       let (e', cs) := trans e (fun n => acc (S n)) in
+       let (e', cs) := trans e (Splitter.next acc) in
        (M.cast_eunbox (M.cast_evar 
-	(M.cast_var (hole_var (acc 0)))), ((e', acc 0) :: nil) :: cs)
+	(M.cast_var (hole_var (Splitter.get acc 0)))), ((e', Splitter.get acc 0) :: nil) :: cs)
     | ERun e =>
         let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_erun v), cs)
@@ -199,16 +199,16 @@ Module Translation (R:Replacement)
         (M.bind e (fun v => M.cast_elift v), cs)
     end.
 
-  Definition trans_expr (e:S.expr) (acc:nat -> nat) : T.expr :=
+  Definition trans_expr (e:S.expr) (acc:Splitter.t) : T.expr :=
     let (e, _) := trans e acc in e.
 
-  Fixpoint trans_mem (m:S.Memory.t) (acc:nat -> nat) : T.Memory.t :=
+  Fixpoint trans_mem (m:S.Memory.t) (acc:Splitter.t) : T.Memory.t :=
     match m with
     | nil => nil
     | e :: m => trans_expr e acc :: (trans_mem m acc)
     end.
 
-  Definition phi (e:S.expr) (acc:nat -> nat) : T.expr :=
+  Definition phi (e:S.expr) (acc:Splitter.t) : T.expr :=
     match e with
     | EConst i => M.cast_econst i
     | EVar y => M.cast_evar (M.cast_var (source_var y))
@@ -246,7 +246,7 @@ Module Translation (R:Replacement)
     | Admin_bind : forall (e1 e2:T.expr) (f1 f2:T.expr -> T.expr),
         admin e1 e2 -> (forall e3:T.expr, admin (f1 e3) (f2 e3)) ->
         admin (M.bind e1 f1) (M.bind e2 f2)
-    | Admin_reduc : forall (e:expr) (acc:nat -> nat), svalue 1 e ->
+    | Admin_reduc : forall (e:expr) (acc:Splitter.t), svalue 1 e ->
         admin (M.cast_eunbox (M.cast_ebox (trans_expr e acc))) (trans_expr e acc).
 
   Definition admin_context :  relation Context.t := 
@@ -307,12 +307,12 @@ Module Type MonadProperties (R:Replacement)
   (** Abstract Reduction Properties *)
 
   Parameter astep_ssubst_1 :
-    forall (v:S.expr) (e:expr) (acc:nat -> nat) (M1 M2:Memory.t) (f:expr -> expr),
+    forall (v:S.expr) (e:expr) (acc:Splitter.t) (M1 M2:Memory.t) (f:expr -> expr),
     S.svalue 0 v -> astep (M1, (f (phi v acc))) (M2, e) ->
     astep (M1, (bind (ret (phi v acc)) f)) (M2, e).
 
   Parameter astep_app_abs :
-    forall (v:S.expr) (x:S.var) (e:expr) (acc:nat -> nat) (M:Memory.t),
+    forall (v:S.expr) (x:S.var) (e:expr) (acc:Splitter.t) (M:Memory.t),
     S.svalue 0 v -> astep (M, cast_eapp
       (cast_eabs (cast_var x) e) (phi v acc))
       (M, ssubst 0 StageSet.empty (cast_var x) e (phi v acc)).
@@ -340,7 +340,7 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
   Qed.
 
   Lemma fill_ssubst:
-    forall (acc:nat -> nat) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
+    forall (acc:Splitter.t) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
     S.svalue 0 v -> VarSet.mem x (context_hole_set c) = false ->
       fill (ssubst_context n ss x c (phi v acc)) 
       (ssubst n ss (M.cast_var (hole_var x)) e (phi v acc)) = 
@@ -451,17 +451,17 @@ Module TranslationProperties (R:Replacement)
   Qed.
 
   Lemma depth_length:
-    forall (e:expr) (acc:nat -> nat),
+    forall (e:expr) (acc:Splitter.t),
     let (_, cs) := trans e acc in
     depth e = length cs.
   Proof.
     induction e ; simpl ; intros ;
     try(auto ; fail) ;
     try(specialize (IHe acc) ; destruct (trans e acc) ; auto ; fail) ;
-    try(specialize (IHe1 (fun n => acc (n + (n + 0))%nat)) ;
-    specialize (IHe2 (fun n => acc (n + (n + 0) + 1)%nat)) ;
-    destruct (trans e1 (fun n => acc (n + (n + 0))%nat)) ; 
-    destruct (trans e2 (fun n => acc (n + (n + 0) + 1)%nat)) ;
+    try(specialize (IHe1 (Splitter.left acc)) ;
+    specialize (IHe2 (Splitter.right acc)) ;
+    destruct (trans e1) ; 
+    destruct (trans e2) ;
     simpl ; rewrite ContextProperties.merge_length ; auto ; fail).
     
 
@@ -479,14 +479,14 @@ Module TranslationProperties (R:Replacement)
     inversion IHe.
     reflexivity.
 
-    specialize (IHe (fun n => acc (S n))).
+    specialize (IHe (Splitter.next acc)).
     destruct (trans e).
     simpl.
     auto.
   Qed.
 
   Lemma length_svalue:
-    forall (e:expr) (acc:nat -> nat) (n:nat),
+    forall (e:expr) (acc:Splitter.t) (n:nat),
     let (_, cs) := trans e acc in
     length cs < (S n) <-> svalue (S n) e.
   Proof.
@@ -499,7 +499,7 @@ Module TranslationProperties (R:Replacement)
   Qed.
 
   Lemma svalue_phi:
-    forall (e:expr) (acc:nat -> nat),
+    forall (e:expr) (acc:Splitter.t),
     svalue 0 e -> trans_expr e acc = M.ret (phi e acc).
   Proof.
     intros ; inversion H ; subst ; simpl ;
@@ -534,7 +534,7 @@ Module TranslationProperties (R:Replacement)
   Qed.
 
   Lemma context_stack_not_nil:
-    forall (e:expr) (acc:nat -> nat),
+    forall (e:expr) (acc:Splitter.t),
     let (_, cs) := trans e acc in
     ~ In nil cs.
   Proof.
@@ -542,9 +542,9 @@ Module TranslationProperties (R:Replacement)
 
     try( specialize (IHe acc) ; destruct (trans e) ; auto ; fail) ;
 
-    try(specialize (IHe1 (fun n => acc (n + (n + 0))%nat)) ;
-    specialize (IHe2 (fun n => acc (n + (n + 0) + 1)%nat)) ;
-    destruct (trans e1) ; destruct (trans e2 ) ;
+    try(specialize (IHe1 (Splitter.left acc)) ;
+    specialize (IHe2 (Splitter.right acc)) ;
+    destruct (trans e1) ; destruct (trans e2) ;
     unfold not ; intros ;
     apply context_merge_not_nil in H ;
     tauto ; fail).
@@ -557,7 +557,7 @@ Module TranslationProperties (R:Replacement)
     unfold not ; intros ; apply IHe.
     simpl ; auto.
     
-    specialize (IHe (fun n => acc (S n))).
+    specialize (IHe (Splitter.next acc)).
     destruct (trans e).
     unfold not ; intros ; apply IHe.
     simpl in *|-*.
@@ -565,6 +565,7 @@ Module TranslationProperties (R:Replacement)
     inversion H.
     assumption.
   Qed.
+
 (*
   Lemma context_independant:
     forall (e:expr),
@@ -613,7 +614,7 @@ Module TranslationProperties (R:Replacement)
    seraient 2n+1.
   *)
   Lemma sstep_rstep:
-    forall (e1:S.expr) (acc:nat -> nat) (e2:S.expr) (M1 M2:S.Memory.t),
+    forall (e1:S.expr) (acc:Splitter.t) (e2:S.expr) (M1 M2:S.Memory.t),
     let (e1', cs1) := trans e1 acc in
     let n := length cs1 in
     S.sstep n (M1, e1) (M2, e2) -> 

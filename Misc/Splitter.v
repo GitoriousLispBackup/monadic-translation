@@ -15,12 +15,20 @@ Module Splitter.
     tauto.
   Qed.
 
+  Lemma next_injective:
+    forall (acc:t) (m n:nat),
+    m <> n -> (fun n => (get acc) (S n)) m <> (fun n => (get acc) (S n)) n.
+  Proof.
+    intros ; simpl.
+    apply (injective acc).
+    omega.
+  Qed.
+
   Lemma left_injective:
     forall (acc:t) (m n:nat),
     m <> n -> (fun n => (get acc) (2*n)) m <> (fun n => (get acc) (2*n)) n.
   Proof.
-    intros.
-    simpl.
+    intros ; simpl.
     apply (injective acc).
     omega.
   Qed.
@@ -29,13 +37,15 @@ Module Splitter.
     forall (acc:t) (m n:nat),
     m <> n -> (fun n => (get acc) (2*n+1)) m <> (fun n => (get acc) (2*n+1)) n.
   Proof.
-    intros.
-    simpl.
+    intros ; simpl.
     apply (injective acc).
     omega.
   Qed.
 
   Definition empty : t := mkT (fun n => n) id_injective.
+
+  Definition next (acc:t) : t := mkT 
+    (fun n => (get acc) (S n)) (next_injective acc).
 
   Definition left (acc:t) : t := mkT 
     (fun n => (get acc) (2*n)) (left_injective acc).

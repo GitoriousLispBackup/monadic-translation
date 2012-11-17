@@ -5,6 +5,7 @@ Require Import Coq.Bool.Bool.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import "Misc/Library".
+Require Import "Misc/Splitter".
 Require Import "Calculus/Sets".
 Require Import "Calculus/Definitions".
 Require Import "Calculus/Monad".
@@ -147,81 +148,81 @@ Module Translation (R:Replacement)
   Module Context := Context R T M.
   Import S.CRaw.
 
-  Fixpoint trans (e:S.expr) : T.expr * Context.t_stack :=
+  Fixpoint trans (e:S.expr) (acc:nat -> nat) : T.expr * Context.t_stack :=
     match e with
     | EConst i => (M.ret (M.cast_econst i), Context.empty)
     | EVar y => (M.ret (M.cast_evar (M.cast_var (source_var y))), Context.empty)
     | EAbs y e => 
-        let (e,cs) := trans e in
+        let (e,cs) := trans e acc in
         (M.ret (M.cast_eabs (M.cast_var (source_var y)) e), cs)
     | EFix f y e => 
-        let (e,cs) := trans e in
+        let (e,cs) := trans e acc in
         (M.ret (M.cast_efix 
             (M.cast_var (source_var f)) 
             (M.cast_var (source_var y)) e), cs)
     | EApp e1 e2 => 
-        let (e1, cs1) := trans e1 in
-        let (e2, cs2) := trans e2 in
+        let (e1, cs1) := trans e1 (fun n => acc (2*n)%nat) in
+        let (e2, cs2) := trans e2 (fun n => acc (2*n+1)%nat) in
         (M.bind e1
         (fun v1 => M.bind e2
         (fun v2 => M.cast_eapp v1 v2)), 
         Context.merge cs1 cs2)
     | ELoc l => (M.ret (M.cast_eloc l), Context.empty)
     | ERef e => 
-        let (e,cs) := trans e in
+        let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_eref v), cs)
     | EDeref e => 
-        let (e,cs) := trans e in
+        let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_ederef v), cs)
     | EAssign e1 e2 =>
-        let (e1, cs1) := trans e1 in
-        let (e2, cs2) := trans e2 in
+        let (e1, cs1) := trans e1 (fun n => acc (2*n)%nat) in
+        let (e2, cs2) := trans e2 (fun n => acc (2*n+1)%nat) in
         (M.bind e1
         (fun v1 => M.bind e2
         (fun v2 => M.cast_eassign v1 v2)), 
         Context.merge cs1 cs2)
     | EBox e => 
-        let (e, cs) := trans e in
+        let (e, cs) := trans e acc in
         match cs with
         | nil => (M.ret (M.cast_ebox e), Context.empty)
         | c :: cs => (Context.fill c (M.ret (M.cast_ebox e)), cs)
         end
     | EUnbox e =>
-       let (e', cs) := trans e in
-       let h := M.S.fresh e in
-       (M.cast_eunbox (M.cast_evar (M.cast_var (hole_var h))), ((e', h) :: nil) :: cs)
+       let (e', cs) := trans e (fun n => acc (S n)) in
+       (M.cast_eunbox (M.cast_evar 
+	(M.cast_var (hole_var (acc 0)))), ((e', acc 0) :: nil) :: cs)
     | ERun e =>
-        let (e,cs) := trans e in
+        let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_erun v), cs)
     | ELift e =>
-        let (e,cs) := trans e in
+        let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_elift v), cs)
     end.
 
-  Definition trans_expr (e:S.expr) : T.expr :=
-    let (e, _) := trans e in e.
+  Definition trans_expr (e:S.expr) (acc:nat -> nat) : T.expr :=
+    let (e, _) := trans e acc in e.
 
-  Fixpoint trans_mem (m:S.Memory.t) : T.Memory.t :=
+  Fixpoint trans_mem (m:S.Memory.t) (acc:nat -> nat) : T.Memory.t :=
     match m with
     | nil => nil
-    | e :: m => trans_expr e :: (trans_mem m)
+    | e :: m => trans_expr e acc :: (trans_mem m acc)
     end.
 
-  Definition phi (e:S.expr) : T.expr :=
+  Definition phi (e:S.expr) (acc:nat -> nat) : T.expr :=
     match e with
     | EConst i => M.cast_econst i
     | EVar y => M.cast_evar (M.cast_var (source_var y))
     | EAbs y e => 
-        let (e, _) := trans e in
+        let (e, _) := trans e acc in
         M.cast_eabs (M.cast_var (source_var y)) e
     | EFix f y e => 
-        let (e, _) := trans e in
+        let (e, _) := trans e acc in
         M.cast_efix 
             (M.cast_var (source_var f)) 
             (M.cast_var (source_var y)) e
     | ELoc l => M.cast_eloc l
     | EBox e => 
-        let (e, _) := trans e in
+        let (e, _) := trans e acc in
         M.cast_ebox e
     | _ => M.cast_econst 0
     end.
@@ -229,9 +230,9 @@ Module Translation (R:Replacement)
 
   (** ** Administrative Reduction Step *)
   (* TODO: Not finished yet *)
-  Inductive admin: relation T.expr :=
+  Inductive admin : relation T.expr :=
     | Admin_refl : forall (e:T.expr), admin e e
-    | Admin_trans : forall (e1 e2 e3:T.expr), 
+    | Admin_trans : forall (e1 e2 e3:T.expr) (acc:nat -> nat), 
         admin e1 e2 -> admin e2 e3 -> admin e1 e3
     | Admin_abs : forall (x:T.var) (e1 e2:T.expr),
         admin e1 e2 -> admin (M.cast_eabs x e1) (M.cast_eabs x e2)
@@ -245,10 +246,10 @@ Module Translation (R:Replacement)
     | Admin_bind : forall (e1 e2:T.expr) (f1 f2:T.expr -> T.expr),
         admin e1 e2 -> (forall e3:T.expr, admin (f1 e3) (f2 e3)) ->
         admin (M.bind e1 f1) (M.bind e2 f2)
-    | Admin_reduc : forall e:expr, svalue 1 e ->
-        admin (M.cast_eunbox (M.cast_ebox (trans_expr e))) (trans_expr e).
+    | Admin_reduc : forall (e:expr) (acc:nat -> nat), svalue 1 e ->
+        admin (M.cast_eunbox (M.cast_ebox (trans_expr e acc))) (trans_expr e acc).
 
-  Definition admin_context : relation Context.t := 
+  Definition admin_context :  relation Context.t := 
     Context.congr_context admin.
   Definition admin_stack : relation Context.t_stack := 
     Context.congr_stack admin.
@@ -306,15 +307,15 @@ Module Type MonadProperties (R:Replacement)
   (** Abstract Reduction Properties *)
 
   Parameter astep_ssubst_1 :
-    forall (v:S.expr) (e:expr) (M1 M2:Memory.t) (f:expr -> expr),
-    S.svalue 0 v -> astep (M1, (f (phi v))) (M2, e) ->
-    astep (M1, (bind (ret (phi v)) f)) (M2, e).
+    forall (v:S.expr) (e:expr) (acc:nat -> nat) (M1 M2:Memory.t) (f:expr -> expr),
+    S.svalue 0 v -> astep (M1, (f (phi v acc))) (M2, e) ->
+    astep (M1, (bind (ret (phi v acc)) f)) (M2, e).
 
   Parameter astep_app_abs :
-    forall (v:S.expr) (x:S.var) (e:expr) (M:Memory.t),
+    forall (v:S.expr) (x:S.var) (e:expr) (acc:nat -> nat) (M:Memory.t),
     S.svalue 0 v -> astep (M, cast_eapp
-      (cast_eabs (cast_var x) e) (phi v))
-      (M, ssubst 0 StageSet.empty (cast_var x) e (phi v)).
+      (cast_eabs (cast_var x) e) (phi v acc))
+      (M, ssubst 0 StageSet.empty (cast_var x) e (phi v acc)).
 
 End MonadProperties.
 
@@ -339,11 +340,11 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
   Qed.
 
   Lemma fill_ssubst:
-    forall (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
+    forall (acc:nat -> nat) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
     S.svalue 0 v -> VarSet.mem x (context_hole_set c) = false ->
-      fill (ssubst_context n ss x c (phi v)) 
-      (ssubst n ss (M.cast_var (hole_var x)) e (phi v)) = 
-      ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v).
+      fill (ssubst_context n ss x c (phi v acc)) 
+      (ssubst n ss (M.cast_var (hole_var x)) e (phi v acc)) = 
+      ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v acc).
     intros.
     induction c ; simpl.
     reflexivity.
@@ -358,7 +359,7 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
     rewrite MP.ssubst_bind with (f2 :=(fun v1 : T.expr =>
      cast_eapp
      (cast_eabs (cast_var (hole_var v0))
-        (ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v))) v1)).
+        (ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v acc))) v1)).
     reflexivity.
 
     apply functional_extensionality.
@@ -398,14 +399,17 @@ Module TranslationProperties (R:Replacement)
     unfold admin_context ;
     induction k1 ; intros.
     inversion H ; subst.
-    simpl ; assumption.
-
+    simpl in *|-* ; assumption.
     destruct a ; inversion H ; subst.
-    simpl ; apply Admin_bind ; 
-    [assumption | intros].
+    simpl ; apply Admin_bind.
+    inversion H ; subst.
+    assumption.
+    
+    intros.
     apply Admin_app.
     apply Admin_abs.
-    apply IHk1 ; [ assumption | assumption ].
+
+    apply IHk1 ; assumption.
     apply Admin_refl.
   Qed.
 
@@ -447,40 +451,56 @@ Module TranslationProperties (R:Replacement)
   Qed.
 
   Lemma depth_length:
-    forall e:expr,
-    let (_, cs) := trans e in
+    forall (e:expr) (acc:nat -> nat),
+    let (_, cs) := trans e acc in
     depth e = length cs.
   Proof.
     induction e ; simpl ; intros ;
     try(auto ; fail) ;
-    try(destruct (trans e) ; auto) ;
-    try(destruct (trans e1) ; destruct (trans e2) ;
-    simpl ; rewrite ContextProperties.merge_length ; auto).
+    try(specialize (IHe acc) ; destruct (trans e acc) ; auto ; fail) ;
+    try(specialize (IHe1 (fun n => acc (n + (n + 0))%nat)) ;
+    specialize (IHe2 (fun n => acc (n + (n + 0) + 1)%nat)) ;
+    destruct (trans e1 (fun n => acc (n + (n + 0))%nat)) ; 
+    destruct (trans e2 (fun n => acc (n + (n + 0) + 1)%nat)) ;
+    simpl ; rewrite ContextProperties.merge_length ; auto ; fail).
+    
 
-    destruct (depth e) ; destruct t ; simpl in *|-*.
+    destruct (depth e).
+    specialize (IHe acc).
+    destruct (trans e).
+    destruct t ; simpl in *|-*.
     reflexivity.
     inversion IHe.
-    inversion IHe.
-    auto.
 
-    simpl ; auto.
+    specialize (IHe acc).
+    destruct (trans e).
+    destruct t ; simpl in *|-*.
+    inversion IHe.
+    inversion IHe.
+    reflexivity.
+
+    specialize (IHe (fun n => acc (S n))).
+    destruct (trans e).
+    simpl.
+    auto.
   Qed.
 
   Lemma length_svalue:
-    forall (e:expr) (n:nat),
-    let (_, cs) := trans e in
+    forall (e:expr) (acc:nat -> nat) (n:nat),
+    let (_, cs) := trans e acc in
     length cs < (S n) <-> svalue (S n) e.
   Proof.
     intros.
     specialize (depth_length e) ; intros.
+    specialize (H acc).
     destruct (trans e).
     rewrite <- H.
     apply CalculusProperties.depth_svalue.
   Qed.
 
   Lemma svalue_phi:
-    forall (e:expr),
-    svalue 0 e -> trans_expr e = M.ret (phi e).
+    forall (e:expr) (acc:nat -> nat),
+    svalue 0 e -> trans_expr e acc = M.ret (phi e acc).
   Proof.
     intros ; inversion H ; subst ; simpl ;
     try(reflexivity) ;
@@ -490,7 +510,7 @@ Module TranslationProperties (R:Replacement)
     unfold trans_expr.
     simpl.
     inversion H ; subst.
-    specialize (length_svalue e0 0) ; intros.
+    specialize (length_svalue e0 acc 0) ; intros.
     destruct (trans e0).
     apply H1 in H3.
     destruct t ; simpl in *|-*.
@@ -514,26 +534,30 @@ Module TranslationProperties (R:Replacement)
   Qed.
 
   Lemma context_stack_not_nil:
-    forall (e:expr),
-    let (_, cs) := trans e in
+    forall (e:expr) (acc:nat -> nat),
+    let (_, cs) := trans e acc in
     ~ In nil cs.
   Proof.
-    intros ;
-    induction e ; simpl ; auto ;
+    induction e ; intros ; simpl ; auto ;
 
-    try( destruct (trans e) ; auto ; fail) ;
+    try( specialize (IHe acc) ; destruct (trans e) ; auto ; fail) ;
 
-    try(destruct (trans e1) ; destruct (trans e2 ) ;
+    try(specialize (IHe1 (fun n => acc (n + (n + 0))%nat)) ;
+    specialize (IHe2 (fun n => acc (n + (n + 0) + 1)%nat)) ;
+    destruct (trans e1) ; destruct (trans e2 ) ;
     unfold not ; intros ;
     apply context_merge_not_nil in H ;
     tauto ; fail).
 
+
+    specialize (IHe acc).
     destruct (trans e).
     destruct t ; simpl.
     tauto.
     unfold not ; intros ; apply IHe.
     simpl ; auto.
     
+    specialize (IHe (fun n => acc (S n))).
     destruct (trans e).
     unfold not ; intros ; apply IHe.
     simpl in *|-*.
@@ -589,33 +613,33 @@ Module TranslationProperties (R:Replacement)
    seraient 2n+1.
   *)
   Lemma sstep_rstep:
-    forall (e1 e2:S.expr) (M1 M2:S.Memory.t),
-    let (e1', cs1) := trans e1 in
+    forall (e1:S.expr) (acc:nat -> nat) (e2:S.expr) (M1 M2:S.Memory.t),
+    let (e1', cs1) := trans e1 acc in
     let n := length cs1 in
     S.sstep n (M1, e1) (M2, e2) -> 
     match cs1 with
-    | nil => rstep (trans_mem M1, e1') (trans_mem M2, trans_expr e2)
+    | nil => rstep (trans_mem M1 acc, e1') (trans_mem M2 acc, trans_expr e2 acc)
     | cs1 => let (c1, cs1') := Context.shift cs1 in
       match c1 with
       | nil => 
-          let (e2', cs2) := trans e2 in 
+          let (e2', cs2) := trans e2 acc in 
           e1' = e2' /\ M1 = M2 /\ cs1 = cs2
       | cons (t_eh, h) c1' => 
-          let (e2', cs2) := trans e2 in
-          let M1' := trans_mem M1 in
-          let M2' := trans_mem M2 in
+          let (e2', cs2) := trans e2 acc in
+          let M1' := trans_mem M1 acc in
+          let M2' := trans_mem M2 acc in
           exists eh, 
           (
             S.svalue 0 eh /\ 
-            t_eh = trans_expr eh /\ 
+            t_eh = trans_expr eh acc /\ 
             M1 = M2 /\ 
             admin_stack 
               (Context.ssubst_stack 
-                 (pred n) StageSet.empty h (c1' :: cs1') (phi eh)) cs2 /\
+                 (pred n) StageSet.empty h (c1' :: cs1') (phi eh acc)) cs2 /\
             admin
-               (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' (phi eh)) e2'
+               (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' (phi eh acc)) e2'
           \/ 
-            exists eh', let t_eh' := trans_expr eh' in
+            exists eh', let t_eh' := trans_expr eh' acc in
             rstep (M1', t_eh) (M2', t_eh') /\
             cs2 = ((t_eh', h) :: c1') :: cs1'
           )
@@ -631,6 +655,7 @@ Module TranslationProperties (R:Replacement)
     inversion H.
 
     (* Case EAbs *)
+    specialize (IHe1 acc).
     destruct (trans e1).
     intros.
 
@@ -668,6 +693,7 @@ Module TranslationProperties (R:Replacement)
 
 
     (* Case EFix *)
+    specialize (IHe1 acc).
     destruct (trans e1).
     intros.
 
@@ -707,6 +733,7 @@ Module TranslationProperties (R:Replacement)
     inversion H.
 
     (* Case ERef *)
+    specialize (IHe1 acc).
     destruct (trans e1).
     intros.
     destruct t ; simpl in H ;
@@ -746,8 +773,8 @@ Module TranslationProperties (R:Replacement)
         apply Admin_refl.
 
         assert (
-         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) (phi x)) =
-         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 (phi x)))).
+         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) (phi x acc)) =
+         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 (phi x acc)))).
           apply functional_extensionality.
           intros ; apply MP.ssubst_eref.
         assumption.
@@ -762,8 +789,9 @@ Module TranslationProperties (R:Replacement)
 
     (* Case EBox *)
     
-    specialize (length_svalue e1 0) ; intros.
-    specialize (context_stack_not_nil e1) ; intros.
+    specialize (length_svalue e1 acc 0) ; intros.
+    specialize (context_stack_not_nil e1 acc) ; intros.
+    specialize (IHe1 acc).
     destruct (trans e1).
     destruct t ; simpl in *|-* ; intros.
 
@@ -803,12 +831,12 @@ Module TranslationProperties (R:Replacement)
             simpl.
 
             apply Rel_step with (e1:=Context.fill 
-               (Context.ssubst_context 0 StageSet.empty v t (phi x))
+               (Context.ssubst_context 0 StageSet.empty v t (phi x acc))
                (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
-               (M.ret (M.cast_ebox e)) (phi x))).
+               (M.ret (M.cast_ebox e)) (phi x acc))).
             assert(H9 := H0).
-            apply svalue_phi in H9.
-            rewrite H9. 
+            apply svalue_phi with (acc:=acc) in H9.
+            rewrite H9.
             apply MP.astep_ssubst_1.
             assumption.
             rewrite ContextProperties.fill_ssubst.

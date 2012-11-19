@@ -134,8 +134,8 @@ Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
     (x:M.S.var) (cs:t_stack) (v:expr) : t_stack :=
     match cs with
     | nil => nil
-    | c :: cs => (ssubst_context (pred n) ss x c v) ::
-       (ssubst_stack n ss x cs v)
+    | c :: cs => (ssubst_context n ss x c v) ::
+       (ssubst_stack (pred n) ss x cs v)
     end.
 
 End Context.
@@ -229,7 +229,6 @@ Module Translation (R:Replacement)
 
 
   (** ** Administrative Reduction Step *)
-  (* TODO: Not finished yet *)
   Inductive admin : relation T.expr :=
     | Admin_refl : forall (e:T.expr), admin e e
     | Admin_trans : forall (e1 e2 e3:T.expr) (acc:nat -> nat), 
@@ -241,13 +240,29 @@ Module Translation (R:Replacement)
     | Admin_app : forall (e1 e2 e3 e4:T.expr),
         admin e1 e3 -> admin e2 e4 -> 
         admin (M.cast_eapp e1 e2) (M.cast_eapp e3 e4)
+    | Admin_ref : forall (e1 e2:T.expr),
+        admin e1 e2 -> admin (M.cast_eref e1) (M.cast_eref e2)
+    | Admin_deref : forall (e1 e2:T.expr),
+        admin e1 e2 -> admin (M.cast_ederef e1) (M.cast_ederef e2)
+    | Admin_assign : forall (e1 e2 e3 e4:T.expr),
+        admin e1 e3 -> admin e2 e4 -> 
+        admin (M.cast_eassign e1 e2) (M.cast_eassign e3 e4)
+    | Admin_box : forall (e1 e2:T.expr),
+        admin e1 e2 -> admin (M.cast_ebox e1) (M.cast_ebox e2)
+    | Admin_unbox : forall (e1 e2:T.expr),
+        admin e1 e2 -> admin (M.cast_eunbox e1) (M.cast_eunbox e2)
+    | Admin_run : forall (e1 e2:T.expr),
+        admin e1 e2 -> admin (M.cast_erun e1) (M.cast_erun e2)
+    | Admin_lift : forall (e1 e2:T.expr),
+        admin e1 e2 -> admin (M.cast_elift e1) (M.cast_elift e2)
     | Admin_ret : forall (e1 e2:T.expr),
         admin e1 e2 -> admin (M.ret e1) (M.ret e2)
     | Admin_bind : forall (e1 e2:T.expr) (f1 f2:T.expr -> T.expr),
         admin e1 e2 -> (forall e3:T.expr, admin (f1 e3) (f2 e3)) ->
         admin (M.bind e1 f1) (M.bind e2 f2)
     | Admin_reduc : forall (e:expr) (acc:Splitter.t), svalue 1 e ->
-        admin (M.cast_eunbox (M.cast_ebox (trans_expr e acc))) (trans_expr e acc).
+        admin (M.cast_eunbox (M.cast_ebox (trans_expr e acc))) 
+          (trans_expr e acc).
 
   Definition admin_context :  relation Context.t := 
     Context.congr_context admin.
@@ -270,6 +285,7 @@ Module Type MonadProperties (R:Replacement)
   Import M.
 
   (** Substitution Properties *)
+
   Parameter ssubst_ret :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
      ssubst n ss (cast_var x) (ret e) v = ret (ssubst n ss (cast_var x) e v).
@@ -304,9 +320,31 @@ Module Type MonadProperties (R:Replacement)
      ssubst n ss (cast_var x) (cast_eref e) v
        = cast_eref (ssubst n ss (cast_var x) e v).
 
+  Parameter ssubst_deref :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_ederef e) v
+       = cast_ederef (ssubst n ss (cast_var x) e v).
+
+  Parameter ssubst_eassign :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 e2 v:expr),
+     ssubst n ss (cast_var x) (cast_eassign e1 e2) v
+       = cast_eassign (ssubst n ss (cast_var x) e1 v) 
+         (ssubst n ss (cast_var x) e2 v).
+
+  Parameter ssubst_ebox :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_ebox e) v
+       = cast_ebox (ssubst (S n) ss (cast_var x) e v).
+
   (** Abstract Reduction Properties *)
 
-  Parameter astep_ssubst_1 :
+  Parameter astep_bind_1 :
+    forall (e1 e2 ef:expr) (acc:Splitter.t) (M1 M2:Memory.t) (x:var),
+    let f := fun v => cast_eapp (cast_eabs x ef) v in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
+  Parameter astep_bind_2 :
     forall (v:S.expr) (e:expr) (acc:Splitter.t) (M1 M2:Memory.t) (f:expr -> expr),
     S.svalue 0 v -> astep (M1, (f (phi v acc))) (M2, e) ->
     astep (M1, (bind (ret (phi v acc)) f)) (M2, e).
@@ -319,14 +357,13 @@ Module Type MonadProperties (R:Replacement)
 
 End MonadProperties.
 
-Module ContextProperties (R:Replacement) (T:StagedCalculus) 
-    (M:Monad R T) (MP:MonadProperties R T M).
+Module ContextStaticProperties (R:Replacement)
+  (T:StagedCalculus) (M:Monad R T).
 
   Module Context := Context R T M.
-  Import MP.Translation.
   Import M.
   Import Context.
-  
+
   Lemma merge_length:
     forall (cs1 cs2:t_stack),
     length (merge cs1 cs2) = max (length cs1) (length cs2).
@@ -338,6 +375,18 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
     rewrite IHcs1.
     reflexivity.
   Qed.
+
+End ContextStaticProperties.
+
+Module ContextProperties (R:Replacement) (T:StagedCalculus) 
+    (M:Monad R T) (MP:MonadProperties R T M).
+
+  Module Context := Context R T M.
+  Module StaticProperties := ContextStaticProperties R T M.
+  Import StaticProperties.
+  Import MP.Translation.
+  Import M.
+  Import Context.
 
   Lemma fill_ssubst:
     forall (acc:Splitter.t) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
@@ -381,74 +430,15 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
 
 End ContextProperties.
 
-Module TranslationProperties (R:Replacement) 
-    (T:StagedCalculus) (M:Monad R T) (MP:MonadProperties R T M). 
+Module TranslationStaticProperties (R:Replacement) 
+    (T:StagedCalculus) (M:Monad R T).
 
-  Module Translation := MP.Translation.
-  Module ContextProperties := ContextProperties R T M MP.
+  Module Translation := Translation R T M.
   Module CalculusProperties := CalculusProperties R M.S.
+  Module ContextStaticProperties := ContextStaticProperties R T M.
   Import Translation.
   Import M.S.
   Import M.
-
-  Lemma admin_context_expr:
-    forall (k1 k2:Context.t) (e1 e2:T.expr),
-    admin_context k1 k2 -> admin e1 e2 ->
-    admin (Context.fill k1 e1) (Context.fill k2 e2).
-  Proof.
-    unfold admin_context ;
-    induction k1 ; intros.
-    inversion H ; subst.
-    simpl in *|-* ; assumption.
-    destruct a ; inversion H ; subst.
-    simpl ; apply Admin_bind.
-    inversion H ; subst.
-    assumption.
-    
-    intros.
-    apply Admin_app.
-    apply Admin_abs.
-
-    apply IHk1 ; assumption.
-    apply Admin_refl.
-  Qed.
-
-  Lemma admin_context_context:
-    forall (k1 k2 k3 k4:Context.t),
-    admin_context k1 k2 -> admin_context k3 k4 ->
-    admin_context (k1 ++ k3) (k2 ++ k4).
-  Proof.
-    unfold admin_context ;
-    induction k1 ; intros.
-    inversion H ; subst.
-    simpl ; assumption.
-
-    destruct a ; inversion H ; subst.
-    simpl ; apply Context.CongrCtx_cons.
-    apply IHk1 ; assumption.
-    assumption.
-  Qed.
-
-  Lemma admin_context_merge:
-    forall (cs1 cs2 cs3 cs4:Context.t_stack),
-    admin_stack cs1 cs2 ->
-    admin_stack cs3 cs4 ->
-    admin_stack (Context.merge cs1 cs3) (Context.merge cs2 cs4).
-  Proof.
-     induction cs1 ; intros ;
-     inversion H ; subst ; simpl.
-
-     assumption.
-
-     destruct cs3 ;
-     inversion H0 ; subst.
-     assumption.
-     apply Context.CongrStack_context.
-     apply IHcs1 ; assumption.
-     apply admin_context_context ;
-     [inversion H | inversion H0] ; subst ;
-     assumption.
-  Qed.
 
   Lemma depth_length:
     forall (e:expr) (acc:Splitter.t),
@@ -462,7 +452,7 @@ Module TranslationProperties (R:Replacement)
     specialize (IHe2 (Splitter.right acc)) ;
     destruct (trans e1) ; 
     destruct (trans e2) ;
-    simpl ; rewrite ContextProperties.merge_length ; auto ; fail).
+    simpl ; rewrite ContextStaticProperties.merge_length ; auto ; fail).
     
 
     destruct (depth e).
@@ -566,20 +556,125 @@ Module TranslationProperties (R:Replacement)
     assumption.
   Qed.
 
+  Lemma admin_context_expr:
+    forall (k1 k2:Context.t) (e1 e2:T.expr),
+    admin_context k1 k2 -> admin e1 e2 ->
+    admin (Context.fill k1 e1) (Context.fill k2 e2).
+  Proof.
+    unfold admin_context ;
+    induction k1 ; intros.
+    inversion H ; subst.
+    simpl in *|-* ; assumption.
+    destruct a ; inversion H ; subst.
+    simpl ; apply Admin_bind.
+    inversion H ; subst.
+    assumption.
+    
+    intros.
+    apply Admin_app.
+    apply Admin_abs.
+
+    apply IHk1 ; assumption.
+    apply Admin_refl.
+  Qed.
+
+  Lemma admin_context_context:
+    forall (k1 k2 k3 k4:Context.t),
+    admin_context k1 k2 -> admin_context k3 k4 ->
+    admin_context (k1 ++ k3) (k2 ++ k4).
+  Proof.
+    unfold admin_context ;
+    induction k1 ; intros.
+    inversion H ; subst.
+    simpl ; assumption.
+
+    destruct a ; inversion H ; subst.
+    simpl ; apply Context.CongrCtx_cons.
+    apply IHk1 ; assumption.
+    assumption.
+  Qed.
+
+  Lemma admin_context_merge:
+    forall (cs1 cs2 cs3 cs4:Context.t_stack),
+    admin_stack cs1 cs2 ->
+    admin_stack cs3 cs4 ->
+    admin_stack (Context.merge cs1 cs3) (Context.merge cs2 cs4).
+  Proof.
+     induction cs1 ; intros ;
+     inversion H ; subst ; simpl.
+
+     assumption.
+
+     destruct cs3 ;
+     inversion H0 ; subst.
+     assumption.
+     apply Context.CongrStack_context.
+     apply IHcs1 ; assumption.
+     apply admin_context_context ;
+     [inversion H | inversion H0] ; subst ;
+     assumption.
+  Qed.
+
+End TranslationStaticProperties.
+
+Module TranslationProperties (R:Replacement) 
+    (T:StagedCalculus) (M:Monad R T) (MP:MonadProperties R T M). 
+
+  Module StaticProperties := TranslationStaticProperties R T M.
+  Module Translation := MP.Translation.
+  Module ContextProperties := ContextProperties R T M MP.
+  Module CalculusProperties := CalculusProperties R M.S.
+  Import StaticProperties.
+  Import Translation.
+  Import M.S.
+  Import M.
+
 (*
-  Lemma context_independant:
-    forall (e:expr),
-      let (_, cs) := trans e in
+  Lemma context_merge_independent:
+    forall (e1 e2:expr) (acc:Splitter.t),
+    let (_, cs1) := trans e1 (Splitter.left acc) in
+    let (_, cs2) := trans e2 (Splitter.right acc) in
+    match cs1 with
+      | ((eh1, h1) :: c1) :: cs1 =>
+      match Context.merge cs1 cs2 with
+        | ((eh, h) :: c) :: cs =>
+            VarSet.mem h (Context.context_hole_set c1) = false ->
+            VarSet.mem h (Context.context_hole_set c) = false
+        | _ => True
+      end
+      | _ => True
+    end.
+  Proof.
+    induction e1 ; simpl ; intros ;
+    try(destruct (trans e2) ; auto ; fail) ;
+    try(specialize (IHe1 e2 acc) ;
+    destruct (trans e1) ; destruct (trans e2) ;
+    assumption ; fail).
+
+    assert(IHe1 := IHe1_2).
+    specialize (IHe1 e2 acc).
+    specialize (IHe1_1 e2 (Splitter.left acc)).
+    specialize (IHe1_2 e2 (Splitter.left acc)).
+    destruct (trans e1_1) ; destruct (trans e1_2).
+
+  Qed.
+
+  Lemma context_independent:
+    forall (e:expr) (acc:Splitter.t),
+      let (_, cs) := trans e acc in
       match cs with
       | ((eh, h) :: c) :: cs => VarSet.mem h (Context.context_hole_set c) = false
       | _ => True 
       end.
   Proof.
     induction e ; simpl ; intros ; auto ;
-    try(destruct (trans e) ; assumption).
+    try(specialize (IHe acc) ; destruct (trans e) ; assumption).
 
+    specialize (IHe1 (Splitter.left acc)).
+    specialize (IHe2 (Splitter.right acc)).
     destruct (trans e1).
     destruct (trans e2).
+
     destruct t ; simpl.
     assumption.
     destruct t0 ; simpl.
@@ -593,17 +688,107 @@ Module TranslationProperties (R:Replacement)
     simpl.
     
   Qed.
+*)
+(*
+  Lemma context_merge_independent:
+    forall (e1 e2:expr) (acc:Splitter.t),
+    let (_, cs1) := trans e1 (Splitter.left acc) in
+    let (_, cs2) := trans e2 (Splitter.right acc) in
+    match cs1 with
+      | ((eh1, h1) :: c1) :: cs1 =>
+        VarSet.mem h (Context.context_hole_set c1) = false ->
 
-  Lemma context_stack_independant:
-    forall (e:expr),
-      let (_, cs) := trans e in
+      match Context.merge cs1 cs2 with
+        | ((eh, h) :: c) :: cs =>
+            VarSet.mem h (Context.context_hole_set c1) = false ->
+            VarSet.mem h (Context.context_hole_set c) = false
+        | _ => True
+      end
+      | _ => True
+    end.
+  Proof.
+    induction e1 ; simpl ; intros ;
+    try(destruct (trans e2) ; auto ; fail) ;
+    try(specialize (IHe1 e2 acc) ;
+    destruct (trans e1) ; destruct (trans e2) ;
+    assumption ; fail).
+
+    assert(IHe1 := IHe1_2).
+    specialize (IHe1 e2 acc).
+    specialize (IHe1_1 e2 (Splitter.left acc)).
+    specialize (IHe1_2 e2 (Splitter.left acc)).
+    destruct (trans e1_1) ; destruct (trans e1_2).
+
+  Qed.*)
+
+  (*Lemma context_stack_independent:
+    forall (e:expr) (acc:Splitter.t),
+      let (_, cs) := trans e acc in
       match cs with
       | ((eh, h) :: c) :: cs => VarSet.mem h (Context.stack_hole_set cs) = false
       | _ => True 
       end.
   Proof.
+    induction e ; simpl ; intros ; auto ;
+    try(specialize (IHe acc) ; destruct (trans e) ; assumption ; fail).
+
+    specialize (IHe1 (Splitter.left acc)).
+    specialize (IHe2 (Splitter.right acc)).
+    destruct (trans e1) ; destruct (trans e2).
+
 
   Qed.*)
+
+  Lemma context_stack_independent:
+    forall (e:expr) (acc:Splitter.t),
+      let (_, cs) := trans e acc in
+      match Context.shift cs with
+        | ((_, h) :: c, cs) => 
+          VarSet.mem h (Context.context_hole_set c) = false /\ 
+          VarSet.mem h (Context.stack_hole_set cs) = false
+        | _ => True
+      end.
+  Proof.
+    induction e ; simpl ; intros ; auto ;
+    try(specialize (IHe acc) ; destruct (trans e) ; assumption ; fail) ;
+    admit.
+    (* TODO: Prove it *)
+  Qed.
+
+  Lemma context_expr_subst:
+    forall (h:var) (e v:T.expr) (c:Context.t) (n:nat),
+      VarSet.mem h (Context.context_hole_set c) = false ->
+      ssubst n StageSet.empty (M.cast_var (hole_var h)) (Context.fill c e) v =
+      Context.fill (Context.ssubst_context n StageSet.empty h c v) 
+      (ssubst n StageSet.empty (M.cast_var (hole_var h)) e v).
+  Proof.
+    induction c ; intros ; simpl.
+    reflexivity.
+    destruct a.
+    specialize (IHc n).
+    simpl in H.
+    assert(H0 := H).
+    apply VarSetProperties.add_mem_5 in H0.
+    apply IHc in H0.
+    clear IHc.
+    assert(beq_nat h v0 = false).
+    apply VarSetProperties.add_mem_6 in H.
+    apply beq_nat_false_iff ; auto.
+    rewrite H1.
+    simpl.
+    rewrite <- H0.
+    apply MP.ssubst_bind.
+    apply functional_extensionality.
+    intros.
+    rewrite MP.ssubst_eapp.
+    rewrite MP.ssubst_eabs.
+    assert(beq_var (hole_var h) (hole_var v0) = false).
+    unfold hole_var.
+    apply beq_nat_false_iff ;
+    apply beq_nat_false_iff in H1.
+    omega.
+    rewrite H2 ; reflexivity.
+  Qed.
 
   (* En gros, on distingue 2 mondes de variables:
     - les variables traduites (cast_var) qui sont celles 
@@ -622,9 +807,7 @@ Module TranslationProperties (R:Replacement)
     | nil => rstep (trans_mem M1 acc, e1') (trans_mem M2 acc, trans_expr e2 acc)
     | cs1 => let (c1, cs1') := Context.shift cs1 in
       match c1 with
-      | nil => 
-          let (e2', cs2) := trans e2 acc in 
-          e1' = e2' /\ M1 = M2 /\ cs1 = cs2
+      | nil => False
       | cons (t_eh, h) c1' => 
           let (e2', cs2) := trans e2 acc in
           let M1' := trans_mem M1 acc in
@@ -636,13 +819,14 @@ Module TranslationProperties (R:Replacement)
             M1 = M2 /\ 
             admin_stack 
               (Context.ssubst_stack 
-                 (pred n) StageSet.empty h (c1' :: cs1') (phi eh acc)) cs2 /\
+                 (pred n) StageSet.empty h (Context.unshift cs1' c1') (phi eh acc)) cs2 /\
             admin
                (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' (phi eh acc)) e2'
           \/ 
             exists eh', let t_eh' := trans_expr eh' acc in
             rstep (M1', t_eh) (M2', t_eh') /\
-            cs2 = ((t_eh', h) :: c1') :: cs1'
+            e1' = e2' /\
+            cs2 = Context.unshift cs1' ((t_eh', h) :: c1')
           )
       end
     end.
@@ -668,6 +852,8 @@ Module TranslationProperties (R:Replacement)
       destruct (trans e3).
       destruct IHe1 ; subst ; tauto.
 
+      assumption.
+
       destruct p ; destruct (trans e3).
       destruct IHe1.
       exists x.
@@ -690,8 +876,8 @@ Module TranslationProperties (R:Replacement)
       simpl in H1.
       rewrite H1 ; assumption.
       exists x0.
-      assumption.
-
+      destruct H0 ; destruct H1 ; subst.
+      auto.
 
     (* Case EFix *)
     specialize (IHe1 acc).
@@ -705,6 +891,7 @@ Module TranslationProperties (R:Replacement)
     destruct t1 ; simpl in *|-*.
       destruct (trans e3).
       destruct IHe1 ; subst ; tauto.
+      assumption.
 
       destruct p ; destruct (trans e3).
       destruct IHe1.
@@ -725,7 +912,7 @@ Module TranslationProperties (R:Replacement)
       simpl in H1.
       rewrite H1 ; assumption.
       exists x0.
-      assumption.
+      destruct H0 ; destruct H1 ; subst ; auto.
 
     (* Case EApp *)
     admit.
@@ -759,6 +946,7 @@ Module TranslationProperties (R:Replacement)
       destruct t1 ; simpl in *|-*.
         destruct (trans e3).
         destruct IHe1 ; subst ; tauto.
+        assumption.
 
         destruct p ; destruct (trans e3).
         destruct IHe1.
@@ -780,7 +968,7 @@ Module TranslationProperties (R:Replacement)
           intros ; apply MP.ssubst_eref.
         assumption.
         exists x0.
-        assumption.
+        destruct H0 ; destruct H1 ; subst ; auto.
 
     (* Case EDeref *)
     admit.
@@ -792,28 +980,31 @@ Module TranslationProperties (R:Replacement)
     
     specialize (length_svalue e1 acc 0) ; intros.
     specialize (context_stack_not_nil e1 acc) ; intros.
+    specialize (context_stack_independent e1 acc) ; intros.
     specialize (IHe1 acc).
     destruct (trans e1).
     destruct t ; simpl in *|-* ; intros.
 
       (* Case of empty stack. Impossible *)
-      inversion H1 ; subst ; simpl in *|-*.
+      inversion H2 ; subst ; simpl in *|-*.
       destruct H.
       assert(svalue 1 e1).
       apply H ; omega.
-      specialize (CalculusProperties.svalue_not_sprogresses 1 M1 e1 H3 (M2,e3) H4) ; intros.
+      specialize (CalculusProperties.svalue_not_sprogresses 1 M1 e1 H4 (M2,e3) H5) ; intros.
       contradiction.
 
       (* Case of stack > 0 *)
-      destruct t0 ; simpl in *|-*.
+      destruct t0.
+      
+        simpl in *|-*.
 
         (* Case of length(stack) = 1 *)
-        inversion H1 ; subst ; simpl in *|-*.
-        specialize (IHe1 e3 M1 M2 H4).
+        inversion H2 ; subst ; simpl in *|-*.
+        specialize (IHe1 e3 M1 M2 H5).
         destruct t.
 
           (* Case stack = [[]] Impossible *)
-          exfalso ; apply H0 ; left ; reflexivity.
+          exfalso ; assumption.
    
           (* Case stack = [a :: lst] *)
           destruct p ; clear H0.
@@ -823,42 +1014,141 @@ Module TranslationProperties (R:Replacement)
           destruct H0.
 
             (* Case svalue *)
-            destruct H0 ; destruct H2 ; 
-            destruct H3 ; destruct H5.
+            destruct H0 ; destruct H3 ; 
+            destruct H4 ; destruct H6.
             subst.
             clear H.
-            inversion H5 ; subst.
-            inversion H3 ; subst ; clear H5 H3.
+            inversion H6 ; subst.
+            inversion H4 ; subst ; clear H6 H4.
             simpl.
-
             apply Rel_step with (e1:=Context.fill 
                (Context.ssubst_context 0 StageSet.empty v t (phi x acc))
                (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
                (M.ret (M.cast_ebox e)) (phi x acc))).
-            assert(H9 := H0).
-            apply svalue_phi with (acc:=acc) in H9.
-            rewrite H9.
-            apply MP.astep_ssubst_1.
+            assert(H10 := H0).
+            apply svalue_phi with (acc:=acc) in H10.
+            rewrite H10.
+            apply MP.astep_bind_2.
             assumption.
             rewrite ContextProperties.fill_ssubst.
             apply MP.astep_app_abs.
             assumption.
             assumption.
-
-            (* To prove *)
-            admit.
-
-            (* To prove *)
-            fail.
+            destruct H1 ; assumption.
+            apply admin_context_expr.
+            assumption.
+            rewrite MP.ssubst_ret.
+            rewrite MP.ssubst_ebox.
+            constructor.
+            constructor.
+            assumption.
 
             (* Case not svalue *)
-            admit.
+            destruct H0 ; destruct H0 ; destruct H3.
+            inversion H0 ; subst.
+            simpl.
+            apply Rel_step with (e1:=bind e4 (fun v0 =>
+               cast_eapp
+               (cast_eabs (cast_var (hole_var v))
+               (Context.fill t (ret (cast_ebox e2)))) v0)).
+            apply MP.astep_bind_1 ; assumption.
+            constructor ;
+            [assumption | intros ; constructor].
 
         (* Case of length(stack) > 1 *)
-        admit.
+        inversion H2 ; subst.
+        specialize (IHe1 e3 M1 M2 H5).
+        destruct (Context.shift (t0 :: t1)).
+        destruct t2.
+        assumption.
+        destruct p.
+        simpl.
+
+        destruct (trans e3).
+        
+        destruct IHe1.
+        destruct t4.
+        destruct H3.
+        destruct H3.
+        destruct H4.
+        destruct H6.
+        destruct H7.
+        inversion H7 ; subst.
+        destruct H3.
+        destruct H3.
+        destruct H4.
+        inversion H6.
+
+        exists x.
+        destruct H3.
+
+          (* Case svalue *)
+          destruct H3.
+          destruct H4.
+          destruct H6.
+          destruct H7.
+          subst.
+          left.
+          repeat(split ; auto).
+
+          inversion H7 ; subst.
+          simpl in *|-*.*.
+          assumption.
+        
+          simpl in *|-*.
+          inversion H7 ; subst.
+          rewrite context_expr_subst.
+          apply admin_context_expr.
+          assumption.
+          
+          rewrite MP.ssubst_ret.
+          rewrite MP.ssubst_ebox.
+          constructor.
+          constructor.
+          assumption.
+
+          destruct H1.
+          rewrite VarSetProperties.union_mem in H4.
+          apply orb_false_iff in H4.
+          destruct H4 ; assumption.
+
+          (* Case not svalue *)
+          destruct H3.
+          destruct H3.
+          destruct H4.
+          inversion H6 ; subst.
+          clear H6.
+          right.
+          exists x0.
+          repeat(split ; auto).
 
     (* Case EUnbox *)
-    admit.
+    specialize (IHe1 (Splitter.next acc)).
+    destruct (trans e1).
+    simpl in *|-* ; intros.
+    inversion H ; subst.
+
+      (* Case EUnbox -> EUnbox *)
+      specialize (IHe1 e3 M1 M2 H2).
+      destruct t.
+      unfold trans_expr in *|-*.
+      simpl in *|-*.
+      assert(trans e3 (Splitter.next acc)  = 
+        (trans ((fun x => x) e3) (Splitter.next acc) )).
+      reflexivity.
+      destruct (trans e3).
+      exists e1.
+      right.
+      exists e3.
+      repeat (split ; auto).
+      admit. (* TO prove *)
+      destruct (trans e3).
+      destruct (trans e3).
+      admit.
+      admit.
+
+      (* Case EUnbox Box e -> e *)
+      admit.
 
     (* Case ERun *)
     admit.
@@ -869,19 +1159,22 @@ Module TranslationProperties (R:Replacement)
 
   Theorem sstep_rstep_O:
     forall (e1 e2:S.expr) (M1 M2:S.Memory.t),
+    let acc := Splitter.empty in
     depth e1 = 0 ->
     S.sstep 0 (M1, e1) (M2, e2) -> 
-    rstep (trans_mem M1, trans_expr e1) (trans_mem M2, trans_expr e2).
+    rstep (trans_mem M1 acc, trans_expr e1 acc) 
+      (trans_mem M2 acc, trans_expr e2 acc).
   Proof.
     intros.
-    specialize (sstep_rstep e1 e2 M1 M2) ; intros.
+    specialize (sstep_rstep e1 acc e2 M1 M2) ; intros.
 
     assert(forall (e1':T.expr) (cs1:Context.t_stack), 
-    trans e1 = (e1', cs1) -> cs1 = nil).
+    trans e1 acc = (e1', cs1) -> cs1 = nil).
     intros.
       assert(0 = length cs1).
       rewrite <- H.
       specialize (depth_length e1) ; intros.
+      specialize (H3 acc) ;
       rewrite H2 in H3 ; destruct H3.
       reflexivity.
     destruct cs1 ; simpl in *|-* ;

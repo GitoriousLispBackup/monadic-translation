@@ -101,7 +101,7 @@ VFILES:= Misc/Tactics.v\
   Misc/Sets.v\
   Misc/Relation.v\
   Misc/Library.v\
-  Misc/Splitter.v\
+  Misc/Injection.v\
   Calculus/Sets.v\
   Calculus/Definitions.v\
   Calculus/Terminology.v\
@@ -114,7 +114,7 @@ ORDEREDVFILES:= Misc/Tactics.v\
   Misc/Sets.v\
   Misc/Relation.v\
   Misc/Library.v\
-  Misc/Splitter.v\
+  Misc/Injection.v\
   Calculus/Sets.v\
   Calculus/Definitions.v\
   Calculus/Terminology.v\

@@ -4,8 +4,10 @@ Require Import Coq.Arith.MinMax.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Logic.FunctionalExtensionality.
+Require Import Coq.Logic.ClassicalChoice.
 Require Import "Misc/Library".
-Require Import "Misc/Splitter".
+Require Import "Misc/Injection".
+Require Import "Misc/Relation".
 Require Import "Calculus/Sets".
 Require Import "Calculus/Definitions".
 Require Import "Calculus/Monad".
@@ -148,7 +150,7 @@ Module Translation (R:Replacement)
   Module Context := Context R T M.
   Import S.CRaw.
 
-  Fixpoint trans (e:S.expr) (acc:Splitter.t) : T.expr * Context.t_stack :=
+  Fixpoint trans (e:S.expr) (acc:Injection.t) : T.expr * Context.t_stack :=
     match e with
     | EConst i => (M.ret (M.cast_econst i), Context.empty)
     | EVar y => (M.ret (M.cast_evar (M.cast_var (source_var y))), Context.empty)
@@ -161,8 +163,8 @@ Module Translation (R:Replacement)
             (M.cast_var (source_var f)) 
             (M.cast_var (source_var y)) e), cs)
     | EApp e1 e2 => 
-        let (e1, cs1) := trans e1 (Splitter.left acc) in
-        let (e2, cs2) := trans e2 (Splitter.right acc) in
+        let (e1, cs1) := trans e1 (Injection.left acc) in
+        let (e2, cs2) := trans e2 (Injection.right acc) in
         (M.bind e1
         (fun v1 => M.bind e2
         (fun v2 => M.cast_eapp v1 v2)), 
@@ -175,8 +177,8 @@ Module Translation (R:Replacement)
         let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_ederef v), cs)
     | EAssign e1 e2 =>
-        let (e1, cs1) := trans e1 (Splitter.left acc) in
-        let (e2, cs2) := trans e2 (Splitter.right acc) in
+        let (e1, cs1) := trans e1 (Injection.left acc) in
+        let (e2, cs2) := trans e2 (Injection.right acc) in
         (M.bind e1
         (fun v1 => M.bind e2
         (fun v2 => M.cast_eassign v1 v2)), 
@@ -188,9 +190,9 @@ Module Translation (R:Replacement)
         | c :: cs => (Context.fill c (M.ret (M.cast_ebox e)), cs)
         end
     | EUnbox e =>
-       let (e', cs) := trans e (Splitter.next acc) in
+       let (e', cs) := trans e (Injection.right acc) in
        (M.cast_eunbox (M.cast_evar 
-	(M.cast_var (hole_var (Splitter.get acc 0)))), ((e', Splitter.get acc 0) :: nil) :: cs)
+	(M.cast_var (hole_var (Injection.get acc 0)))), ((e', Injection.get acc 0) :: nil) :: cs)
     | ERun e =>
         let (e,cs) := trans e acc in
         (M.bind e (fun v => M.cast_erun v), cs)
@@ -199,16 +201,16 @@ Module Translation (R:Replacement)
         (M.bind e (fun v => M.cast_elift v), cs)
     end.
 
-  Definition trans_expr (e:S.expr) (acc:Splitter.t) : T.expr :=
+  Definition trans_expr (e:S.expr) (acc:Injection.t) : T.expr :=
     let (e, _) := trans e acc in e.
 
-  Fixpoint trans_mem (m:S.Memory.t) (acc:Splitter.t) : T.Memory.t :=
+  Fixpoint trans_mem (m:S.Memory.t) (acc:Injection.t) : T.Memory.t :=
     match m with
     | nil => nil
     | e :: m => trans_expr e acc :: (trans_mem m acc)
     end.
 
-  Definition phi (e:S.expr) (acc:Splitter.t) : T.expr :=
+  Definition phi (e:S.expr) (acc:Injection.t) : T.expr :=
     match e with
     | EConst i => M.cast_econst i
     | EVar y => M.cast_evar (M.cast_var (source_var y))
@@ -227,6 +229,68 @@ Module Translation (R:Replacement)
     | _ => M.cast_econst 0
     end.
 
+  (** ** Alpha Renaming Step *)
+  Inductive alpha_rename (alpha:Injection.t) : relation T.expr :=
+    | Alpha_const : forall (c:nat),
+	alpha_rename alpha (M.cast_econst c) (M.cast_econst c)
+    | Alpha_var_source : forall (x:S.var),
+        alpha_rename alpha 
+          (M.cast_evar (M.cast_var (source_var x)))
+          (M.cast_evar (M.cast_var (source_var x)))
+    | Alpha_var_hole : forall (x:S.var),
+        alpha_rename alpha 
+          (M.cast_evar (M.cast_var (hole_var x)))
+          (M.cast_evar (M.cast_var (hole_var (Injection.get alpha x))))
+    | Alpha_abs_source : forall (x:S.var) (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha 
+          (M.cast_eabs (M.cast_var (source_var x)) e1) 
+          (M.cast_eabs (M.cast_var (source_var x)) e2)
+    | Alpha_abs_hole : forall (x:S.var) (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha 
+          (M.cast_eabs (M.cast_var (hole_var x)) e1) 
+          (M.cast_eabs (M.cast_var (hole_var (Injection.get alpha x))) e2)
+    | Alpha_fix : forall (f x:S.var) (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha 
+            (M.cast_efix (M.cast_var (source_var f)) (M.cast_var (source_var x)) e1)
+            (M.cast_efix (M.cast_var (source_var f)) (M.cast_var (source_var x)) e2)
+    | Alpha_app : forall (e1 e2 e3 e4:T.expr),
+        alpha_rename alpha e1 e3 -> alpha_rename alpha e2 e4 -> 
+        alpha_rename alpha (M.cast_eapp e1 e2) (M.cast_eapp e3 e4)
+    | Alpha_loc : forall (l:nat),
+	alpha_rename alpha (M.cast_eloc l) (M.cast_eloc l)
+    | Alpha_ref : forall (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+        alpha_rename alpha (M.cast_eref e1) (M.cast_eref e2)
+    | Alpha_deref : forall (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha (M.cast_ederef e1) (M.cast_ederef e2)
+    | Alpha_assign : forall (e1 e2 e3 e4:T.expr),
+        alpha_rename alpha e1 e3 -> alpha_rename alpha e2 e4 -> 
+        alpha_rename alpha (M.cast_eassign e1 e2) (M.cast_eassign e3 e4)
+    | Alpha_box : forall (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha (M.cast_ebox e1) (M.cast_ebox e2)
+    | Alpha_unbox : forall (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 ->
+          alpha_rename alpha (M.cast_eunbox e1) (M.cast_eunbox e2)
+    | Alpha_run : forall (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha (M.cast_erun e1) (M.cast_erun e2)
+    | Alpha_lift : forall (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha (M.cast_elift e1) (M.cast_elift e2)
+    | Alpha_ret : forall (e1 e2:T.expr),
+        alpha_rename alpha e1 e2 -> 
+          alpha_rename alpha (M.ret e1) (M.ret e2)
+    | Alpha_bind : forall (e1 e2 e3 e4:T.expr) (f1 f2:T.expr -> T.expr),
+        alpha_rename alpha e1 e2 -> 
+        alpha_rename alpha
+          (f1 (M.cast_evar (M.cast_var (source_var 0))))
+          (f2 (M.cast_evar (M.cast_var (source_var 0)))) ->
+        alpha_rename alpha (M.bind e1 f1) (M.bind e2 f2).
 
   (** ** Administrative Reduction Step *)
   Inductive admin : relation T.expr :=
@@ -260,7 +324,7 @@ Module Translation (R:Replacement)
     | Admin_bind : forall (e1 e2:T.expr) (f1 f2:T.expr -> T.expr),
         admin e1 e2 -> (forall e3:T.expr, admin (f1 e3) (f2 e3)) ->
         admin (M.bind e1 f1) (M.bind e2 f2)
-    | Admin_reduc : forall (e:expr) (acc:Splitter.t), svalue 1 e ->
+    | Admin_reduc : forall (e:expr) (acc:Injection.t), svalue 1 e ->
         admin (M.cast_eunbox (M.cast_ebox (trans_expr e acc))) 
           (trans_expr e acc).
 
@@ -269,10 +333,24 @@ Module Translation (R:Replacement)
   Definition admin_stack : relation Context.t_stack := 
     Context.congr_stack admin.
 
+  Inductive alpha_rename_context (alpha: Injection.t) : relation Context.t :=
+    | AlphaCtx_nil: alpha_rename_context alpha nil nil
+    | AlphaCtx_cons: forall (k1 k2:Context.t) (e1 e2:T.expr) (x:M.S.var),
+        alpha_rename_context alpha k1 k2 -> 
+        alpha_rename alpha e1 e2 -> 
+        alpha_rename_context alpha ((e1,x)::k1) ((e2,(Injection.get alpha x))::k2).
+
+  Inductive alpha_rename_stack (alpha:Injection.t) : relation Context.t_stack :=
+    | AlphaStack_empty: alpha_rename_stack alpha nil nil
+    | AlphaStack_context: forall (s1 s2:Context.t_stack) (k1 k2:Context.t),
+       alpha_rename_stack alpha s1 s2 -> alpha_rename_context alpha k1 k2 ->
+       alpha_rename_stack alpha (k1::s1) (k2::s2).
+
   (** ** Relative Abstract Reduction Step *)
   Inductive rstep : relation T.state :=
-    | Rel_step : forall (s:T.state) (e1 e2:T.expr) (M:T.Memory.t),
-        M.astep s (M,e1) -> admin e1 e2 -> rstep s (M,e2).
+    | Rel_step : forall (s:T.state) (e1 e2 e3:T.expr) (M:T.Memory.t),
+        M.astep s (M,e1) -> admin e1 e2 -> 
+        (exists f, alpha_rename f e2 e3) -> rstep s (M,e3).
 
 End Translation.
 
@@ -339,18 +417,18 @@ Module Type MonadProperties (R:Replacement)
   (** Abstract Reduction Properties *)
 
   Parameter astep_bind_1 :
-    forall (e1 e2 ef:expr) (acc:Splitter.t) (M1 M2:Memory.t) (x:var),
+    forall (e1 e2 ef:expr) (acc:Injection.t) (M1 M2:Memory.t) (x:var),
     let f := fun v => cast_eapp (cast_eabs x ef) v in
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind e1 f) (M2, bind e2 f).
 
   Parameter astep_bind_2 :
-    forall (v:S.expr) (e:expr) (acc:Splitter.t) (M1 M2:Memory.t) (f:expr -> expr),
+    forall (v:S.expr) (e:expr) (acc:Injection.t) (M1 M2:Memory.t) (f:expr -> expr),
     S.svalue 0 v -> astep (M1, (f (phi v acc))) (M2, e) ->
     astep (M1, (bind (ret (phi v acc)) f)) (M2, e).
 
   Parameter astep_app_abs :
-    forall (v:S.expr) (x:S.var) (e:expr) (acc:Splitter.t) (M:Memory.t),
+    forall (v:S.expr) (x:S.var) (e:expr) (acc:Injection.t) (M:Memory.t),
     S.svalue 0 v -> astep (M, cast_eapp
       (cast_eabs (cast_var x) e) (phi v acc))
       (M, ssubst 0 StageSet.empty (cast_var x) e (phi v acc)).
@@ -389,7 +467,7 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
   Import Context.
 
   Lemma fill_ssubst:
-    forall (acc:Splitter.t) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
+    forall (acc:Injection.t) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
     S.svalue 0 v -> VarSet.mem x (context_hole_set c) = false ->
       fill (ssubst_context n ss x c (phi v acc)) 
       (ssubst n ss (M.cast_var (hole_var x)) e (phi v acc)) = 
@@ -441,15 +519,15 @@ Module TranslationStaticProperties (R:Replacement)
   Import M.
 
   Lemma depth_length:
-    forall (e:expr) (acc:Splitter.t),
+    forall (e:expr) (acc:Injection.t),
     let (_, cs) := trans e acc in
     depth e = length cs.
   Proof.
     induction e ; simpl ; intros ;
     try(auto ; fail) ;
     try(specialize (IHe acc) ; destruct (trans e acc) ; auto ; fail) ;
-    try(specialize (IHe1 (Splitter.left acc)) ;
-    specialize (IHe2 (Splitter.right acc)) ;
+    try(specialize (IHe1 (Injection.left acc)) ;
+    specialize (IHe2 (Injection.right acc)) ;
     destruct (trans e1) ; 
     destruct (trans e2) ;
     simpl ; rewrite ContextStaticProperties.merge_length ; auto ; fail).
@@ -469,14 +547,14 @@ Module TranslationStaticProperties (R:Replacement)
     inversion IHe.
     reflexivity.
 
-    specialize (IHe (Splitter.next acc)).
+    specialize (IHe (Injection.right acc)).
     destruct (trans e).
     simpl.
     auto.
   Qed.
 
   Lemma length_svalue:
-    forall (e:expr) (acc:Splitter.t) (n:nat),
+    forall (e:expr) (acc:Injection.t) (n:nat),
     let (_, cs) := trans e acc in
     length cs < (S n) <-> svalue (S n) e.
   Proof.
@@ -489,7 +567,7 @@ Module TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma svalue_phi:
-    forall (e:expr) (acc:Splitter.t),
+    forall (e:expr) (acc:Injection.t),
     svalue 0 e -> trans_expr e acc = M.ret (phi e acc).
   Proof.
     intros ; inversion H ; subst ; simpl ;
@@ -524,7 +602,7 @@ Module TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma context_stack_not_nil:
-    forall (e:expr) (acc:Splitter.t),
+    forall (e:expr) (acc:Injection.t),
     let (_, cs) := trans e acc in
     ~ In nil cs.
   Proof.
@@ -532,8 +610,8 @@ Module TranslationStaticProperties (R:Replacement)
 
     try( specialize (IHe acc) ; destruct (trans e) ; auto ; fail) ;
 
-    try(specialize (IHe1 (Splitter.left acc)) ;
-    specialize (IHe2 (Splitter.right acc)) ;
+    try(specialize (IHe1 (Injection.left acc)) ;
+    specialize (IHe2 (Injection.right acc)) ;
     destruct (trans e1) ; destruct (trans e2) ;
     unfold not ; intros ;
     apply context_merge_not_nil in H ;
@@ -547,7 +625,7 @@ Module TranslationStaticProperties (R:Replacement)
     unfold not ; intros ; apply IHe.
     simpl ; auto.
     
-    specialize (IHe (Splitter.next acc)).
+    specialize (IHe (Injection.right acc)).
     destruct (trans e).
     unfold not ; intros ; apply IHe.
     simpl in *|-*.
@@ -615,6 +693,287 @@ Module TranslationStaticProperties (R:Replacement)
      assumption.
   Qed.
 
+
+  Lemma alpha_rename_stack_app_refl:
+    forall (cs1 cs2:Context.t_stack),
+    alpha_rename_stack Injection.id cs1 cs1 ->
+    alpha_rename_stack Injection.id cs2 cs2 ->
+    alpha_rename_stack Injection.id (cs1 ++ cs2) (cs1 ++ cs2).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    assumption.
+    inversion H ; inversion H0 ; subst.
+    rewrite app_nil_r.
+    assumption.
+    constructor.
+    apply IHcs1.
+    assumption.
+    assumption.
+    assumption.
+  Qed.
+
+  Lemma alpha_rename_context_app:
+    forall (c1 c2 c3 c4:Context.t) (alpha:Injection.t),
+    alpha_rename_context alpha c1 c3 ->
+    alpha_rename_context alpha c2 c4 ->
+    alpha_rename_context alpha (c1++c2) (c3++c4).
+  Proof.
+    induction c1 ; simpl ; intros.
+    inversion H ; subst.
+    assumption.
+    inversion H ; subst.
+    constructor.
+    apply IHc1 ; assumption.
+    assumption.
+  Qed.
+
+  Lemma alpha_rename_merge:
+    forall (cs1 cs2 cs3 cs4:Context.t_stack) (alpha:Injection.t),
+    alpha_rename_stack alpha cs1 cs3 ->
+    alpha_rename_stack alpha cs2 cs4 ->
+    alpha_rename_stack alpha (Context.merge cs1 cs2) (Context.merge cs3 cs4).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    inversion H ; subst.
+    assumption.
+    inversion H ; subst.
+    destruct cs2.
+    inversion H0 ; subst.
+    simpl.
+    assumption.
+    simpl.
+    inversion H0 ; subst.
+    constructor.
+    apply IHcs1.
+    assumption.
+    assumption.
+    apply alpha_rename_context_app.
+    assumption.
+    assumption.
+  Qed.
+
+  Lemma alpha_rename_fill:
+    forall (e1 e2:T.expr) (c1 c2:Context.t) (alpha:Injection.t),
+    alpha_rename alpha e1 e2 ->
+    alpha_rename_context alpha c1 c2 ->
+    alpha_rename alpha (Context.fill c1 e1) (Context.fill c2 e2).
+  Proof.
+    induction c1 ; intros.
+    inversion H0 ; simpl ; subst.
+    assumption.
+    destruct a.
+    inversion H0 ; subst.
+    simpl.
+    constructor ; auto.
+    constructor.
+    constructor.
+    apply IHc1 ; assumption.
+    constructor.
+  Qed.
+
+  Lemma injective_composition:
+    forall (alpha1 alpha2:Injection.t),
+    let f := fun v => (Injection.get alpha2 (Injection.get alpha1 v)) in
+    forall (m n:nat), m <> n -> f m <> f n.
+  Proof.
+    intros.
+    unfold f.
+    apply (Injection.injective alpha2).
+    apply (Injection.injective alpha1).
+    assumption.
+  Qed.
+
+  Lemma alpha_rename_acc:
+    forall (e:S.expr) (acc1 acc2 alpha:Injection.t),
+    let (e1, cs1) := trans e acc1 in
+    let (e2, cs2) := trans e acc2 in
+    (forall n:nat, Injection.get alpha (Injection.get acc1 n) = 
+      Injection.get acc2 n) ->
+    alpha_rename alpha e1 e2 /\
+    alpha_rename_stack alpha cs1 cs2.
+  Proof.
+    induction e ; simpl in *|-* ; intros ;
+    
+    try(split ; repeat(constructor) ; auto ; fail) ;
+
+    try(specialize (IHe acc1 acc2 alpha) ;
+    destruct (trans e) ; destruct (trans e) ; intros ;
+    specialize (IHe H) ; destruct IHe ;
+    split ; repeat(constructor) ; auto ; fail).
+
+    specialize (IHe1 (Injection.left acc1) (Injection.left acc2) alpha) ;
+    specialize (IHe2 (Injection.right acc1) (Injection.right acc2) alpha) ;
+    destruct (trans e1) ; destruct (trans e1) ;
+    destruct (trans e2) ; destruct (trans e2) ; intros ;
+    unfold Injection.left in IHe1 ; unfold Injection.right in IHe2.
+    assert(alpha_rename alpha e e0 /\ alpha_rename_stack alpha t t0).
+    apply IHe1 ; intros ; apply H.
+    assert(alpha_rename alpha e3 e4 /\ alpha_rename_stack alpha t1 t2).
+    apply IHe2 ; intros ; apply H.
+    destruct H0 ; destruct H1 ;
+    split ; [apply Alpha_bind ; auto ;
+    repeat(constructor) ; auto | 
+    apply alpha_rename_merge ; auto ].
+
+    
+    (* Should be merged with previous case *)
+    specialize (IHe1 (Injection.left acc1) (Injection.left acc2) alpha) ;
+    specialize (IHe2 (Injection.right acc1) (Injection.right acc2) alpha) ;
+    destruct (trans e1) ; destruct (trans e1) ;
+    destruct (trans e2) ; destruct (trans e2) ; intros ;
+    unfold Injection.left in IHe1 ; unfold Injection.right in IHe2.
+    assert(alpha_rename alpha e e0 /\ alpha_rename_stack alpha t t0).
+    apply IHe1 ; intros ; apply H.
+    assert(alpha_rename alpha e3 e4 /\ alpha_rename_stack alpha t1 t2).
+    apply IHe2 ; intros ; apply H.
+    destruct H0 ; destruct H1 ;
+    split ; [apply Alpha_bind ; auto ;
+    repeat(constructor) ; auto | 
+    apply alpha_rename_merge ; auto ].
+    
+    specialize (IHe acc1 acc2 alpha).
+    destruct (trans e) ; destruct (trans e).
+    destruct t ; simpl.
+    destruct t0 ; simpl ; intros ;
+    specialize (IHe H) ; destruct IHe.
+    split ; repeat(constructor) ; auto.
+    inversion H1.
+    destruct t0 ; simpl ; intros ;
+    specialize (IHe H) ; destruct IHe ;
+    inversion H1 ; subst.
+    split ; repeat(constructor) ; auto.
+    apply alpha_rename_fill ; auto.
+    repeat(constructor) ; auto.
+
+    specialize (IHe (Injection.right acc1) (Injection.right acc2) alpha).
+    destruct (trans e) ; destruct (trans e).
+    intros.
+    unfold Injection.right in IHe.
+    assert(alpha_rename alpha e0 e1 /\ alpha_rename_stack alpha t t0).
+    apply IHe ; intros ; apply H.
+    destruct H0.
+    split.
+    repeat(constructor) ; auto.
+    rewrite <- H ; constructor.
+    rewrite <- H ; constructor ; auto.
+    repeat(constructor) ; auto.
+  Qed.
+
+  Definition R (acc1 acc2:Injection.t) (x y:nat) : Prop := 
+    (exists z, x = (Injection.get acc1 z) /\ y = (Injection.get acc2 z)).
+
+  Lemma R_injective_relation:
+    forall (acc1 acc2:Injection.t),
+    Injection.injective_relation (R acc1 acc2).
+  Proof.
+    unfold Injection.injective_relation ; intros.
+    unfold R in *|-*.
+    destruct H ; destruct H0.
+    destruct H ; destruct H0.
+    specialize (Injection.injective acc2 x x0) ; intros.
+    assert(x = x0).
+    omega.
+    subst ; reflexivity.
+  Qed.
+
+  Lemma R_partial_function:
+    forall (acc1 acc2:Injection.t),
+    partial_function (R acc1 acc2).
+  Proof.
+    unfold partial_function ; intros.
+    unfold R in *|-*.
+    destruct H ; destruct H0.
+    destruct H ; destruct H0.
+    subst.
+    specialize (Injection.injective acc1 x0 x1) ; intros.
+    assert(x0 = x1).
+    omega.
+    subst ; reflexivity.
+  Qed.
+   
+  Lemma alpha_rename_left_acc_exists:
+    forall (e:S.expr) (acc1 acc2:Injection.t),
+    let acc2 := Injection.left acc2 in
+    let (e1, cs1) := trans e acc1 in
+    let (e2, cs2) := trans e acc2 in
+    exists alpha:Injection.t,
+    alpha_rename alpha e1 e2 /\
+    alpha_rename_stack alpha cs1 cs2.
+  Proof.
+    intros.
+    specialize (R_injective_relation acc1 acc0) ; intros.
+    specialize (R_partial_function acc1 acc0) ; intros.
+    assert(Injection.disjoint_function (R acc1 acc0)
+       (Injection.right acc2)).
+       unfold Injection.disjoint_function ; intros.
+       unfold Injection.not_in_image, Injection.left, Injection.right.
+       unfold R ; simpl ; intros.
+       apply all_not_not_ex ; intros.
+       apply or_not_and ; right.
+       apply (Injection.injective acc2).
+       omega.
+    specialize (Injection.completion_exists 
+     (R acc1 (Injection.left acc2)) (Injection.right acc2) H H0 H1) ; intros.
+    destruct H2 ; unfold R in H2.
+    specialize (alpha_rename_acc e acc1 acc0 x) ; intros.
+    destruct (trans e).
+    destruct (trans e).
+    exists x.
+    apply H3 ; intros.
+    specialize (H2 (Injection.get acc1 n) (Injection.get acc0 n)).
+    apply H2.
+    exists n.
+    split ; auto.
+  Qed.
+
+  Lemma alpha_rename_right_acc_exists:
+    forall (e:S.expr) (acc1 acc2:Injection.t),
+    let acc2 := Injection.right acc2 in
+    let (e1, cs1) := trans e acc1 in
+    let (e2, cs2) := trans e acc2 in
+    exists alpha:Injection.t,
+    alpha_rename alpha e1 e2 /\
+    alpha_rename_stack alpha cs1 cs2.
+  Proof.
+    intros.
+    specialize (R_injective_relation acc1 acc0) ; intros.
+    specialize (R_partial_function acc1 acc0) ; intros.
+    assert(Injection.disjoint_function (R acc1 acc0)
+       (Injection.left acc2)).
+       unfold Injection.disjoint_function ; intros.
+       unfold Injection.not_in_image, Injection.right, Injection.left.
+       unfold R ; simpl ; intros.
+       apply all_not_not_ex ; intros.
+       apply or_not_and ; right.
+       apply (Injection.injective acc2).
+       omega.
+    specialize (Injection.completion_exists 
+     (R acc1 (Injection.right acc2)) (Injection.left acc2) H H0 H1) ; intros.
+    destruct H2 ; unfold R in H2.
+    specialize (alpha_rename_acc e acc1 acc0 x) ; intros.
+    destruct (trans e).
+    destruct (trans e).
+    exists x.
+    apply H3 ; intros.
+    specialize (H2 (Injection.get acc1 n) (Injection.get acc0 n)).
+    apply H2.
+    exists n.
+    split ; auto.
+  Qed.
+
+  Lemma alpha_rename_refl:
+    forall (e:S.expr) (acc:Injection.t),
+    let (e, cs) := trans e acc in
+    alpha_rename Injection.id e e /\
+    alpha_rename_stack Injection.id cs cs.
+  Proof.
+    intros.
+    specialize (alpha_rename_acc e acc acc Injection.id) ; intros.
+    destruct (trans e).
+    apply H ; intros.
+    reflexivity.
+  Qed.
+
 End TranslationStaticProperties.
 
 Module TranslationProperties (R:Replacement) 
@@ -629,118 +988,8 @@ Module TranslationProperties (R:Replacement)
   Import M.S.
   Import M.
 
-(*
-  Lemma context_merge_independent:
-    forall (e1 e2:expr) (acc:Splitter.t),
-    let (_, cs1) := trans e1 (Splitter.left acc) in
-    let (_, cs2) := trans e2 (Splitter.right acc) in
-    match cs1 with
-      | ((eh1, h1) :: c1) :: cs1 =>
-      match Context.merge cs1 cs2 with
-        | ((eh, h) :: c) :: cs =>
-            VarSet.mem h (Context.context_hole_set c1) = false ->
-            VarSet.mem h (Context.context_hole_set c) = false
-        | _ => True
-      end
-      | _ => True
-    end.
-  Proof.
-    induction e1 ; simpl ; intros ;
-    try(destruct (trans e2) ; auto ; fail) ;
-    try(specialize (IHe1 e2 acc) ;
-    destruct (trans e1) ; destruct (trans e2) ;
-    assumption ; fail).
-
-    assert(IHe1 := IHe1_2).
-    specialize (IHe1 e2 acc).
-    specialize (IHe1_1 e2 (Splitter.left acc)).
-    specialize (IHe1_2 e2 (Splitter.left acc)).
-    destruct (trans e1_1) ; destruct (trans e1_2).
-
-  Qed.
-
-  Lemma context_independent:
-    forall (e:expr) (acc:Splitter.t),
-      let (_, cs) := trans e acc in
-      match cs with
-      | ((eh, h) :: c) :: cs => VarSet.mem h (Context.context_hole_set c) = false
-      | _ => True 
-      end.
-  Proof.
-    induction e ; simpl ; intros ; auto ;
-    try(specialize (IHe acc) ; destruct (trans e) ; assumption).
-
-    specialize (IHe1 (Splitter.left acc)).
-    specialize (IHe2 (Splitter.right acc)).
-    destruct (trans e1).
-    destruct (trans e2).
-
-    destruct t ; simpl.
-    assumption.
-    destruct t0 ; simpl.
-    assumption.
-    destruct t ; simpl.
-    assumption.
-    destruct p.
-    destruct t0 ; simpl.
-    rewrite app_nil_r ; assumption.
-    destruct p.
-    simpl.
-    
-  Qed.
-*)
-(*
-  Lemma context_merge_independent:
-    forall (e1 e2:expr) (acc:Splitter.t),
-    let (_, cs1) := trans e1 (Splitter.left acc) in
-    let (_, cs2) := trans e2 (Splitter.right acc) in
-    match cs1 with
-      | ((eh1, h1) :: c1) :: cs1 =>
-        VarSet.mem h (Context.context_hole_set c1) = false ->
-
-      match Context.merge cs1 cs2 with
-        | ((eh, h) :: c) :: cs =>
-            VarSet.mem h (Context.context_hole_set c1) = false ->
-            VarSet.mem h (Context.context_hole_set c) = false
-        | _ => True
-      end
-      | _ => True
-    end.
-  Proof.
-    induction e1 ; simpl ; intros ;
-    try(destruct (trans e2) ; auto ; fail) ;
-    try(specialize (IHe1 e2 acc) ;
-    destruct (trans e1) ; destruct (trans e2) ;
-    assumption ; fail).
-
-    assert(IHe1 := IHe1_2).
-    specialize (IHe1 e2 acc).
-    specialize (IHe1_1 e2 (Splitter.left acc)).
-    specialize (IHe1_2 e2 (Splitter.left acc)).
-    destruct (trans e1_1) ; destruct (trans e1_2).
-
-  Qed.*)
-
-  (*Lemma context_stack_independent:
-    forall (e:expr) (acc:Splitter.t),
-      let (_, cs) := trans e acc in
-      match cs with
-      | ((eh, h) :: c) :: cs => VarSet.mem h (Context.stack_hole_set cs) = false
-      | _ => True 
-      end.
-  Proof.
-    induction e ; simpl ; intros ; auto ;
-    try(specialize (IHe acc) ; destruct (trans e) ; assumption ; fail).
-
-    specialize (IHe1 (Splitter.left acc)).
-    specialize (IHe2 (Splitter.right acc)).
-    destruct (trans e1) ; destruct (trans e2).
-
-
-  Qed.*)
-
   Lemma context_stack_independent:
-    forall (e:expr) (acc:Splitter.t),
+    forall (e:expr) (acc:Injection.t),
       let (_, cs) := trans e acc in
       match Context.shift cs with
         | ((_, h) :: c, cs) => 
@@ -790,6 +1039,15 @@ Module TranslationProperties (R:Replacement)
     rewrite H2 ; reflexivity.
   Qed.
 
+  Lemma test:
+    forall (e1:S.expr) (acc:Injection.t) (e2:S.expr) (M1 M2:S.Memory.t),
+    rstep (trans_mem M1 acc, trans_expr e1 acc) (trans_mem M2 acc, trans_expr e2 acc) ->
+    forall (acc:Injection.t),
+    rstep (trans_mem M1 acc, trans_expr e1 acc) (trans_mem M2 acc, trans_expr e2 acc).
+  Proof.
+    admit. (* Prove it *)
+  Qed.
+
   (* En gros, on distingue 2 mondes de variables:
     - les variables traduites (cast_var) qui sont celles 
    des expressions initiales et celles créées pour le contexte
@@ -799,7 +1057,7 @@ Module TranslationProperties (R:Replacement)
    seraient 2n+1.
   *)
   Lemma sstep_rstep:
-    forall (e1:S.expr) (acc:Splitter.t) (e2:S.expr) (M1 M2:S.Memory.t),
+    forall (e1:S.expr) (acc:Injection.t) (e2:S.expr) (M1 M2:S.Memory.t),
     let (e1', cs1) := trans e1 acc in
     let n := length cs1 in
     S.sstep n (M1, e1) (M2, e2) -> 
@@ -812,10 +1070,9 @@ Module TranslationProperties (R:Replacement)
           let (e2', cs2) := trans e2 acc in
           let M1' := trans_mem M1 acc in
           let M2' := trans_mem M2 acc in
-          exists eh, 
+          exists eh, t_eh = trans_expr eh acc /\
           (
             S.svalue 0 eh /\ 
-            t_eh = trans_expr eh acc /\ 
             M1 = M2 /\ 
             admin_stack 
               (Context.ssubst_stack 
@@ -857,9 +1114,10 @@ Module TranslationProperties (R:Replacement)
       destruct p ; destruct (trans e3).
       destruct IHe1.
       exists x.
-      destruct H0 ; [left | right] ;
       destruct H0.
-        destruct H1.
+      split ; [assumption|].
+      destruct H1 ; [left | right] ;
+      destruct H1.
         destruct H3.
         destruct H4.
         subst.
@@ -873,10 +1131,10 @@ Module TranslationProperties (R:Replacement)
         unfold hole_var, source_var.
         omega.
 
-      simpl in H1.
-      rewrite H1 ; assumption.
+      simpl in H0.
+      rewrite H0 ; assumption.
       exists x0.
-      destruct H0 ; destruct H1 ; subst.
+      destruct H1 ; destruct H3 ; subst.
       auto.
 
     (* Case EFix *)
@@ -896,8 +1154,9 @@ Module TranslationProperties (R:Replacement)
       destruct p ; destruct (trans e3).
       destruct IHe1.
       exists x.
-      destruct H0 ; [left | right] ; destruct H0.
-      destruct H1 ; destruct H3 ; destruct H4.
+      destruct H0 ; split ; [assumption|].
+      destruct H1 ; [left | right] ; destruct H1.
+      destruct H3 ; destruct H4.
       subst.
       repeat(split ; auto).
 
@@ -909,10 +1168,10 @@ Module TranslationProperties (R:Replacement)
         apply orb_false_intro ; apply beq_nat_false_iff ;
         unfold hole_var, source_var ; omega.
 
-      simpl in H1.
-      rewrite H1 ; assumption.
+      simpl in H0.
+      rewrite H0 ; assumption.
       exists x0.
-      destruct H0 ; destruct H1 ; subst ; auto.
+      destruct H1 ; destruct H3 ; subst ; auto.
 
     (* Case EApp *)
     admit.
@@ -951,8 +1210,9 @@ Module TranslationProperties (R:Replacement)
         destruct p ; destruct (trans e3).
         destruct IHe1.
         exists x.
-        destruct H0 ; [left | right] ; destruct H0.
-        destruct H1 ; destruct H3 ; destruct H4.
+        destruct H0 ; split ; [assumption|].
+        destruct H1 ; [left | right] ; destruct H1.
+        destruct H3 ; destruct H4.
         repeat(split ; auto).
 
         rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr => cast_eref v0)).
@@ -968,7 +1228,7 @@ Module TranslationProperties (R:Replacement)
           intros ; apply MP.ssubst_eref.
         assumption.
         exists x0.
-        destruct H0 ; destruct H1 ; subst ; auto.
+        destruct H1 ; destruct H3 ; subst ; auto.
 
     (* Case EDeref *)
     admit.
@@ -1012,10 +1272,11 @@ Module TranslationProperties (R:Replacement)
           destruct (trans e3).
           destruct IHe1.
           destruct H0.
+          destruct H3.
 
             (* Case svalue *)
-            destruct H0 ; destruct H3 ; 
-            destruct H4 ; destruct H6.
+            destruct H3 ; destruct H4 ; 
+            destruct H6.
             subst.
             clear H.
             inversion H6 ; subst.
@@ -1024,8 +1285,9 @@ Module TranslationProperties (R:Replacement)
             apply Rel_step with (e1:=Context.fill 
                (Context.ssubst_context 0 StageSet.empty v t (phi x acc))
                (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
-               (M.ret (M.cast_ebox e)) (phi x acc))).
-            assert(H10 := H0).
+               (M.ret (M.cast_ebox e)) (phi x acc)))
+               (e2:=Context.fill k2 (ret (cast_ebox e2))).
+            assert(H10 := H3).
             apply svalue_phi with (acc:=acc) in H10.
             rewrite H10.
             apply MP.astep_bind_2.
@@ -1042,10 +1304,11 @@ Module TranslationProperties (R:Replacement)
             constructor.
             constructor.
             assumption.
+            fail.
 
             (* Case not svalue *)
-            destruct H0 ; destruct H0 ; destruct H3.
-            inversion H0 ; subst.
+            destruct H3 ; destruct H3 ; destruct H4.
+            inversion H3 ; subst.
             simpl.
             apply Rel_step with (e1:=bind e4 (fun v0 =>
                cast_eapp
@@ -1069,21 +1332,22 @@ Module TranslationProperties (R:Replacement)
         destruct IHe1.
         destruct t4.
         destruct H3.
-        destruct H3.
+        destruct H4.
         destruct H4.
         destruct H6.
         destruct H7.
         inversion H7 ; subst.
-        destruct H3.
-        destruct H3.
         destruct H4.
-        inversion H6.
+        destruct H4.
+        destruct H6.
+        inversion H7.
 
         exists x.
         destruct H3.
+        split ; [assumption |].
+        destruct H4.
 
           (* Case svalue *)
-          destruct H3.
           destruct H4.
           destruct H6.
           destruct H7.
@@ -1108,40 +1372,45 @@ Module TranslationProperties (R:Replacement)
           assumption.
 
           destruct H1.
-          rewrite VarSetProperties.union_mem in H4.
-          apply orb_false_iff in H4.
-          destruct H4 ; assumption.
+          rewrite VarSetProperties.union_mem in H3.
+          apply orb_false_iff in H3.
+          destruct H3 ; assumption.
 
           (* Case not svalue *)
-          destruct H3.
-          destruct H3.
           destruct H4.
-          inversion H6 ; subst.
-          clear H6.
+          destruct H4.
+          destruct H6.
+          inversion H7 ; subst.
+          clear H7.
           right.
           exists x0.
           repeat(split ; auto).
 
     (* Case EUnbox *)
-    specialize (IHe1 (Splitter.next acc)).
+    specialize (IHe1 (Injection.succ acc)).
+    specialize (test e1 (Injection.succ acc)) ; intros.
+    unfold trans_expr in *|-*.
     destruct (trans e1).
     simpl in *|-* ; intros.
-    inversion H ; subst.
+    inversion H0 ; subst.
 
       (* Case EUnbox -> EUnbox *)
-      specialize (IHe1 e3 M1 M2 H2).
+      specialize (IHe1 e3 M1 M2 H3).
+      specialize (H e3 M1 M2).
       destruct t.
       unfold trans_expr in *|-*.
       simpl in *|-*.
-      assert(trans e3 (Splitter.next acc)  = 
-        (trans ((fun x => x) e3) (Splitter.next acc) )).
+      assert(trans e3 (Injection.succ acc)  = 
+        (trans ((fun x => x) e3) (Injection.succ acc) )).
       reflexivity.
       destruct (trans e3).
       exists e1.
       right.
       exists e3.
       repeat (split ; auto).
-      admit. (* TO prove *)
+      specialize (H IHe1 acc).
+      
+      fail. (* TO prove *)
       destruct (trans e3).
       destruct (trans e3).
       admit.
@@ -1159,7 +1428,7 @@ Module TranslationProperties (R:Replacement)
 
   Theorem sstep_rstep_O:
     forall (e1 e2:S.expr) (M1 M2:S.Memory.t),
-    let acc := Splitter.empty in
+    let acc := Injection.id in
     depth e1 = 0 ->
     S.sstep 0 (M1, e1) (M2, e2) -> 
     rstep (trans_mem M1 acc, trans_expr e1 acc) 

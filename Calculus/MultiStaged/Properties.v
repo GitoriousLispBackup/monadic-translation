@@ -2,8 +2,10 @@ Require Import Coq.Arith.Arith.
 Require Import Coq.Arith.MinMax.
 Require Import Coq.Bool.Bool.
 Require Import Coq.omega.Omega.
+Require Import Coq.Lists.List.
 Require Import "Misc/Tactics".
 Require Import "Misc/Relation".
+Require Import "Misc/Library".
 Require Import "Calculus/Sets".
 Require Import "Calculus/Terminology".
 Require Import "Calculus/MultiStaged/Definitions".
@@ -202,6 +204,230 @@ Module CalculusProperties (Repl:Replacement)
 
    inversion H ; subst.
    apply IHe in H2 ; omega.
+  Qed.
+
+  Lemma depth_ssubst:
+    forall (e1 e2:expr) (ss:StageSet.t) (x:var) (n:nat),
+    depth (ssubst n ss x e1 e2) <= depth e1 + depth e2.
+  Proof.
+    induction e1 ; intros ; simpl in *|-* ;
+
+    (* Case EConst, ELoc *)
+    try(omega) ;
+
+    (* Case ERef, EDeref, ELift, ERun *)
+    try(specialize (IHe1 e2 ss x n) ; assumption) ;
+
+    (* Case EApp, EAssign *)
+    try(specialize (max_spec (depth (ssubst n ss x e1_1 e2))
+     (depth (ssubst n ss x e1_2 e2))) ; intros ;
+    destruct H ; destruct H ; rewrite H0 in *|-* ;
+    [specialize (IHe1_2 e2 ss x n) ;
+    apply le_trans with (m := depth e1_2 + depth e2) ; auto ;
+    apply plus_le_compat_r ;
+    apply le_max_r |
+    specialize (IHe1_1 e2 ss x n) ;
+    apply le_trans with (m := depth e1_1 + depth e2) ; auto ;
+    apply plus_le_compat_r ;
+    apply le_max_l]).
+
+    (* Case EVar *)
+    destruct (beq_nat x v && BindingSet.rho n ss) ; simpl ; omega.
+
+    (* Case EAbs *)
+    destruct (beq_nat x v).
+    specialize (IHe1 e2 (StageSet.add n ss) x n) ; assumption.
+    specialize (IHe1 e2 ss x n) ; assumption.
+
+    (* Case EFix *)
+    destruct (beq_nat x v || beq_nat x v0).
+    specialize (IHe1 e2 (StageSet.add n ss) x n) ; assumption.
+    specialize (IHe1 e2 ss x n) ; assumption.
+
+    (* Case EBox *)
+    specialize (IHe1 e2 ss x (S n)).
+    destruct (depth e1) ; simpl in *|-*.
+    omega.
+    destruct (depth (ssubst (S n) ss x e1 e2)) ; 
+    simpl in *|-* ; omega.    
+
+    (* Case EUnbox *)
+    specialize (IHe1 e2 (StageSet.remove n ss) x (pred n)).
+    apply le_n_S.
+    assumption.
+  Qed.
+
+  Lemma memory_depth_get:
+    forall (l:location) (M:Memory.t),
+    depth (Memory.get l M) <= memory_depth M.
+  Proof.
+    unfold Memory.get.
+    induction l ; simpl ; intros.
+    destruct M ; simpl.
+    omega.
+    assert(depth = CRaw.depth).
+    reflexivity.
+    rewrite H in *|-*.
+    apply le_max_l.
+    destruct M ; simpl ; auto.
+    apply le_trans with (m:=memory_depth M).
+    apply IHl.
+    apply le_max_r.
+  Qed.
+
+  Lemma memory_depth_set:
+    forall (e:expr) (M:Memory.t) (l:location) ,
+    memory_depth (Memory.set l e M) <= max (depth e) (memory_depth M).
+  Proof.
+    induction M ; simpl ; intros.
+    induction l ; simpl.
+    auto.
+    assumption.
+    assert(CRaw.depth = depth).
+    reflexivity.
+    destruct l ; simpl ;
+    rewrite H in *|-*.
+    apply max_le_compat_l.
+    apply le_max_r.
+    rewrite max_comm.
+    rewrite max_comm with (n := (depth a)).
+    rewrite max_assoc.
+    apply max_le_compat_r.
+    apply IHM.
+  Qed.
+
+  Lemma memory_depth_fresh:
+    forall (e:expr) (M:Memory.t),
+    memory_depth (Memory.set (Memory.fresh M) e M) = 
+    max (depth e) (memory_depth M).
+  Proof.
+    intros ; induction M ; simpl.
+    reflexivity.
+    rewrite IHM.
+    rewrite max_comm.
+    rewrite max_comm with (n := (depth a)).
+    rewrite max_assoc.
+    reflexivity.
+  Qed.
+
+  Lemma depth_sstep_2:
+    forall (M1:Memory.t) (e1:expr)
+    (M2:Memory.t) (e2:expr),
+    memory_depth M1 = 0 ->
+    (M1, e1) ⊨ (depth e1) ⇒ (M2, e2) ->
+    depth e2 <= depth e1 /\ memory_depth M2 = 0.
+  Proof.
+    intros.
+    generalize dependent e2.
+    generalize dependent M2.
+    generalize dependent e1.
+    induction e1 ; simpl ; intros ; inversion H0 ; 
+    subst ; simpl in *|-* ;
+
+    (* Case EAbs, EFix *)
+    try(rewrite H1 in *|-* ;
+    specialize (IHe1 M2 e3 H3) ;
+    assumption) ;
+
+    (* Case ERef, EDeref, ERun, ELift, n > 0 *)
+    try(specialize (IHe1 M2 e3 H3) ; assumption) ;
+
+    try(omega) ;
+
+    (* Case EApp|EAssign e1 e2,  e1 -> e1' *)
+    try(specialize (max_spec (depth e1_1) (depth e1_2)) ; intros ;
+    destruct H1 ; destruct H1 ;
+    rewrite H2 in *|-* ;
+    [ apply depth_sstep in H3 ; [destruct H3 ; subst ; 
+    rewrite max_r ; auto ; apply lt_le_weak |] ; assumption |
+    specialize (IHe1_1 M2 e3 H3) ;
+    destruct IHe1_1 ; split ; 
+    [apply max_lub |] ; assumption]) ;
+
+    (* Case EApp|EAssign e1 e2,  e2 -> e2' *)
+    try(specialize (max_spec (depth e1_2) (depth e1_1)) ; intros ;
+    destruct H1 ; destruct H1 ;
+    rewrite max_comm in H2 ; rewrite H2 in *|-* ;
+    [ destruct (depth e1_1) ; 
+    [apply lt_n_O in H1 ; contradiction|
+    apply depth_svalue in H4 ;
+    apply depth_sstep in H8 ; [destruct H8; subst ;
+    rewrite max_l ; auto ; apply lt_le_weak |] ; assumption ] | 
+    specialize (IHe1_2 M2 e0 H8) ;
+    destruct IHe1_2 ; split ; 
+    [apply max_lub |] ; assumption]).
+
+    (* Case EApp (EAbs), n=0 *)
+    symmetry in H1 ; apply max_0 in H1.
+    destruct H1.
+    specialize (depth_ssubst e e1_2 StageSet.empty x 0) ; intros.
+    rewrite H1 in *|-*.
+    rewrite H2 in *|-*.
+    simpl in *|-* ; split ; assumption.
+
+    (* Case EApp (EFix), n=0 *)
+    symmetry in H1 ; apply max_0 in H1.
+    destruct H1.
+    specialize (depth_ssubst (CRaw.ssubst 0 StageSet.empty x e e1_2) 
+      (EFix f x e) StageSet.empty f 0) ; intros.
+    simpl in *|-*.
+    specialize (depth_ssubst e e1_2 StageSet.empty x 0) ; intros.
+    rewrite H1 in *|-*.
+    rewrite H2 in *|-*.
+    simpl in *|-*.
+    assert(CRaw.ssubst = ssubst).
+    reflexivity.
+    rewrite H6 in *|-*.
+    apply le_n_0_eq in H5.
+    rewrite <- H5 in *|-*.
+    simpl in *|-* ; split ; assumption.
+
+    (* Case ERef, n=0 *)
+    split.
+    omega.
+    specialize (memory_depth_fresh e1 M1) ; intros.
+    rewrite <- H1 in H2.
+    rewrite H in H2.
+    simpl in H2 ; assumption.
+    
+    (* Case EDeref, n=0 *)
+    specialize (memory_depth_get l M2) ; intros.
+    rewrite H in *|-*.
+    split ; auto.
+
+    (* Case EAssign, n=0 *)
+    specialize (memory_depth_set e2 M1 l) ; intros.
+    rewrite <- H1 in *|-*.
+    rewrite H in *|-*.
+    simpl in H2 ; apply le_n_0_eq in H2 ; split ; auto.
+    
+    (* Case EBox *)
+    specialize (depth_sstep M1 e1 M2 e3 1) ; intros.
+    assert(depth e1 = depth ((fun x => x) e1)).
+    reflexivity.
+    destruct (depth e1) ; simpl in *|-*.
+    assert(0 < 1).
+    auto.
+    specialize (H1 H4 H3).
+    destruct H1 ; subst.
+    rewrite <- H2 ; split ; auto.
+    specialize (IHe1 M2 e3 H3).
+    destruct IHe1 ; split ; auto.
+    assert(n = pred (S n)).
+    reflexivity.
+    rewrite H6.
+    apply le_pred ; assumption.
+
+    (* Case EUnbox -> EUnbox *)
+    specialize (IHe1 M2 e3 H3).
+    destruct IHe1 ; split ; auto.
+    apply le_n_S ; assumption.
+
+    (* Case EUnbox (Box) *)
+    split ; auto.
+    apply depth_svalue in H3.
+    apply le_S_n.
+    assumption.
   Qed.
 
   (** ** Fresh **)

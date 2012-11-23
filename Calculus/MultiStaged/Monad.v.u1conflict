@@ -586,22 +586,6 @@ Module TranslationStaticProperties (R:Replacement)
     apply CalculusProperties.depth_svalue.
   Qed.
 
-  Lemma length_sstep:
-    forall (e1 e2:expr) (M1 M2:Memory.t) (acc:Injection.t),
-    sstep (depth e1) (M1,e1) (M2,e2) ->
-    memory_depth M1 = 0 ->
-    let (_, cs2) := trans e2 acc in
-    length cs2 <= depth e1.
-  Proof.
-    intros.
-    specialize (CalculusProperties.depth_sstep_2 M1 e1 M2 e2 H0 H) ; intros.
-    destruct H1.
-    specialize (depth_length e2 acc) ; intros.
-    destruct (trans e2).
-    rewrite H3 in *|-*.
-    assumption.
-  Qed.
-
   Lemma svalue_phi:
     forall (e:expr) (acc:Injection.t),
     svalue 0 e -> trans_expr e acc = M.ret (phi e acc).
@@ -1086,7 +1070,6 @@ Module TranslationProperties (R:Replacement)
   *)
   Lemma sstep_rstep:
     forall (e1:S.expr) (acc:Injection.t) (e2:S.expr) (M1 M2:S.Memory.t),
-    S.memory_depth M1 = 0 ->
     let (e1', cs1) := trans e1 acc in
     let n := length cs1 in
     S.sstep n (M1, e1) (M2, e2) -> 
@@ -1117,8 +1100,7 @@ Module TranslationProperties (R:Replacement)
       end
     end.
   Proof.
-    induction e1 ; simpl ; 
-    intros acc e2 M1 M2 MemDepth0 ; intros.
+    induction e1 ; simpl ; intros.
 
     (* Case EConst *)
     inversion H.
@@ -1133,7 +1115,7 @@ Module TranslationProperties (R:Replacement)
 
     destruct t ; simpl in H;
     inversion H ; subst.
-    specialize (IHe1 e3 M1 M2 MemDepth0 H2).
+    specialize (IHe1 e3 M1 M2 H2).
     destruct (Context.shift (t :: t0)).
     destruct t1 ; simpl in *|-*.
       destruct (trans e3).
@@ -1174,7 +1156,7 @@ Module TranslationProperties (R:Replacement)
 
     destruct t ; simpl in H;
     inversion H ; subst.
-    specialize (IHe1 e3 M1 M2 MemDepth0 H2).
+    specialize (IHe1 e3 M1 M2 H2).
     destruct (Context.shift (t :: t0)).
     destruct t1 ; simpl in *|-*.
       destruct (trans e3).
@@ -1276,7 +1258,7 @@ Module TranslationProperties (R:Replacement)
     inversion H ; subst.
 
       (* SubCase ERef, n=0, e -> e' *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H2).
+      specialize (IHe1 e3 M1 M2 H2).
       unfold trans_expr.
       unfold trans_expr in IHe1.
       simpl.
@@ -1292,7 +1274,7 @@ Module TranslationProperties (R:Replacement)
       admit.
 
       (* SubCase ERef, n>0 *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H2).
+      specialize (IHe1 e3 M1 M2 H2).
       destruct (Context.shift (t :: t0)).
       destruct t1 ; simpl in *|-*.
         destruct (trans e3).
@@ -1504,7 +1486,7 @@ Module TranslationProperties (R:Replacement)
     inversion H0 ; subst.
 
       (* Case EUnbox -> EUnbox *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H3).
+      specialize (IHe1 e3 M1 M2 H3).
       destruct t.
 
         (* Case n = 1 *)
@@ -1523,22 +1505,9 @@ Module TranslationProperties (R:Replacement)
         right.
         exists e3.
         repeat (split ; auto).
-        
         destruct (trans e3) ; inversion H1 ; subst ; auto.
-
-        assert(depth e1 = 0).
-        specialize (depth_length e1 (Injection.succ acc)) ; intros.
-        destruct (trans e1).
-        inversion H ; subst ; auto.
-        assert(t = nil).
-        specialize (length_sstep e1 e3 M1 M2 (Injection.succ acc)) ; intros.
-        rewrite H2 in *|-* ; specialize (H4 H3 MemDepth0).
-        destruct (trans e3).
-        apply le_n_0_eq in H4.
-        inversion H1 ; subst.
-        destruct t0 ; [auto | inversion H4].
-        subst.
         destruct (trans e3) ; inversion H1 ; subst ; auto.
+        fail. (* To prove *)
 
         (* Case n > 1 *)
         admit.
@@ -1557,13 +1526,12 @@ Module TranslationProperties (R:Replacement)
     forall (e1 e2:S.expr) (M1 M2:S.Memory.t),
     let acc := Injection.id in
     depth e1 = 0 ->
-    memory_depth M1 = 0 ->
     S.sstep 0 (M1, e1) (M2, e2) -> 
     rstep (trans_mem M1 acc, trans_expr e1 acc) 
       (trans_mem M2 acc, trans_expr e2 acc).
   Proof.
     intros.
-    specialize (sstep_rstep e1 acc e2 M1 M2 H0) ; intros.
+    specialize (sstep_rstep e1 acc e2 M1 M2) ; intros.
 
     assert(forall (e1':T.expr) (cs1:Context.t_stack), 
     trans e1 acc = (e1', cs1) -> cs1 = nil).
@@ -1571,17 +1539,17 @@ Module TranslationProperties (R:Replacement)
       assert(0 = length cs1).
       rewrite <- H.
       specialize (depth_length e1) ; intros.
-      specialize (H4 acc) ;
-      rewrite H3 in H4 ; destruct H4.
+      specialize (H3 acc) ;
+      rewrite H2 in H3 ; destruct H3.
       reflexivity.
     destruct cs1 ; simpl in *|-* ;
-    [reflexivity | inversion H4].
+    [reflexivity | inversion H3].
 
     unfold trans_expr in *|-*.
     destruct (trans e1).
-    specialize (H3 e t).
-    rewrite H3 in H2.
-    simpl in H2.
+    specialize (H2 e t).
+    rewrite H2 in H1.
+    simpl in H1.
     destruct (trans e2).
     auto.
     auto.

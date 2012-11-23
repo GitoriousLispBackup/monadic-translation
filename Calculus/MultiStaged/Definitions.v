@@ -183,6 +183,12 @@ Module CalculusRaw (Repl:Replacement).
     | ELift e => depth e
     end.
 
+  Fixpoint memory_depth (M:Memory.t) : nat :=
+    match M with
+    | nil => 0
+    | cons e M => max (depth e) (memory_depth M)
+    end.
+
   (** ** Free Variables *)
   Fixpoint fv (n:nat) (B:BindingSet.t) (e:expr) : VarSet.t :=
     match e with
@@ -263,6 +269,8 @@ Module Type ReplacementCalculus (Repl:Replacement) <: StagedCalculus.
   Definition sstep := sstep.
 
   Definition depth := depth.
+  Definition memory_depth := memory_depth.
+
   Definition fresh := fresh.
 
   Definition beq_var := beq_nat.

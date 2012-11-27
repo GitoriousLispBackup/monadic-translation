@@ -95,15 +95,15 @@ Module StageSetProperties.
     assumption.
   Qed.
 
-  Lemma ub_S:
+  Lemma ub_pred:
     forall (lst:t) (n:nat),
-    ub (S n) lst = ub n (remove (S n) lst).
+    ub n lst = ub (pred n) (remove n lst).
   Proof.
     assert(forall n, Proper (Logic.eq ==> Logic.eq) 
       (fun x : elt => leb x n)).
     intros x s1 s2 H1 ; subst ; reflexivity.
     intros.
-    assert(ub (S n) lst = true \/ ~ub (S n) lst = true).
+    assert(ub n lst = true \/ ~ub n lst = true).
     apply classic.
     destruct H0 ; [| apply not_true_is_false in H0] ;
     rewrite H0 ; symmetry.
@@ -111,7 +111,7 @@ Module StageSetProperties.
     apply H.
     apply MSetEqProps.for_all_mem_2 with (x:=x) in H0.
     apply leb_iff in H0 ; apply leb_iff.
-    case_beq_nat x (S n).
+    case_beq_nat x n.
     rewrite MSetEqProps.remove_mem_1 in H1 ; inversion H1.
     omega.
     apply H.
@@ -127,6 +127,13 @@ Module StageSetProperties.
     apply H.
   Qed.
 
+  Lemma ub_S:
+    forall (lst:t) (n:nat),
+    ub (S n) lst = ub n (remove (S n) lst).
+  Proof.
+    intros ; apply ub_pred.
+  Qed.
+
   Lemma add_ub:
    forall (lst:t) (n m:nat), ub n (add m lst) = true ->
    ub n lst = true.
@@ -140,6 +147,21 @@ Module StageSetProperties.
     apply H.
     apply MSetEqProps.for_all_mem_2 with (x:=x) in H0 ; trivial.
     apply add_mem_2 ; assumption.
+  Qed.
+
+  Lemma remove_add_remove:
+    forall (lst:t) (n:nat),
+    remove n (add n lst) = remove n lst.
+  Proof.
+    intros.
+    remember(mem n lst).
+    destruct b ; symmetry in Heqb.
+    rewrite add_mem_1 ; auto.
+    rewrite remove_equal with (lst:=lst) ; auto.
+    apply MSetEqProps.remove_add in Heqb.
+    apply eq_leibniz.
+    apply equal_spec.
+    assumption.
   Qed.
 
 End StageSetProperties.

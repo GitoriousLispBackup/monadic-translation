@@ -127,8 +127,8 @@ Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
     (x:M.S.var) (c:t) (v:expr) : t :=
     match c with
     | nil => nil
-    | (eh,h) :: c => (ssubst n ss (M.cast_var (hole_var x)) eh v, h) ::
-        (ssubst_context n (if beq_nat x h
+    | (eh,h) :: c => (ssubst n ss (M.cast_var x) eh v, h) ::
+        (ssubst_context n (if beq_nat x (hole_var h)
         then (StageSet.add n ss) else ss) x c v)
     end.
 
@@ -137,7 +137,7 @@ Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
     match cs with
     | nil => nil
     | c :: cs => (ssubst_context n ss x c v) ::
-       (ssubst_stack (pred n) ss x cs v)
+       (ssubst_stack (pred n) (StageSet.remove n ss) x cs v)
     end.
 
 End Context.
@@ -150,165 +150,113 @@ Module Translation (R:Replacement)
   Module Context := Context R T M.
   Import S.CRaw.
 
-  Fixpoint trans (e:S.expr) (acc:Injection.t) : T.expr * Context.t_stack :=
+  Fixpoint booker (e:S.expr) (n:nat) : nat :=
+    match e with 
+    | EConst _ => 0
+    | EVar _ => 0
+    | EAbs _ e => booker e n
+    | EFix _ _ e => booker e n
+    | EApp e1 e2 => (booker e1 n + booker e2 n)%nat
+    | ELoc _ => 0
+    | ERef e => booker e n
+    | EDeref e => booker e n
+    | EAssign e1 e2 => (booker e1 n + booker e2 n)%nat
+    | EBox e => booker e (S n)
+    | EUnbox e => match n with
+       | 0 => 1
+       | S n => booker e n
+       end
+    | ERun e => booker e n
+    | ELift e => booker e n
+    end.
+
+  Definition hd_cons {T:Type} (l:list T) (e:T) : T * list T :=
+    match l with
+    | nil => (e, nil)
+    | e :: l => (e, l)
+    end.
+
+  Fixpoint trans (e:S.expr) (bs:list nat) : T.expr * Context.t_stack :=
     match e with
     | EConst i => (M.ret (M.cast_econst i), Context.empty)
     | EVar y => (M.ret (M.cast_evar (M.cast_var (source_var y))), Context.empty)
     | EAbs y e => 
-        let (e,cs) := trans e acc in
+        let (e,cs) := trans e bs in
         (M.ret (M.cast_eabs (M.cast_var (source_var y)) e), cs)
     | EFix f y e => 
-        let (e,cs) := trans e acc in
+        let (e,cs) := trans e bs in
         (M.ret (M.cast_efix 
             (M.cast_var (source_var f)) 
             (M.cast_var (source_var y)) e), cs)
     | EApp e1 e2 => 
-        let (e1, cs1) := trans e1 (Injection.left acc) in
-        let (e2, cs2) := trans e2 (Injection.right acc) in
-        (M.bind e1
-        (fun v1 => M.bind e2
-        (fun v2 => M.cast_eapp v1 v2)), 
-        Context.merge cs1 cs2)
+        let (b, bs) := hd_cons bs 0 in
+	let b2 := booker e2 0 in
+        let (e1, cs1) := trans e1 ((b + b2)%nat::bs) in
+        let (e2, cs2) := trans e2 (b::bs) in
+          (M.bind e1 (fun v1 => M.bind e2
+          (fun v2 => M.cast_eapp v1 v2)), 
+          Context.merge cs1 cs2)
     | ELoc l => (M.ret (M.cast_eloc l), Context.empty)
     | ERef e => 
-        let (e,cs) := trans e acc in
+        let (e,cs) := trans e bs in
         (M.bind e (fun v => M.cast_eref v), cs)
     | EDeref e => 
-        let (e,cs) := trans e acc in
+        let (e,cs) := trans e bs in
         (M.bind e (fun v => M.cast_ederef v), cs)
-    | EAssign e1 e2 =>
-        let (e1, cs1) := trans e1 (Injection.left acc) in
-        let (e2, cs2) := trans e2 (Injection.right acc) in
-        (M.bind e1
-        (fun v1 => M.bind e2
-        (fun v2 => M.cast_eassign v1 v2)), 
-        Context.merge cs1 cs2)
+    | EAssign e1 e2 => 
+	let (b, bs) := hd_cons bs 0 in
+	let b2 := booker e2 0 in
+        let (e1, cs1) := trans e1 ((b + b2)%nat::bs) in
+        let (e2, cs2) := trans e2 (b::bs) in
+          (M.bind e1 (fun v1 => M.bind e2
+          (fun v2 => M.cast_eassign v1 v2)), 
+          Context.merge cs1 cs2)
     | EBox e => 
-        let (e, cs) := trans e acc in
+        let (e, cs) := trans e (0 :: bs) in
         match cs with
         | nil => (M.ret (M.cast_ebox e), Context.empty)
         | c :: cs => (Context.fill c (M.ret (M.cast_ebox e)), cs)
         end
     | EUnbox e =>
-       let (e', cs) := trans e (Injection.succ acc) in
-       (M.cast_eunbox (M.cast_evar 
-	(M.cast_var (hole_var (Injection.get acc 0)))), ((e', Injection.get acc 0) :: nil) :: cs)
+        let (b, bs) := hd_cons bs 0 in
+        let (e', cs) := trans e bs in
+           (M.cast_eunbox (M.cast_evar 
+	   (M.cast_var (hole_var b))), ((e', b) :: nil) :: cs)
     | ERun e =>
-        let (e,cs) := trans e acc in
+        let (e,cs) := trans e bs in
         (M.bind e (fun v => M.cast_erun v), cs)
     | ELift e =>
-        let (e,cs) := trans e acc in
+        let (e,cs) := trans e bs in
         (M.bind e (fun v => M.cast_elift v), cs)
     end.
 
-  Definition trans_expr (e:S.expr) (acc:Injection.t) : T.expr :=
-    let (e, _) := trans e acc in e.
+  Definition trans_expr (e:S.expr) (bs:list nat) : T.expr :=
+    let (e, _) := trans e bs in e.
 
-  Fixpoint trans_mem (m:S.Memory.t) (acc:Injection.t) : T.Memory.t :=
+  Fixpoint trans_mem (m:S.Memory.t) (bs:list nat) : T.Memory.t :=
     match m with
     | nil => nil
-    | e :: m => trans_expr e acc :: (trans_mem m acc)
+    | e :: m => trans_expr e bs :: (trans_mem m bs)
     end.
 
-  Definition phi (e:S.expr) (acc:Injection.t) : T.expr :=
+  Definition phi (e:S.expr) (bs:list nat) : T.expr :=
     match e with
     | EConst i => M.cast_econst i
     | EVar y => M.cast_evar (M.cast_var (source_var y))
     | EAbs y e => 
-        let (e, _) := trans e acc in
+        let (e, _) := trans e bs in
         M.cast_eabs (M.cast_var (source_var y)) e
     | EFix f y e => 
-        let (e, _) := trans e acc in
+        let (e, _) := trans e bs in
         M.cast_efix 
             (M.cast_var (source_var f)) 
             (M.cast_var (source_var y)) e
     | ELoc l => M.cast_eloc l
     | EBox e => 
-        let (e, _) := trans e acc in
+        let (e, _) := trans e (0 :: bs) in
         M.cast_ebox e
     | _ => M.cast_econst 0
     end.
-
-  (** ** Hole Alpha Renaming *)
-  Inductive hole_rename: relation T.expr :=
-    | HR_acc: forall (e:S.expr) (acc1 acc2:Injection.t),
-        hole_rename (trans_expr e acc1) (trans_expr e acc2)
-    | HR_refl: forall (e:T.expr),
-        hole_rename e e
-    | HR_bind:
-        forall (e1 e2 ef:T.expr) (x:T.var),
-        let f := fun v => M.cast_eapp (M.cast_eabs x ef) v in
-        hole_rename e1 e2 -> hole_rename (M.bind e1 f) (M.bind e2 f)
-    | HR_subst: forall (e1 e2:S.expr) (x:S.var) (acc:Injection.t),
-        svalue 0 e2 -> 
-        hole_rename (M.ssubst 0 StageSet.empty (M.cast_var (source_var x))
-        (trans_expr e1 (Injection.left acc)) (phi e2 (Injection.right acc)))
-        (trans_expr (S.ssubst 0 StageSet.empty x e1 e2) acc).
-
-(*
-  (** ** Alpha Renaming Step *)
-  Inductive alpha_rename (alpha:Injection.t) : relation T.expr :=
-    | Alpha_const : forall (c:nat),
-	alpha_rename alpha (M.cast_econst c) (M.cast_econst c)
-    | Alpha_var_source : forall (x:S.var),
-        alpha_rename alpha 
-          (M.cast_evar (M.cast_var (source_var x)))
-          (M.cast_evar (M.cast_var (source_var x)))
-    | Alpha_var_hole : forall (x:S.var),
-        alpha_rename alpha 
-          (M.cast_evar (M.cast_var (hole_var x)))
-          (M.cast_evar (M.cast_var (hole_var (Injection.get alpha x))))
-    | Alpha_abs_source : forall (x:S.var) (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha 
-          (M.cast_eabs (M.cast_var (source_var x)) e1) 
-          (M.cast_eabs (M.cast_var (source_var x)) e2)
-    | Alpha_abs_hole : forall (x:S.var) (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha 
-          (M.cast_eabs (M.cast_var (hole_var x)) e1) 
-          (M.cast_eabs (M.cast_var (hole_var (Injection.get alpha x))) e2)
-    | Alpha_fix : forall (f x:S.var) (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha 
-            (M.cast_efix (M.cast_var (source_var f)) (M.cast_var (source_var x)) e1)
-            (M.cast_efix (M.cast_var (source_var f)) (M.cast_var (source_var x)) e2)
-    | Alpha_app : forall (e1 e2 e3 e4:T.expr),
-        alpha_rename alpha e1 e3 -> alpha_rename alpha e2 e4 -> 
-        alpha_rename alpha (M.cast_eapp e1 e2) (M.cast_eapp e3 e4)
-    | Alpha_loc : forall (l:nat),
-	alpha_rename alpha (M.cast_eloc l) (M.cast_eloc l)
-    | Alpha_ref : forall (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-        alpha_rename alpha (M.cast_eref e1) (M.cast_eref e2)
-    | Alpha_deref : forall (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha (M.cast_ederef e1) (M.cast_ederef e2)
-    | Alpha_assign : forall (e1 e2 e3 e4:T.expr),
-        alpha_rename alpha e1 e3 -> alpha_rename alpha e2 e4 -> 
-        alpha_rename alpha (M.cast_eassign e1 e2) (M.cast_eassign e3 e4)
-    | Alpha_box : forall (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha (M.cast_ebox e1) (M.cast_ebox e2)
-    | Alpha_unbox : forall (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 ->
-          alpha_rename alpha (M.cast_eunbox e1) (M.cast_eunbox e2)
-    | Alpha_run : forall (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha (M.cast_erun e1) (M.cast_erun e2)
-    | Alpha_lift : forall (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha (M.cast_elift e1) (M.cast_elift e2)
-    | Alpha_ret : forall (e1 e2:T.expr),
-        alpha_rename alpha e1 e2 -> 
-          alpha_rename alpha (M.ret e1) (M.ret e2)
-    | Alpha_bind : forall (e1 e2:T.expr) (f1 f2:T.expr -> T.expr),
-        alpha_rename alpha e1 e2 -> 
-        alpha_rename alpha
-          (f1 (M.cast_evar (M.cast_var (source_var 0))))
-          (f2 (M.cast_evar (M.cast_var (source_var 0)))) ->
-        alpha_rename alpha (M.bind e1 f1) (M.bind e2 f2).
-*)
 
   (** ** Administrative Reduction Step *)
   Inductive admin : relation T.expr :=
@@ -342,35 +290,19 @@ Module Translation (R:Replacement)
     | Admin_bind : forall (e1 e2:T.expr) (f1 f2:T.expr -> T.expr),
         admin e1 e2 -> (forall e3:T.expr, admin (f1 e3) (f2 e3)) ->
         admin (M.bind e1 f1) (M.bind e2 f2)
-    | Admin_reduc : forall (e:expr) (acc:Injection.t), svalue 1 e ->
-        admin (M.cast_eunbox (M.cast_ebox (trans_expr e acc))) 
-          (trans_expr e acc).
+    | Admin_reduc : forall (e:expr) (bs:list nat), svalue 1 e ->
+        admin (M.cast_eunbox (M.cast_ebox (trans_expr e bs))) 
+          (trans_expr e bs).
 
   Definition admin_context :  relation Context.t := 
     Context.congr_context admin.
   Definition admin_stack : relation Context.t_stack := 
     Context.congr_stack admin.
 
-(*
-  Inductive alpha_rename_context (alpha: Injection.t) : relation Context.t :=
-    | AlphaCtx_nil: alpha_rename_context alpha nil nil
-    | AlphaCtx_cons: forall (k1 k2:Context.t) (e1 e2:T.expr) (x:M.S.var),
-        alpha_rename_context alpha k1 k2 -> 
-        alpha_rename alpha e1 e2 -> 
-        alpha_rename_context alpha ((e1,x)::k1) ((e2,(Injection.get alpha x))::k2).
-
-  Inductive alpha_rename_stack (alpha:Injection.t) : relation Context.t_stack :=
-    | AlphaStack_empty: alpha_rename_stack alpha nil nil
-    | AlphaStack_context: forall (s1 s2:Context.t_stack) (k1 k2:Context.t),
-       alpha_rename_stack alpha s1 s2 -> alpha_rename_context alpha k1 k2 ->
-       alpha_rename_stack alpha (k1::s1) (k2::s2).
-*)
-
   (** ** Relative Abstract Reduction Step *)
   Inductive rstep : relation T.state :=
-    | Rel_step : forall (s:T.state) (e1 e2 e3:T.expr) (M:T.Memory.t),
-        M.astep s (M,e1) -> admin e1 e2 -> 
-        hole_rename e2 e3 -> rstep s (M,e3).
+    | Rel_step : forall (s:T.state) (e1 e2:T.expr) (M:T.Memory.t),
+        M.astep s (M,e1) -> admin e1 e2 -> rstep s (M,e2).
 
 End Translation.
 
@@ -395,6 +327,16 @@ Module Type MonadProperties (R:Replacement)
      ssubst n ss (cast_var x) (bind e1 f1) v = 
        bind (ssubst n ss (cast_var x) e1 v) f2.
 
+  Parameter ssubst_econst :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (c:nat) (v:expr),
+     ssubst n ss (cast_var x) (cast_econst c) v = cast_econst c.
+
+  Parameter ssubst_evar :
+    forall (n:nat) (ss:StageSet.t) (x y:S.var) (v:expr),
+     ssubst n ss (cast_var x) (cast_evar (cast_var y)) v = 
+     if beq_nat x y && S.CRaw.BindingSet.rho n ss 
+     then v else (cast_evar (cast_var y)).
+
   Parameter ssubst_eabs :
     forall (n:nat) (ss:StageSet.t) (x y:S.var) (e v:expr),
      ssubst n ss (cast_var x) (cast_eabs (cast_var y) e) v = 
@@ -413,12 +355,16 @@ Module Type MonadProperties (R:Replacement)
        = cast_eapp (ssubst n ss (cast_var x) e1 v) 
          (ssubst n ss (cast_var x) e2 v).
 
+  Parameter ssubst_eloc :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (l:nat) (v:expr),
+     ssubst n ss (cast_var x) (cast_eloc l) v = cast_eloc l.
+
   Parameter ssubst_eref :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
      ssubst n ss (cast_var x) (cast_eref e) v
        = cast_eref (ssubst n ss (cast_var x) e v).
 
-  Parameter ssubst_deref :
+  Parameter ssubst_ederef :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
      ssubst n ss (cast_var x) (cast_ederef e) v
        = cast_ederef (ssubst n ss (cast_var x) e v).
@@ -434,6 +380,21 @@ Module Type MonadProperties (R:Replacement)
      ssubst n ss (cast_var x) (cast_ebox e) v
        = cast_ebox (ssubst (S n) ss (cast_var x) e v).
 
+  Parameter ssubst_eunbox :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_eunbox e) v
+       = cast_eunbox (ssubst (pred n) ss (cast_var x) e v).
+
+  Parameter ssubst_erun :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_erun e) v
+       = cast_erun (ssubst n ss (cast_var x) e v).
+
+  Parameter ssubst_elift :
+    forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
+     ssubst n ss (cast_var x) (cast_elift e) v
+       = cast_elift (ssubst n ss (cast_var x) e v).
+
   (** Abstract Reduction Properties *)
 
   Parameter astep_bind_1 :
@@ -443,22 +404,22 @@ Module Type MonadProperties (R:Replacement)
     astep (M1, bind e1 f) (M2, bind e2 f).
 
   Parameter astep_bind_2 :
-    forall (v:S.expr) (e:expr) (acc:Injection.t) (M1 M2:Memory.t) (f:expr -> expr),
-    S.svalue 0 v -> astep (M1, (f (phi v acc))) (M2, e) ->
-    astep (M1, (bind (ret (phi v acc)) f)) (M2, e).
+    forall (v:S.expr) (e:expr) (bs:list nat) (M1 M2:Memory.t) (f:expr -> expr),
+    S.svalue 0 v -> astep (M1, (f (phi v bs))) (M2, e) ->
+    astep (M1, (bind (ret (phi v bs)) f)) (M2, e).
 
   Parameter astep_app_abs :
-    forall (v:S.expr) (x:S.var) (e:expr) (acc:Injection.t) (M:Memory.t),
+    forall (v:S.expr) (x:S.var) (e:expr) (bs:list nat) (M:Memory.t),
     S.svalue 0 v -> astep (M, cast_eapp
-      (cast_eabs (cast_var x) e) (phi v acc))
-      (M, ssubst 0 StageSet.empty (cast_var x) e (phi v acc)).
+      (cast_eabs (cast_var x) e) (phi v bs))
+      (M, ssubst 0 StageSet.empty (cast_var x) e (phi v bs)).
 
 End MonadProperties.
 
 Module ContextStaticProperties (R:Replacement)
-  (T:StagedCalculus) (M:Monad R T).
+  (T:StagedCalculus) (M:Monad R T) (MP:MonadProperties R T M).
 
-  Module Context := Context R T M.
+  Module Context := MP.Translation.Context.
   Import M.
   Import Context.
 
@@ -474,137 +435,137 @@ Module ContextStaticProperties (R:Replacement)
     reflexivity.
   Qed.
 
-End ContextStaticProperties.
-
-Module ContextProperties (R:Replacement) (T:StagedCalculus) 
-    (M:Monad R T) (MP:MonadProperties R T M).
-
-  Module Context := Context R T M.
-  Module StaticProperties := ContextStaticProperties R T M.
-  Import StaticProperties.
-  Import MP.Translation.
-  Import M.
-  Import Context.
-
-  Lemma fill_ssubst:
-    forall (acc:Injection.t) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
-    S.svalue 0 v -> VarSet.mem x (context_hole_set c) = false ->
-      fill (ssubst_context n ss x c (phi v acc)) 
-      (ssubst n ss (M.cast_var (hole_var x)) e (phi v acc)) = 
-      ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v acc).
-    intros.
-    induction c ; simpl.
-    reflexivity.
-
-    destruct a ; simpl in *|-*.
-    assert(H1 := H0).
-    apply VarSetProperties.add_mem_6 in H0.
-    apply beq_nat_false_iff in H0.
-    rewrite beq_nat_sym in H0.
-    rewrite H0.
-    rewrite IHc.
-    rewrite MP.ssubst_bind with (f2 :=(fun v1 : T.expr =>
-     cast_eapp
-     (cast_eabs (cast_var (hole_var v0))
-        (ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v acc))) v1)).
-    reflexivity.
-
-    apply functional_extensionality.
-    intros.
-    rewrite MP.ssubst_eapp.
-    rewrite MP.ssubst_eabs.
-    assert(S.beq_var (hole_var x) (hole_var v0) = false).
-    apply beq_nat_false_iff.
-    apply beq_nat_false_iff in H0.
-    unfold not ; intros ; apply H0.
-    unfold hole_var in H2.
-    omega.
-    rewrite H2.
-    reflexivity.
-    apply VarSetProperties.add_mem_5 in H1.
+  Lemma congr_context_app:
+    forall (rel:relation T.expr) (c1 c2 c3 c4:t),
+    congr_context rel c1 c3 ->
+    congr_context rel c2 c4 ->
+    congr_context rel (c1++c2) (c3++c4).
+  Proof.
+    induction c1 ; simpl ; intros.
+    inversion H ; subst.
+    simpl ; assumption.
+    inversion H ; subst.
+    constructor.
+    apply IHc1 ; assumption.
     assumption.
   Qed.
 
+  Lemma congr_stack_app:
+    forall (rel:relation T.expr) (cs1 cs2 cs3 cs4:t_stack),
+    congr_stack rel cs1 cs3 ->
+    congr_stack rel cs2 cs4 ->
+    congr_stack rel (cs1++cs2) (cs3++cs4).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    inversion H ; subst.
+    simpl ; assumption.
+    inversion H ; subst.
+    constructor.
+    apply IHcs1 ; assumption.
+    assumption.
+  Qed.
 
-End ContextProperties.
+  Lemma congr_stack_merge:
+    forall (rel:relation T.expr) (cs1 cs2 cs3 cs4:t_stack),
+    congr_stack rel cs1 cs3 ->
+    congr_stack rel cs2 cs4 ->
+    congr_stack rel (Context.merge cs1 cs2) (Context.merge cs3 cs4).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    inversion H ; subst.
+    simpl ; assumption.
+    inversion H ; subst.
+
+    destruct cs2 ;
+    inversion H0 ; subst.
+    assumption.
+    constructor.
+    apply IHcs1 ; assumption.
+    apply congr_context_app ; assumption.
+  Qed.
+
+End ContextStaticProperties.
 
 Module TranslationStaticProperties (R:Replacement) 
-    (T:StagedCalculus) (M:Monad R T).
+    (T:StagedCalculus) (M:Monad R T) (MP:MonadProperties R T M).
 
-  Module Translation := Translation R T M.
+  Module Translation := MP.Translation.
   Module CalculusProperties := CalculusProperties R M.S.
-  Module ContextStaticProperties := ContextStaticProperties R T M.
+  Module ContextStaticProperties := ContextStaticProperties R T M MP.
   Import Translation.
   Import M.S.
   Import M.
 
   Lemma depth_length:
-    forall (e:expr) (acc:Injection.t),
-    let (_, cs) := trans e acc in
+    forall (e:expr) (bs:list nat),
+    let (_, cs) := trans e bs in
     depth e = length cs.
   Proof.
     induction e ; simpl ; intros ;
     try(auto ; fail) ;
-    try(specialize (IHe acc) ; destruct (trans e acc) ; auto ; fail) ;
-    try(specialize (IHe1 (Injection.left acc)) ;
-    specialize (IHe2 (Injection.right acc)) ;
+    try(specialize (IHe bs) ; destruct (trans e bs) ; auto ; fail) ;
+
+    (* EApp, EAssign *)
+    try(destruct (hd_cons bs 0) ;
+    specialize (IHe1 ((n + booker e2 0)%nat :: l)) ;
+    specialize (IHe2 (n :: l)) ;
     destruct (trans e1) ; 
     destruct (trans e2) ;
     simpl ; rewrite ContextStaticProperties.merge_length ; auto ; fail).
     
-
     destruct (depth e).
-    specialize (IHe acc).
+    specialize (IHe (0::bs)).
     destruct (trans e).
     destruct t ; simpl in *|-*.
     reflexivity.
     inversion IHe.
 
-    specialize (IHe acc).
+    specialize (IHe (0::bs)).
     destruct (trans e).
     destruct t ; simpl in *|-*.
     inversion IHe.
     inversion IHe.
     reflexivity.
 
-    specialize (IHe (Injection.succ acc)).
+    destruct (hd_cons bs 0).
+    specialize (IHe l).
     destruct (trans e).
     simpl.
     auto.
   Qed.
 
   Lemma length_svalue:
-    forall (e:expr) (acc:Injection.t) (n:nat),
-    let (_, cs) := trans e acc in
+    forall (e:expr) (bs:list nat) (n:nat),
+    let (_, cs) := trans e bs in
     length cs < (S n) <-> svalue (S n) e.
   Proof.
     intros.
     specialize (depth_length e) ; intros.
-    specialize (H acc).
+    specialize (H bs).
     destruct (trans e).
     rewrite <- H.
     apply CalculusProperties.depth_svalue.
   Qed.
 
   Lemma length_sstep:
-    forall (e1 e2:expr) (M1 M2:Memory.t) (acc:Injection.t),
+    forall (e1 e2:expr) (M1 M2:Memory.t) (bs:list nat),
     sstep (depth e1) (M1,e1) (M2,e2) ->
     memory_depth M1 = 0 ->
-    let (_, cs2) := trans e2 acc in
+    let (_, cs2) := trans e2 bs in
     length cs2 <= depth e1.
   Proof.
     intros.
     specialize (CalculusProperties.depth_sstep_2 M1 e1 M2 e2 H0 H) ; intros.
     destruct H1.
-    specialize (depth_length e2 acc) ; intros.
+    specialize (depth_length e2 bs) ; intros.
     destruct (trans e2).
     rewrite H3 in *|-*.
     assumption.
   Qed.
 
   Lemma svalue_phi:
-    forall (e:expr) (acc:Injection.t),
-    svalue 0 e -> trans_expr e acc = M.ret (phi e acc).
+    forall (e:expr) (bs:list nat),
+    svalue 0 e -> trans_expr e bs = M.ret (phi e bs).
   Proof.
     intros ; inversion H ; subst ; simpl ;
     try(reflexivity) ;
@@ -614,7 +575,7 @@ Module TranslationStaticProperties (R:Replacement)
     unfold trans_expr.
     simpl.
     inversion H ; subst.
-    specialize (length_svalue e0 acc 0) ; intros.
+    specialize (length_svalue e0 (0::bs) 0) ; intros.
     destruct (trans e0).
     apply H1 in H3.
     destruct t ; simpl in *|-*.
@@ -638,30 +599,33 @@ Module TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma context_stack_not_nil:
-    forall (e:expr) (acc:Injection.t),
-    let (_, cs) := trans e acc in
+    forall (e:expr) (bs:list nat),
+    let (_, cs) := trans e bs in
     ~ In nil cs.
   Proof.
     induction e ; intros ; simpl ; auto ;
 
-    try( specialize (IHe acc) ; destruct (trans e) ; auto ; fail) ;
+    try(specialize (IHe bs) ; destruct (trans e) ; auto ; fail) ;
 
-    try(specialize (IHe1 (Injection.left acc)) ;
-    specialize (IHe2 (Injection.right acc)) ;
+    (* EApp, EAssign *)
+    try(destruct (hd_cons bs 0) ;
+    specialize (IHe1 ((n + booker e2 0)%nat :: l)) ;
+    specialize (IHe2 (n :: l)) ;
     destruct (trans e1) ; destruct (trans e2) ;
     unfold not ; intros ;
     apply context_merge_not_nil in H ;
     tauto ; fail).
 
 
-    specialize (IHe acc).
+    specialize (IHe (0::bs)).
     destruct (trans e).
     destruct t ; simpl.
     tauto.
     unfold not ; intros ; apply IHe.
     simpl ; auto.
     
-    specialize (IHe (Injection.succ acc)).
+    destruct (hd_cons bs 0).
+    specialize (IHe l).
     destruct (trans e).
     unfold not ; intros ; apply IHe.
     simpl in *|-*.
@@ -692,20 +656,13 @@ Module TranslationStaticProperties (R:Replacement)
     apply Admin_refl.
   Qed.
 
-  Lemma admin_context_context:
+  Lemma admin_context_app:
     forall (k1 k2 k3 k4:Context.t),
     admin_context k1 k2 -> admin_context k3 k4 ->
     admin_context (k1 ++ k3) (k2 ++ k4).
   Proof.
-    unfold admin_context ;
-    induction k1 ; intros.
-    inversion H ; subst.
-    simpl ; assumption.
-
-    destruct a ; inversion H ; subst.
-    simpl ; apply Context.CongrCtx_cons.
-    apply IHk1 ; assumption.
-    assumption.
+    intros.
+    apply ContextStaticProperties.congr_context_app ; assumption.
   Qed.
 
   Lemma admin_context_merge:
@@ -714,318 +671,165 @@ Module TranslationStaticProperties (R:Replacement)
     admin_stack cs3 cs4 ->
     admin_stack (Context.merge cs1 cs3) (Context.merge cs2 cs4).
   Proof.
-     induction cs1 ; intros ;
-     inversion H ; subst ; simpl.
-
-     assumption.
-
-     destruct cs3 ;
-     inversion H0 ; subst.
-     assumption.
-     apply Context.CongrStack_context.
-     apply IHcs1 ; assumption.
-     apply admin_context_context ;
-     [inversion H | inversion H0] ; subst ;
-     assumption.
-  Qed.
-
-(*
-  Lemma alpha_rename_stack_app_refl:
-    forall (cs1 cs2:Context.t_stack),
-    alpha_rename_stack Injection.id cs1 cs1 ->
-    alpha_rename_stack Injection.id cs2 cs2 ->
-    alpha_rename_stack Injection.id (cs1 ++ cs2) (cs1 ++ cs2).
-  Proof.
-    induction cs1 ; simpl ; intros.
-    assumption.
-    inversion H ; inversion H0 ; subst.
-    rewrite app_nil_r.
-    assumption.
-    constructor.
-    apply IHcs1.
-    assumption.
-    assumption.
-    assumption.
-  Qed.
-
-  Lemma alpha_rename_context_app:
-    forall (c1 c2 c3 c4:Context.t) (alpha:Injection.t),
-    alpha_rename_context alpha c1 c3 ->
-    alpha_rename_context alpha c2 c4 ->
-    alpha_rename_context alpha (c1++c2) (c3++c4).
-  Proof.
-    induction c1 ; simpl ; intros.
-    inversion H ; subst.
-    assumption.
-    inversion H ; subst.
-    constructor.
-    apply IHc1 ; assumption.
-    assumption.
-  Qed.
-
-  Lemma alpha_rename_merge:
-    forall (cs1 cs2 cs3 cs4:Context.t_stack) (alpha:Injection.t),
-    alpha_rename_stack alpha cs1 cs3 ->
-    alpha_rename_stack alpha cs2 cs4 ->
-    alpha_rename_stack alpha (Context.merge cs1 cs2) (Context.merge cs3 cs4).
-  Proof.
-    induction cs1 ; simpl ; intros.
-    inversion H ; subst.
-    assumption.
-    inversion H ; subst.
-    destruct cs2.
-    inversion H0 ; subst.
-    simpl.
-    assumption.
-    simpl.
-    inversion H0 ; subst.
-    constructor.
-    apply IHcs1.
-    assumption.
-    assumption.
-    apply alpha_rename_context_app.
-    assumption.
-    assumption.
-  Qed.
-
-  Lemma alpha_rename_fill:
-    forall (e1 e2:T.expr) (c1 c2:Context.t) (alpha:Injection.t),
-    alpha_rename alpha e1 e2 ->
-    alpha_rename_context alpha c1 c2 ->
-    alpha_rename alpha (Context.fill c1 e1) (Context.fill c2 e2).
-  Proof.
-    induction c1 ; intros.
-    inversion H0 ; simpl ; subst.
-    assumption.
-    destruct a.
-    inversion H0 ; subst.
-    simpl.
-    constructor ; auto.
-    constructor.
-    constructor.
-    apply IHc1 ; assumption.
-    constructor.
-  Qed.
-
-  Lemma injective_composition:
-    forall (alpha1 alpha2:Injection.t),
-    let f := fun v => (Injection.get alpha2 (Injection.get alpha1 v)) in
-    forall (m n:nat), m <> n -> f m <> f n.
-  Proof.
     intros.
-    unfold f.
-    apply (Injection.injective alpha2).
-    apply (Injection.injective alpha1).
-    assumption.
+    apply ContextStaticProperties.congr_stack_merge ; assumption.
   Qed.
-
-  Lemma alpha_rename_acc:
-    forall (e:S.expr) (acc1 acc2 alpha:Injection.t),
-    let (e1, cs1) := trans e acc1 in
-    let (e2, cs2) := trans e acc2 in
-    (forall n:nat, Injection.get alpha (Injection.get acc1 n) = 
-      Injection.get acc2 n) ->
-    alpha_rename alpha e1 e2 /\
-    alpha_rename_stack alpha cs1 cs2.
+  
+  Lemma trans_depth:
+    forall (e:expr) (bs bs1 bs2:list nat),
+    depth e <= length bs -> trans e (bs++bs1) = trans e (bs++bs2).
   Proof.
-    induction e ; simpl in *|-* ; intros ;
-    
-    try(split ; repeat(constructor) ; auto ; fail) ;
+    assert(0 <= 0) as Ole.
+    auto.
+    induction e ; intros ; simpl in *|-* ;
 
-    try(specialize (IHe acc1 acc2 alpha) ;
-    destruct (trans e) ; destruct (trans e) ; intros ;
-    specialize (IHe H) ; destruct IHe ;
-    split ; repeat(constructor) ; auto ; fail).
+    try(reflexivity) ;
+    try(specialize (IHe bs bs1 bs2 H) ; rewrite IHe ; reflexivity) ;
 
-    specialize (IHe1 (Injection.left acc1) (Injection.left acc2) alpha) ;
-    specialize (IHe2 (Injection.right acc1) (Injection.right acc2) alpha) ;
-    destruct (trans e1) ; destruct (trans e1) ;
-    destruct (trans e2) ; destruct (trans e2) ; intros ;
-    unfold Injection.left in IHe1 ; unfold Injection.right in IHe2.
-    assert(alpha_rename alpha e e0 /\ alpha_rename_stack alpha t t0).
-    apply IHe1 ; intros ; apply H.
-    assert(alpha_rename alpha e3 e4 /\ alpha_rename_stack alpha t1 t2).
-    apply IHe2 ; intros ; apply H.
-    destruct H0 ; destruct H1 ;
-    split ; [apply Alpha_bind ; auto ;
-    repeat(constructor) ; auto | 
-    apply alpha_rename_merge ; auto ].
+    (* EApp, EAssign *)
+    try(destruct bs ; simpl in *|-* ; [
+    apply le_n_0_eq in H ; symmetry in H ; apply max_0 in H ;
+    destruct H ; destruct (hd_cons bs1 0) ;
+    destruct (hd_cons bs2 0) ; rewrite H, H0 in *|-* ;
+    specialize (IHe1 nil (n + booker e2 0 :: l)%nat 
+      (n0 + booker e2 0 :: l0)%nat Ole) ;
+    specialize (IHe2 nil (n::l) (n0 :: l0) Ole) 
+    | apply max_lub_iff in H ; destruct H ;
+    specialize (IHe1 ((n + booker e2 0)%nat :: bs) bs1 bs2 H) ;
+    specialize (IHe2 (n::bs) bs1 bs2 H0) ];
+    simpl in *|-* ;
+    rewrite IHe1, IHe2 ;
+    reflexivity).
 
-    
-    (* Should be merged with previous case *)
-    specialize (IHe1 (Injection.left acc1) (Injection.left acc2) alpha) ;
-    specialize (IHe2 (Injection.right acc1) (Injection.right acc2) alpha) ;
-    destruct (trans e1) ; destruct (trans e1) ;
-    destruct (trans e2) ; destruct (trans e2) ; intros ;
-    unfold Injection.left in IHe1 ; unfold Injection.right in IHe2.
-    assert(alpha_rename alpha e e0 /\ alpha_rename_stack alpha t t0).
-    apply IHe1 ; intros ; apply H.
-    assert(alpha_rename alpha e3 e4 /\ alpha_rename_stack alpha t1 t2).
-    apply IHe2 ; intros ; apply H.
-    destruct H0 ; destruct H1 ;
-    split ; [apply Alpha_bind ; auto ;
-    repeat(constructor) ; auto | 
-    apply alpha_rename_merge ; auto ].
-    
-    specialize (IHe acc1 acc2 alpha).
-    destruct (trans e) ; destruct (trans e).
-    destruct t ; simpl.
-    destruct t0 ; simpl ; intros ;
-    specialize (IHe H) ; destruct IHe.
-    split ; repeat(constructor) ; auto.
-    inversion H1.
-    destruct t0 ; simpl ; intros ;
-    specialize (IHe H) ; destruct IHe ;
-    inversion H1 ; subst.
-    split ; repeat(constructor) ; auto.
-    apply alpha_rename_fill ; auto.
-    repeat(constructor) ; auto.
-
-    specialize (IHe (Injection.right acc1) (Injection.right acc2) alpha).
-    destruct (trans e) ; destruct (trans e).
-    intros.
-    unfold Injection.right in IHe.
-    assert(alpha_rename alpha e0 e1 /\ alpha_rename_stack alpha t t0).
-    apply IHe ; intros ; apply H.
-    destruct H0.
-    split.
-    repeat(constructor) ; auto.
-    rewrite <- H ; constructor.
-    rewrite <- H ; constructor ; auto.
-    repeat(constructor) ; auto.
-  Qed.
-
-  Definition R (acc1 acc2:Injection.t) (x y:nat) : Prop := 
-    (exists z, x = (Injection.get acc1 z) /\ y = (Injection.get acc2 z)).
-
-  Lemma R_injective_relation:
-    forall (acc1 acc2:Injection.t),
-    Injection.injective_relation (R acc1 acc2).
-  Proof.
-    unfold Injection.injective_relation ; intros.
-    unfold R in *|-*.
-    destruct H ; destruct H0.
-    destruct H ; destruct H0.
-    specialize (Injection.injective acc2 x x0) ; intros.
-    assert(x = x0).
+    (* EBox *)
+    assert(depth e <= S (length bs)).
     omega.
-    subst ; reflexivity.
+    specialize (IHe (0::bs) bs1 bs2 H0).
+    repeat(rewrite app_comm_cons).
+    rewrite IHe ; reflexivity.
+    
+    (* EUnbox *)
+    destruct bs ; simpl in *|-*.
+    exfalso ; omega.
+    apply le_S_n in H.
+    specialize (IHe bs bs1 bs2 H).
+    rewrite IHe ; reflexivity.
   Qed.
 
-  Lemma R_partial_function:
-    forall (acc1 acc2:Injection.t),
-    partial_function (R acc1 acc2).
+  Lemma trans_depth_0:
+    forall (e:expr) (bs1 bs2:list nat),
+    depth e = 0 -> trans e bs1 = trans e bs2.
   Proof.
-    unfold partial_function ; intros.
-    unfold R in *|-*.
-    destruct H ; destruct H0.
-    destruct H ; destruct H0.
-    subst.
-    specialize (Injection.injective acc1 x0 x1) ; intros.
-    assert(x0 = x1).
+    intros.
+    rewrite <- app_nil_l with (l:=bs1).
+    rewrite <- app_nil_l with (l:=bs2).
+    apply trans_depth.
+    simpl ; omega.
+  Qed.
+
+  Lemma phi_depth_0:
+    forall (v:expr) (bs1 bs2:list nat),
+    svalue 0 v -> depth v = 0 -> phi v bs1 = phi v bs2.
+  Proof.
+    intros ; inversion H ; subst ; simpl in *|-* ; auto.
+    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
+    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
+    rewrite trans_depth_0 with (bs2:=0 :: bs2) ; auto.
+    apply CalculusProperties.depth_svalue in H1.
     omega.
-    subst ; reflexivity.
-  Qed.
-   
-  Lemma alpha_rename_left_acc_exists:
-    forall (e:S.expr) (acc1 acc2:Injection.t),
-    let acc2 := Injection.left acc2 in
-    let (e1, cs1) := trans e acc1 in
-    let (e2, cs2) := trans e acc2 in
-    exists alpha:Injection.t,
-    alpha_rename alpha e1 e2 /\
-    alpha_rename_stack alpha cs1 cs2.
-  Proof.
-    intros.
-    specialize (R_injective_relation acc1 acc0) ; intros.
-    specialize (R_partial_function acc1 acc0) ; intros.
-    assert(Injection.disjoint_function (R acc1 acc0)
-       (Injection.right acc2)).
-       unfold Injection.disjoint_function ; intros.
-       unfold Injection.not_in_image, Injection.left, Injection.right.
-       unfold R ; simpl ; intros.
-       apply all_not_not_ex ; intros.
-       apply or_not_and ; right.
-       apply (Injection.injective acc2).
-       omega.
-    specialize (Injection.completion_exists 
-     (R acc1 (Injection.left acc2)) (Injection.right acc2) H H0 H1) ; intros.
-    destruct H2 ; unfold R in H2.
-    specialize (alpha_rename_acc e acc1 acc0 x) ; intros.
-    destruct (trans e).
-    destruct (trans e).
-    exists x.
-    apply H3 ; intros.
-    specialize (H2 (Injection.get acc1 n) (Injection.get acc0 n)).
-    apply H2.
-    exists n.
-    split ; auto.
   Qed.
 
-  Lemma alpha_rename_right_acc_exists:
-    forall (e:S.expr) (acc1 acc2:Injection.t),
-    let acc2 := Injection.right acc2 in
-    let (e1, cs1) := trans e acc1 in
-    let (e2, cs2) := trans e acc2 in
-    exists alpha:Injection.t,
-    alpha_rename alpha e1 e2 /\
-    alpha_rename_stack alpha cs1 cs2.
+  Lemma booker_depth:
+    forall (e:expr) (n:nat),
+    depth e <= n -> booker e n = 0.
   Proof.
-    intros.
-    specialize (R_injective_relation acc1 acc0) ; intros.
-    specialize (R_partial_function acc1 acc0) ; intros.
-    assert(Injection.disjoint_function (R acc1 acc0)
-       (Injection.left acc2)).
-       unfold Injection.disjoint_function ; intros.
-       unfold Injection.not_in_image, Injection.right, Injection.left.
-       unfold R ; simpl ; intros.
-       apply all_not_not_ex ; intros.
-       apply or_not_and ; right.
-       apply (Injection.injective acc2).
-       omega.
-    specialize (Injection.completion_exists 
-     (R acc1 (Injection.right acc2)) (Injection.left acc2) H H0 H1) ; intros.
-    destruct H2 ; unfold R in H2.
-    specialize (alpha_rename_acc e acc1 acc0 x) ; intros.
-    destruct (trans e).
-    destruct (trans e).
-    exists x.
-    apply H3 ; intros.
-    specialize (H2 (Injection.get acc1 n) (Injection.get acc0 n)).
-    apply H2.
-    exists n.
-    split ; auto.
+    induction e ; simpl ; intros ; auto.
+    apply max_lub_iff in H.
+    destruct H ; rewrite IHe1, IHe2 ; auto.
+    apply max_lub_iff in H.
+    destruct H ; rewrite IHe1, IHe2 ; auto.
+    apply IHe ; omega.
+    destruct n ; [exfalso ; omega|auto].
+    apply IHe ; omega.
   Qed.
 
-  Lemma alpha_rename_refl:
-    forall (e:S.expr) (acc:Injection.t),
-    let (e, cs) := trans e acc in
-    alpha_rename Injection.id e e /\
-    alpha_rename_stack Injection.id cs cs.
+  Lemma booker_ssubst:
+    forall (e v:expr) (m n:nat) (x:var) (ss:StageSet.t),
+    depth v = 0 ->
+    booker (S.ssubst m ss x e v) n = booker e n.
   Proof.
-    intros.
-    specialize (alpha_rename_acc e acc acc Injection.id) ; intros.
-    destruct (trans e).
-    apply H ; intros.
-    reflexivity.
+    induction e ; simpl ; intros ; auto.
+    destruct (beq_nat x v && CRaw.BindingSet.rho m ss) ; auto.
+    apply booker_depth ; omega.
+    destruct n ; auto.
   Qed.
-*)
 
 End TranslationStaticProperties.
+
+Module ContextProperties (R:Replacement) (T:StagedCalculus) 
+    (M:Monad R T) (MP:MonadProperties R T M).
+
+  Module TranslationStaticProperties := TranslationStaticProperties R T M MP.
+  Module StaticProperties := TranslationStaticProperties.ContextStaticProperties.
+  Module Context := StaticProperties.Context.
+  Import StaticProperties.
+  Import MP.Translation.
+  Import M.
+  Import Context.
+
+  Lemma fill_ssubst:
+    forall (bs:list nat) (c:t) (n:nat) (ss:StageSet.t) (x:S.var) (v:S.expr) (e:T.expr),
+    S.svalue 0 v -> VarSet.mem x (context_hole_set c) = false ->
+      fill (ssubst_context n ss (hole_var x) c (phi v bs)) 
+      (ssubst n ss (M.cast_var (hole_var x)) e (phi v bs)) = 
+      ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v bs).
+    intros.
+    induction c ; simpl.
+    reflexivity.
+
+    destruct a ; simpl in *|-*.
+    assert(beq_nat (hole_var x) (hole_var v0) = false).
+    assert(H1 := H0).
+    apply VarSetProperties.add_mem_6 in H0.
+    apply beq_nat_false_iff.
+    unfold not ; intros ; unfold hole_var in *|-*.
+    clear IHc H H1 ; omega.
+    rewrite H1.
+    rewrite IHc.
+    rewrite MP.ssubst_bind with (f2 :=(fun v1 : T.expr =>
+     cast_eapp
+     (cast_eabs (cast_var (hole_var v0))
+        (ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v bs))) v1)).
+    reflexivity.
+
+    apply functional_extensionality.
+    intros.
+    rewrite MP.ssubst_eapp.
+    rewrite MP.ssubst_eabs.
+    assert(S.beq_var (hole_var x) (hole_var v0) = false).
+    assumption.
+    rewrite H2.
+    reflexivity.
+    apply VarSetProperties.add_mem_5 in H0.
+    assumption.
+  Qed.
+
+
+End ContextProperties.
 
 Module TranslationProperties (R:Replacement) 
     (T:StagedCalculus) (M:Monad R T) (MP:MonadProperties R T M). 
 
-  Module StaticProperties := TranslationStaticProperties R T M.
   Module Translation := MP.Translation.
   Module ContextProperties := ContextProperties R T M MP.
+  Module StaticProperties := ContextProperties.TranslationStaticProperties.
   Module CalculusProperties := CalculusProperties R M.S.
   Import StaticProperties.
   Import Translation.
   Import M.S.
   Import M.
 
-  Lemma context_stack_independent:
+  (* Lemma context_stack_independent:
     forall (e:expr) (acc:Injection.t),
       let (_, cs) := trans e acc in
       match Context.shift cs with
@@ -1040,12 +844,13 @@ Module TranslationProperties (R:Replacement)
     admit.
     (* TODO: Prove it *)
   Qed.
+  *)
 
-  Lemma context_expr_subst:
+  Lemma ssubst_fill_hole:
     forall (h:var) (e v:T.expr) (c:Context.t) (n:nat),
       VarSet.mem h (Context.context_hole_set c) = false ->
       ssubst n StageSet.empty (M.cast_var (hole_var h)) (Context.fill c e) v =
-      Context.fill (Context.ssubst_context n StageSet.empty h c v) 
+      Context.fill (Context.ssubst_context n StageSet.empty (hole_var h) c v) 
       (ssubst n StageSet.empty (M.cast_var (hole_var h)) e v).
   Proof.
     induction c ; intros ; simpl.
@@ -1053,28 +858,298 @@ Module TranslationProperties (R:Replacement)
     destruct a.
     specialize (IHc n).
     simpl in H.
-    assert(H0 := H).
-    apply VarSetProperties.add_mem_5 in H0.
-    apply IHc in H0.
-    clear IHc.
-    assert(beq_nat h v0 = false).
+    assert(beq_nat (hole_var h) (hole_var v0) = false).
     apply VarSetProperties.add_mem_6 in H.
-    apply beq_nat_false_iff ; auto.
-    rewrite H1.
+    apply beq_nat_false_iff.
+    unfold not ; intros ; unfold hole_var in *|-*.
+    clear IHc ; omega.
+    rewrite H0.
     simpl.
-    rewrite <- H0.
     apply MP.ssubst_bind.
     apply functional_extensionality.
     intros.
     rewrite MP.ssubst_eapp.
     rewrite MP.ssubst_eabs.
     assert(beq_var (hole_var h) (hole_var v0) = false).
-    unfold hole_var.
-    apply beq_nat_false_iff ;
-    apply beq_nat_false_iff in H1.
-    omega.
-    rewrite H2 ; reflexivity.
+    assumption.
+    rewrite H1.
+    rewrite IHc.
+    reflexivity.
+    apply VarSetProperties.add_mem_5 in H.
+    assumption.
   Qed.
+
+  Lemma ssubst_fill_source:
+    forall (x:var) (e v:T.expr) (c:Context.t) (ss:StageSet.t) (n:nat),
+      ssubst n ss (M.cast_var (source_var x)) (Context.fill c e) v =
+      Context.fill (Context.ssubst_context n ss (source_var x) c v) 
+      (ssubst n ss (M.cast_var (source_var x)) e v).
+  Proof.
+    assert(forall (m n:nat), beq_nat (source_var m) (hole_var n) = false).
+    intros ; unfold source_var, hole_var ; apply beq_nat_false_iff ; omega.
+    induction c ; intros ; simpl.
+    reflexivity.
+    destruct a.
+    specialize (IHc ss n).
+    apply MP.ssubst_bind.
+    apply functional_extensionality.
+    intros.
+    rewrite MP.ssubst_eapp.
+    rewrite MP.ssubst_eabs.
+    rewrite H ; rewrite H.
+    rewrite IHc.
+    reflexivity.
+  Qed.
+
+  Lemma ssubst_app_source:
+    forall (x:var) (v:T.expr) (c1 c2:Context.t) (ss:StageSet.t) (n:nat),
+      Context.ssubst_context n ss (source_var x) (c1++c2) v =
+      (Context.ssubst_context n ss (source_var x) c1 v) ++
+      (Context.ssubst_context n ss (source_var x) c2 v).
+  Proof.
+    assert(forall (m n:nat), beq_nat (source_var m) (hole_var n) = false).
+    intros ; unfold source_var, hole_var ; apply beq_nat_false_iff ; omega.
+    induction c1 ; intros ; simpl in *|-*.
+    reflexivity.
+    destruct a.
+    rewrite H.
+    rewrite IHc1.
+    reflexivity.
+  Qed.
+
+  Lemma ssubst_merge_source:
+    forall (x:var) (v:T.expr) (cs1 cs2:Context.t_stack) (ss:StageSet.t) (n:nat),
+      Context.ssubst_stack n ss (source_var x) (Context.merge cs1 cs2) v =
+      Context.merge (Context.ssubst_stack n ss (source_var x) cs1 v) 
+      (Context.ssubst_stack n ss (source_var x) cs2 v).
+  Proof.
+    induction cs1 ; intros ; simpl in *|-*.
+    reflexivity.
+    destruct cs2 ; simpl.
+    reflexivity.
+    simpl.
+    rewrite ssubst_app_source.
+    rewrite IHcs1.
+    reflexivity.
+  Qed.
+
+  Lemma trans_ssubst_source: 
+    forall (e v:expr) (bs:list nat) (x:var) (ss:StageSet.t) (n:nat), 
+    let (e', cs) := trans e bs in
+    svalue 0 v ->
+    depth v = 0 ->
+    length cs <= n ->
+    StageSet.ub n ss = true ->
+    trans (S.ssubst n ss x e v) bs =
+    (M.ssubst n ss (cast_var (source_var x)) e' (phi v bs),
+    Context.ssubst_stack (pred n) (StageSet.remove n ss) (source_var x) cs (phi v bs)).
+  Proof.
+    assert(forall (x v:nat), beq_nat x v = 
+    beq_nat (source_var x) (source_var v)) as HSInject.
+    intros ; unfold source_var ; remember (beq_nat x v) ; 
+    destruct b ; symmetry in Heqb ; symmetry.
+    apply beq_nat_true_iff in Heqb.
+    subst ; rewrite <- beq_nat_refl ; reflexivity.
+    apply beq_nat_false_iff ; apply beq_nat_false in Heqb.
+    omega.
+
+    induction e ; simpl ; intros.
+
+    (* Case EConst *)
+    rewrite MP.ssubst_ret.
+    rewrite MP.ssubst_econst.
+    reflexivity.
+    
+    (* Case EVar *)
+    rewrite MP.ssubst_ret.
+    rewrite MP.ssubst_evar.
+    rewrite <- HSInject.
+    destruct (beq_nat x v && CRaw.BindingSet.rho n ss).
+    specialize (svalue_phi v0 bs H) ; intros.
+    unfold trans_expr in H3.
+    specialize (depth_length v0 bs) ; intros.
+    rewrite H0 in H4.
+    destruct (trans v0) ; subst.
+    destruct t ; simpl in H4 ; [reflexivity|inversion H4].
+    reflexivity.
+    
+    (* EAbs *)
+    specialize (IHe v0 bs x).
+    destruct (trans e) ; intros.
+    rewrite MP.ssubst_ret.
+    rewrite MP.ssubst_eabs.
+    rewrite <- HSInject.
+    destruct (beq_nat x v).
+    rewrite IHe ; auto.
+    rewrite StageSetProperties.remove_add_remove ; auto.
+    rewrite <- StageSetProperties.ub_le_1 with (m:=n) ; auto.
+    rewrite IHe ; auto.
+
+    (* EFix *)
+    specialize (IHe v1 bs x).
+    destruct (trans e) ; intros.
+    rewrite MP.ssubst_ret.
+    rewrite MP.ssubst_efix.
+    rewrite <- HSInject.
+    rewrite <- HSInject.
+    destruct (beq_nat x v || beq_nat x v0).
+    rewrite IHe ; auto.
+    rewrite StageSetProperties.remove_add_remove ; auto.
+    rewrite <- StageSetProperties.ub_le_1 with (m:=n) ; auto.
+    rewrite IHe ; auto.
+
+    (* EApp *)
+    destruct (hd_cons bs 0).
+    specialize (IHe1 v ((n0 + booker e2 0)%nat :: l) x).
+    specialize (IHe2 v (n0::l) x).
+    destruct (trans e1) ; destruct (trans e2) ; intros.
+    rewrite IHe2 ; auto ; clear IHe2.
+    rewrite booker_ssubst ; [|auto].
+    rewrite IHe1 ; auto ; clear IHe1.
+    rewrite phi_depth_0 with (bs2:=nil) ; auto.
+    rewrite phi_depth_0 with (bs1:=n0:: l) (bs2:=nil) ; auto.
+    rewrite phi_depth_0 with (bs1:=bs) (bs2:=nil) ; auto.
+    rewrite ssubst_merge_source.
+    rewrite MP.ssubst_bind with (f2:= fun v1 => bind 
+      (ssubst n ss (cast_var (source_var x)) e0 (phi v nil))
+      (fun v2 => cast_eapp v1 v2)).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_bind with (f2:=(fun v2 : T.expr =>
+    cast_eapp (ssubst n ss (cast_var (source_var x)) x0 (phi v nil)) v2)).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_eapp.
+    reflexivity.
+    rewrite ContextStaticProperties.merge_length in H1.
+    apply max_lub_iff in H1 ; destruct H1 ; assumption.
+    rewrite ContextStaticProperties.merge_length in H1.
+    apply max_lub_iff in H1 ; destruct H1 ; assumption.
+
+    (* ELoc *)
+    rewrite MP.ssubst_ret, MP.ssubst_eloc ; reflexivity.
+    
+    (* ERef *)
+    specialize (IHe v bs x).
+    destruct (trans e) ; intros.
+    rewrite IHe ; auto.
+    rewrite MP.ssubst_bind with (f2:=fun v0 => cast_eref v0).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_eref.
+    reflexivity.
+    
+    (* EDeref *)
+    specialize (IHe v bs x).
+    destruct (trans e) ; intros.
+    rewrite IHe ; auto.
+    rewrite MP.ssubst_bind with (f2:=fun v0 => cast_ederef v0).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_ederef.
+    reflexivity.
+
+    (* EAssign *)
+    destruct (hd_cons bs 0).
+    specialize (IHe1 v ((n0 + booker e2 0)%nat :: l) x).
+    specialize (IHe2 v (n0::l) x).
+    destruct (trans e1) ; destruct (trans e2) ; intros.
+    rewrite IHe2 ; auto ; clear IHe2.
+    rewrite booker_ssubst ; [|auto].
+    rewrite IHe1 ; auto ; clear IHe1.
+    rewrite phi_depth_0 with (bs2:=nil) ; auto.
+    rewrite phi_depth_0 with (bs1:=n0:: l) (bs2:=nil) ; auto.
+    rewrite phi_depth_0 with (bs1:=bs) (bs2:=nil) ; auto.
+    rewrite ssubst_merge_source.
+    rewrite MP.ssubst_bind with (f2:= fun v1 => bind 
+      (ssubst n ss (cast_var (source_var x)) e0 (phi v nil))
+      (fun v2 => cast_eassign v1 v2)).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_bind with (f2:=(fun v2 : T.expr =>
+    cast_eassign (ssubst n ss (cast_var (source_var x)) x0 (phi v nil)) v2)).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_eassign.
+    reflexivity.
+    rewrite ContextStaticProperties.merge_length in H1.
+    apply max_lub_iff in H1 ; destruct H1 ; assumption.
+    rewrite ContextStaticProperties.merge_length in H1.
+    apply max_lub_iff in H1 ; destruct H1 ; assumption.
+
+    (* EBox *)
+    specialize (IHe v (0::bs) x).
+    destruct (trans e) ; intros.
+    destruct t ; simpl in *|-* ; intros ;
+    rewrite IHe ; auto ; simpl in *|-*.
+    rewrite MP.ssubst_ret ; auto.
+    rewrite MP.ssubst_ebox ; auto.
+    rewrite phi_depth_0 with (bs2:=bs) ; auto.
+    apply StageSetProperties.ub_le_2 with (m:=n) ; auto.
+    rewrite ssubst_fill_source.
+    rewrite phi_depth_0 with (bs2:=bs) ; auto.
+    rewrite MP.ssubst_ret ; auto.
+    rewrite MP.ssubst_ebox ; auto.
+    assert(StageSet.remove (S n) ss = ss).
+    apply StageSetProperties.remove_equal.
+    remember(Sets.NatSet.MSetIntern.mem (S n) ss).
+    destruct b ; symmetry in Heqb.
+    exfalso ; apply StageSetProperties.ub_le_3 with (n:=n) in Heqb ; 
+    [omega|auto].
+    reflexivity.
+    rewrite H3.
+    reflexivity.
+    omega.
+    apply StageSetProperties.ub_le_2 with (m:=n) ; auto.
+
+    (* EUnbox *)
+    destruct (hd_cons bs 0).
+    specialize (IHe v l x).
+    destruct (trans e) ; intros.
+    rewrite IHe ; auto.
+    rewrite MP.ssubst_eunbox ; auto.
+    simpl.
+    rewrite MP.ssubst_evar.
+    assert(beq_nat (source_var x) (hole_var n0) &&
+       CRaw.BindingSet.rho (pred n) ss = false).
+    apply andb_false_iff ; left.
+    apply beq_nat_false_iff.
+    unfold source_var, hole_var ; omega.
+    rewrite H3 ; clear H3.
+    rewrite phi_depth_0 with (bs2:=bs) ; auto.
+    simpl in H1 ; omega.
+    rewrite <- StageSetProperties.ub_pred ; auto.
+
+    (* ERun *)
+    specialize (IHe v bs x).
+    destruct (trans e) ; intros.
+    rewrite IHe ; auto.
+    rewrite MP.ssubst_bind with (f2:=fun v0 => cast_erun v0).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_erun.
+    reflexivity.
+
+    (* ELift *)
+    specialize (IHe v bs x).
+    destruct (trans e) ; intros.
+    rewrite IHe ; auto.
+    rewrite MP.ssubst_bind with (f2:=fun v0 => cast_elift v0).
+    reflexivity.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_elift.
+    reflexivity.
+  Qed.
+    
+    
+
+  (*
+  Fixpoint compose {T:Type} (n:nat) (f:T -> T) (x:T) : T :=
+    match n with
+    | 0 => x
+    | S n => compose n f (f x)
+    end.
+  *)
 
   (* En gros, on distingue 2 mondes de variables:
     - les variables traduites (cast_var) qui sont celles 
@@ -1085,31 +1160,33 @@ Module TranslationProperties (R:Replacement)
    seraient 2n+1.
   *)
   Lemma sstep_rstep:
-    forall (e1:S.expr) (acc:Injection.t) (e2:S.expr) (M1 M2:S.Memory.t),
+    forall (e1:S.expr) (bs:list nat) (e2:S.expr) (M1 M2:S.Memory.t),
     S.memory_depth M1 = 0 ->
-    let (e1', cs1) := trans e1 acc in
-    let n := length cs1 in
+    let n := depth e1 in
     S.sstep n (M1, e1) (M2, e2) -> 
+    let (e1', cs1) := trans e1 bs in
     match cs1 with
-    | nil => rstep (trans_mem M1 acc, e1') (trans_mem M2 acc, trans_expr e2 acc)
+    | nil => rstep (trans_mem M1 bs, e1') (trans_mem M2 bs, trans_expr e2 bs)
     | cs1 => let (c1, cs1') := Context.shift cs1 in
       match c1 with
       | nil => False
       | cons (t_eh, h) c1' => 
-          let (e2', cs2) := trans e2 acc in
-          let M1' := trans_mem M1 (Injection.succ acc) in
-          let M2' := trans_mem M2 (Injection.succ acc) in
-          exists eh, t_eh = trans_expr eh (Injection.succ acc) /\
+          let (e2', cs2) := trans e2 bs in
+          let M1' := trans_mem M1 bs in
+          let M2' := trans_mem M2 bs in
+          exists eh, t_eh = trans_expr eh (0::nil) /\
           (
             S.svalue 0 eh /\ 
             M1 = M2 /\ 
             admin_stack 
               (Context.ssubst_stack 
-                 (pred n) StageSet.empty h (Context.unshift cs1' c1') (phi eh acc)) cs2 /\
+                 (pred n) StageSet.empty (hole_var h) (Context.unshift cs1' c1') 
+                 (phi eh (0::nil))) cs2 /\
             admin
-               (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' (phi eh acc)) e2'
+               (M.ssubst n StageSet.empty (M.cast_var (hole_var h)) e1' 
+               (phi eh (0::nil))) e2'
           \/ 
-            exists eh', let t_eh' := trans_expr eh' (Injection.succ acc) in
+            exists eh', let t_eh' := trans_expr eh' (0::nil) in
             rstep (M1', t_eh) (M2', t_eh') /\
             e1' = e2' /\
             cs2 = Context.unshift cs1' ((t_eh', h) :: c1')
@@ -1118,102 +1195,77 @@ Module TranslationProperties (R:Replacement)
     end.
   Proof.
     induction e1 ; simpl ; 
-    intros acc e2 M1 M2 MemDepth0 ; intros.
+    intros bs e2 M1 M2 MemDepth0 Step ; intros.
 
     (* Case EConst *)
-    inversion H.
+    inversion Step.
 
     (* Case EVar *)
-    inversion H.
+    inversion Step.
 
     (* Case EAbs *)
-    specialize (IHe1 acc).
+    inversion Step ; subst.
+    rewrite <- H in IHe1.
+    specialize (IHe1 bs e3 M1 M2 MemDepth0 H1).
+    specialize (depth_length e1 bs) ; intros.
     destruct (trans e1).
-    intros.
-
-    destruct t ; simpl in H;
-    inversion H ; subst.
-    specialize (IHe1 e3 M1 M2 MemDepth0 H2).
+    rewrite <- H in H0.
+    destruct t ; simpl in H0 ; inversion H0 ; subst.
     destruct (Context.shift (t :: t0)).
-    destruct t1 ; simpl in *|-*.
-      destruct (trans e3).
-      destruct IHe1 ; subst ; tauto.
+    destruct t1 ; simpl in *|-* ; auto.
+    destruct p ; destruct (trans e3) ; intros.
+    destruct IHe1 ; exists x.
+    destruct H2 ; split ; [assumption|].
+    destruct H3 ; [left | right] ; destruct H3.
 
-      assumption.
-
-      destruct p ; destruct (trans e3).
-      destruct IHe1.
-      exists x.
-      destruct H0.
-      split ; [assumption|].
-      destruct H1 ; [left | right] ;
-      destruct H1.
-        destruct H3.
-        destruct H4.
-        subst.
-        repeat(split ; auto).
-
+      (* Case svalue *)
+      destruct H4 ; destruct H5 ; subst.
+      repeat(split ; auto).
       rewrite MP.ssubst_ret, MP.ssubst_eabs.
       apply Admin_ret, Admin_abs.
-
       assert(S.beq_var (hole_var v0) (source_var v) = false).
         apply beq_nat_false_iff.
         unfold hole_var, source_var.
         omega.
+      simpl in *|-*.
+      rewrite H2 ; assumption.
 
-      simpl in H0.
-      rewrite H0 ; assumption.
+      (* Case not svalue *)
       exists x0.
-      destruct H1 ; destruct H3 ; subst.
+      destruct H3 ; destruct H4 ; subst.
       auto.
 
     (* Case EFix *)
-    specialize (IHe1 acc).
+    inversion Step ; subst.
+    rewrite <- H in IHe1.
+    specialize (IHe1 bs e3 M1 M2 MemDepth0 H1).
+    specialize (depth_length e1 bs) ; intros.
     destruct (trans e1).
-    intros.
-
-    destruct t ; simpl in H;
-    inversion H ; subst.
-    specialize (IHe1 e3 M1 M2 MemDepth0 H2).
+    rewrite <- H in H0.
+    destruct t ; simpl in H0 ; inversion H0 ; subst.
     destruct (Context.shift (t :: t0)).
-    destruct t1 ; simpl in *|-*.
-      destruct (trans e3).
-      destruct IHe1 ; subst ; tauto.
-      assumption.
-
-      destruct p ; destruct (trans e3).
-      destruct IHe1.
-      exists x.
-      destruct H0 ; split ; [assumption|].
-      destruct H1 ; [left | right] ; destruct H1.
-      destruct H3 ; destruct H4.
-      subst.
+    destruct t1 ; simpl in *|-* ; auto.
+    destruct p ; destruct (trans e3) ; intros.
+    destruct IHe1 ; exists x.
+    destruct H2 ; split ; [assumption|].
+    destruct H3 ; [left | right] ; destruct H3.
+    
+      (* Case svalue *)
+      destruct H4 ; destruct H5 ; subst.
       repeat(split ; auto).
-
       rewrite MP.ssubst_ret, MP.ssubst_efix.
       apply Admin_ret, Admin_fix.
-
       assert(orb (S.beq_var (hole_var v1) (source_var v)) 
           (S.beq_var (hole_var v1) (source_var v0)) = false).
         apply orb_false_intro ; apply beq_nat_false_iff ;
         unfold hole_var, source_var ; omega.
-
-      simpl in H0.
-      rewrite H0 ; assumption.
+      simpl in *|-*.
+      rewrite H2 ; assumption.
       exists x0.
-      destruct H1 ; destruct H3 ; subst ; auto.
+      destruct H3 ; destruct H4 ; subst ; auto.
 
     (* Case EApp *)
-    specialize (IHe1_1 (Injection.left acc)).
-    specialize (IHe1_2 (Injection.right acc)).
-    assert(trans ((fun x => x) e1_1) (Injection.left acc) = (trans e1_1) (Injection.left acc)).
-    reflexivity.
-    assert(trans ((fun x => x) e1_2) (Injection.right acc) = (trans e1_2) (Injection.right acc)).
-    reflexivity.
-    destruct (trans e1_1).
-    destruct (trans e1_2).
-    intros.
-    inversion H1 ; subst.
+    inversion Step ; subst ; simpl in *|-*.
     
       (* Case EApp e1 e2,  e1 -> e1' *)
       admit.
@@ -1222,57 +1274,53 @@ Module TranslationProperties (R:Replacement)
       admit.
 
       (* Case EApp (EAbs), n = 0 *)
-      symmetry in H2.
-      rewrite ContextStaticProperties.merge_length in H2.
-      apply max_0 in H2.
-      destruct H2.
-      destruct t ; [| inversion H2].
-      destruct t0 ; [| inversion H3].
-      simpl in *|-* ; clear H2 H3.
+      symmetry in H ; apply max_0 in H.
+      destruct H.
       clear IHe1_2 IHe1_1.
-      assert(e = trans_expr (CRaw.EAbs x e1) (Injection.left acc)).
-      unfold trans_expr ; simpl.
-      destruct (trans e1) ; inversion H ; subst ; auto.
-      assert(e0 = trans_expr e1_2 (Injection.right acc)).
-      unfold trans_expr.
-      destruct (trans e1_2) ; inversion H0 ; subst ; auto.
-      subst.
-      rewrite svalue_phi ; [| constructor].
-      rewrite svalue_phi ; [|assumption].
-      clear H1 H0.
+      destruct (hd_cons bs 0).
+      specialize (depth_length e ((n + booker e1_2 0)%nat :: l)) ; intros.
+      assert(let (e0, _) := trans e ((n + booker e1_2 0)%nat :: l) in
+      cast_eabs (cast_var (source_var x)) e0 = 
+      phi (CRaw.EAbs x e) ((n + booker e1_2 0)%nat :: l)).
+      simpl ; destruct (trans e) ; reflexivity.
+      destruct (trans e).
+      rewrite H3.
+      rewrite H in H2 ; destruct t ; simpl in *|- ;
+      [clear H2 |inversion H2].
+      specialize (depth_length e1_2 (n :: l)) ; intros.
+      specialize (svalue_phi e1_2 (n::l) H1) ; intros.
+      unfold trans_expr in H4.
+      destruct (trans e1_2).
+      rewrite H0 in H2 ; destruct t ; simpl in *|-;
+      [clear H2 |inversion H2].
+      rewrite H4 ; unfold Context.merge.
       apply Rel_step with 
-        (e1:=ssubst 0 StageSet.empty (cast_var (source_var x)) 
-          (trans_expr e1 (Injection.left acc)) (phi e1_2 (Injection.right acc)))
-        (e2:=ssubst 0 StageSet.empty (cast_var (source_var x)) 
-          (trans_expr e1 (Injection.left acc)) (phi e1_2 (Injection.right acc))).
-      apply MP.astep_bind_2.
+      (e1:=trans_expr (S.ssubst 0 StageSet.empty x e e1_2) bs).
+      apply MP.astep_bind_2 ; [constructor|].
+      apply MP.astep_bind_2 ; [assumption|].
+      specialize (trans_ssubst_source e e1_2 bs x StageSet.empty 0) ; intros.
+      unfold trans_expr ; simpl.
+      rewrite trans_depth_0 with (bs2:=bs) ; auto.
+      specialize (depth_length e bs) ; intros.
+      destruct (trans e bs).
+      rewrite H2 ; auto ; clear H2.
+      rewrite phi_depth_0 with (bs2:=bs) ; auto.
+      apply MP.astep_app_abs ; auto.
+      omega.
       constructor.
-      apply MP.astep_bind_2.
-      assumption.
-      simpl ; clear H.
-      specialize (MP.astep_app_abs e1_2 (source_var x) 
-        (trans_expr e1 (Injection.left acc)) 
-        (Injection.right acc) (trans_mem M2 acc) H4) ; intros.
-      unfold trans_expr in *|-*.
-      assert(MP.Translation.trans = trans).
-      reflexivity.
-      rewrite H0 in *|-* ; clear H0.
-      destruct (trans e1).
-      assumption.
-      constructor.
-      constructor ; assumption.
 
       (* Case EApp (EFix), n = 0 *)
       admit.
 
     (* Case ELoc *)
-    inversion H.
+    inversion Step.
 
     (* Case ERef *)
+    fail.
     specialize (IHe1 acc).
     destruct (trans e1).
     intros.
-    destruct t ; simpl in H ;
+    destruct t ; simpl in H ; intros ;
     inversion H ; subst.
 
       (* SubCase ERef, n=0, e -> e' *)
@@ -1299,7 +1347,8 @@ Module TranslationProperties (R:Replacement)
         destruct IHe1 ; subst ; tauto.
         assumption.
 
-        destruct p ; destruct (trans e3).
+        destruct p ; destruct (trans e3) ; intros.
+        specialize (IHe1 acc').
         destruct IHe1.
         exists x.
         destruct H0 ; split ; [assumption|].
@@ -1314,8 +1363,10 @@ Module TranslationProperties (R:Replacement)
         apply Admin_refl.
 
         assert (
-         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) (phi x acc)) =
-         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 (phi x acc)))).
+         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) 
+         (M.cast_eref v2) (phi x (compose (length t0) Injection.succ (Injection.succ acc)))) =
+         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty 
+         (M.cast_var (hole_var v)) v2 (phi x (compose (length t0) Injection.succ (Injection.succ acc)))))).
           apply functional_extensionality.
           intros ; apply MP.ssubst_eref.
         assumption.
@@ -1329,8 +1380,7 @@ Module TranslationProperties (R:Replacement)
     admit.
 
     (* Case EBox *)
-    admit.
-    (*
+    
     specialize (length_svalue e1 acc 0) ; intros.
     specialize (context_stack_not_nil e1 acc) ; intros.
     specialize (context_stack_independent e1 acc) ; intros.
@@ -1353,7 +1403,7 @@ Module TranslationProperties (R:Replacement)
 
         (* Case of length(stack) = 1 *)
         inversion H2 ; subst ; simpl in *|-*.
-        specialize (IHe1 e3 M1 M2 H5).
+        specialize (IHe1 e3 M1 M2 MemDepth0 H5).
         destruct t.
 
           (* Case stack = [[]] Impossible *)
@@ -1362,7 +1412,9 @@ Module TranslationProperties (R:Replacement)
           (* Case stack = [a :: lst] *)
           destruct p ; clear H0.
           unfold trans_expr ; simpl.
-          destruct (trans e3).
+          specialize (depth_length e3 acc) ; intros DL.
+          destruct (trans e3) ; intros.
+          specialize (IHe1 acc0).
           destruct IHe1.
           destruct H0.
           destruct H3.
@@ -1375,13 +1427,21 @@ Module TranslationProperties (R:Replacement)
             inversion H6 ; subst.
             inversion H4 ; subst ; clear H6 H4.
             simpl.
+            specialize (depth_length e3 acc0) ; intros DL2.
+            rewrite DL in DL2.
+            destruct (trans e3 acc0).
+            simpl in DL2.
+            destruct t0 ; simpl in *|-* ; [inversion DL2 | ].
+            inversion DL2 ; subst ; destruct t1 ; simpl in *|-* ; [| inversion H0].
+            clear DL2 H0.
             apply Rel_step with (e1:=Context.fill 
-               (Context.ssubst_context 0 StageSet.empty v t (phi x acc))
+               (Context.ssubst_context 0 StageSet.empty (hole_var v) t (phi x (Injection.succ acc)))
                (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
-               (M.ret (M.cast_ebox e)) (phi x acc)))
-               (e2:=Context.fill k2 (ret (cast_ebox e2))).
+               (M.ret (M.cast_ebox e)) (phi x (Injection.succ acc))))
+               (e2:=Context.fill k2 (ret (cast_ebox e2)))
+               (M1:=trans_mem M2 acc0).
             assert(H10 := H3).
-            apply svalue_phi with (acc:=acc) in H10.
+            apply svalue_phi with (acc:=(Injection.succ acc)) in H10.
             rewrite H10.
             apply MP.astep_bind_2.
             assumption.
@@ -1397,6 +1457,7 @@ Module TranslationProperties (R:Replacement)
             constructor.
             constructor.
             assumption.
+            apply hole_rename_fill.
             constructor.
 
             (* Case not svalue *)
@@ -1419,8 +1480,9 @@ Module TranslationProperties (R:Replacement)
             assumption.
 
         (* Case of length(stack) > 1 *)
-        inversion H2 ; subst.
-        specialize (IHe1 e3 M1 M2 H5).
+        admit.
+        (*inversion H2 ; subst.
+        specialize (IHe1 e3 M1 M2 MemDepth0 H5).
         destruct (Context.shift (t0 :: t1)).
         destruct t2.
         assumption.
@@ -1444,6 +1506,7 @@ Module TranslationProperties (R:Replacement)
 
         exists x.
         destruct H3.
+        simpl in *|-*.
         split ; [assumption |].
         destruct H4.
 
@@ -1461,7 +1524,7 @@ Module TranslationProperties (R:Replacement)
         
           simpl in *|-*.
           inversion H7 ; subst.
-          rewrite context_expr_subst.
+          rewrite ssubst_fill_hole.
           apply admin_context_expr.
           assumption.
           
@@ -1541,7 +1604,43 @@ Module TranslationProperties (R:Replacement)
         destruct (trans e3) ; inversion H1 ; subst ; auto.
 
         (* Case n > 1 *)
-        admit.
+        destruct (Context.shift (t :: t0)).
+        destruct t1 ; simpl in *|-*.
+        assumption.
+
+        destruct p ; destruct (trans e3).
+        destruct IHe1.
+        exists x.
+        destruct H1 ; split ; [assumption|].
+        destruct H2 ; [left | right] ; destruct H2.
+
+          (* Case svalue *)
+          destruct H4 ; destruct H5.
+          repeat(split ; auto).
+          constructor.
+          assumption.
+          constructor.
+          constructor.
+          assumption.
+          
+          (* Case not svalue *)
+          
+
+        rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr => cast_eref v0)).
+        apply Admin_bind.
+        assumption.
+        intros.
+        apply Admin_refl.
+
+        assert (
+         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) (phi x acc)) =
+         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 (phi x acc)))).
+          apply functional_extensionality.
+          intros ; apply MP.ssubst_eref.
+        assumption.
+        exists x0.
+        destruct H1 ; destruct H3 ; subst ; auto.
+        fail.
 
       (* Case EUnbox Box e -> e *)
       admit.

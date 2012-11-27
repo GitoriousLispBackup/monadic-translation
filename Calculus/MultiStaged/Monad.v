@@ -397,9 +397,21 @@ Module Type MonadProperties (R:Replacement)
 
   (** Abstract Reduction Properties *)
 
-  Parameter astep_bind_1 :
+  Parameter astep_bind_app_eabs :
     forall (e1 e2 ef:expr) (M1 M2:Memory.t) (x:var),
     let f := fun v => cast_eapp (cast_eabs x ef) v in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
+  Parameter astep_bind_app_efix :
+    forall (e1 e2 ef:expr) (M1 M2:Memory.t) (f x:var),
+    let f := fun v => cast_eapp (cast_efix f x ef) v in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
+  Parameter astep_bind_eref :
+    forall (e1 e2:expr) (M1 M2:Memory.t),
+    let f := fun v => cast_eref v in
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind e1 f) (M2, bind e2 f).
 
@@ -483,6 +495,23 @@ Module ContextStaticProperties (R:Replacement)
     apply IHcs1 ; assumption.
     apply congr_context_app ; assumption.
   Qed.
+
+  Lemma shift_spec:
+    forall (cs:t_stack),
+    length cs > 0 ->
+    let (c, cs') := Context.shift cs in
+    cs = cs'++ (c::nil).
+  Proof.
+    induction cs ; intros ; simpl in *|-*.
+    exfalso ; omega.
+    destruct cs.
+    simpl in *|-* ; reflexivity.
+    destruct (shift (t0 :: cs)).
+    simpl.
+    rewrite IHcs ; simpl ; auto.
+    omega.
+  Qed.
+
 
 End ContextStaticProperties.
 
@@ -634,6 +663,28 @@ Module TranslationStaticProperties (R:Replacement)
     assumption.
   Qed.
 
+  Lemma context_shift_not_nil:
+    forall (cs:Context.t_stack),
+    length cs > 0 ->
+    ~ In nil cs ->
+    let (c, cs) := Context.shift cs in
+    c <> nil /\ ~ In nil cs.
+  Proof.
+    induction cs ; intros ; simpl in *|-*.
+    exfalso ; omega.
+
+    destruct cs ;
+    apply not_or_and in H0 ; destruct H0 ; auto.
+    destruct (Context.shift (t :: cs)).
+    assert(length (t :: cs) > 0).
+    simpl ; omega.
+    specialize (IHcs H2 H1).
+    destruct IHcs.
+    clear H ; split.
+    assumption.
+    simpl ; apply and_not_or ; auto.
+  Qed.
+
   Lemma admin_context_expr:
     forall (k1 k2:Context.t) (e1 e2:T.expr),
     admin_context k1 k2 -> admin e1 e2 ->
@@ -725,6 +776,19 @@ Module TranslationStaticProperties (R:Replacement)
     rewrite <- app_nil_l with (l:=bs2).
     apply trans_depth.
     simpl ; omega.
+  Qed.
+
+  Lemma trans_memory_depth_0:
+    forall (M:Memory.t) (bs1 bs2:list nat),
+    memory_depth M = 0 -> trans_mem M bs1 = trans_mem M bs2.
+  Proof.
+    induction M ; intros.
+    reflexivity.
+    simpl in *|-*.
+    apply max_0 in H ; destruct H.
+    rewrite IHM with (bs2:=bs2) ; auto.
+    unfold trans_expr.
+    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
   Qed.
 
   Lemma phi_depth_0:
@@ -1261,6 +1325,8 @@ Module TranslationProperties (R:Replacement)
         unfold hole_var, source_var ; omega.
       simpl in *|-*.
       rewrite H2 ; assumption.
+
+      (* Case not svalue *)
       exists x0.
       destruct H3 ; destruct H4 ; subst ; auto.
 
@@ -1316,62 +1382,44 @@ Module TranslationProperties (R:Replacement)
     inversion Step.
 
     (* Case ERef *)
-    fail.
-    specialize (IHe1 acc).
+    specialize (IHe1 bs).
     destruct (trans e1).
-    intros.
-    destruct t ; simpl in H ; intros ;
-    inversion H ; subst.
+    inversion Step ; subst.
+    destruct t ; intros.
 
       (* SubCase ERef, n=0, e -> e' *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H2).
-      unfold trans_expr.
-      unfold trans_expr in IHe1.
-      simpl.
+      specialize (IHe1 e3 M1 M2 MemDepth0 H1).
+      inversion IHe1 ; subst.
+      apply Rel_step with (e1:=bind e0 (fun v => cast_eref v)).
+      apply MP.astep_bind_eref ; assumption.
+      unfold trans_expr in *|-* ; simpl in *|-*.
       destruct (trans e3).
-      simpl.
-      admit.
-
-    
-      (* SubCase ERef, n=0, svalue 0 e *)
-      simpl in *|-*.
-      unfold trans_expr.
-      simpl.
-      admit.
+      constructor ; [auto | intros ; constructor].
 
       (* SubCase ERef, n>0 *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H2).
+      specialize (IHe1 e3 M1 M2 MemDepth0 H1).
       destruct (Context.shift (t :: t0)).
-      destruct t1 ; simpl in *|-*.
-        destruct (trans e3).
-        destruct IHe1 ; subst ; tauto.
-        assumption.
+      destruct t1 ; simpl in *|-* ; auto.
+      destruct p ; destruct (trans e3) ; intros.
+      destruct IHe1 ; exists x.
+      destruct H ; split ; [assumption|].
+      destruct H0 ; [left | right] ; destruct H0.
 
-        destruct p ; destruct (trans e3) ; intros.
-        specialize (IHe1 acc').
-        destruct IHe1.
-        exists x.
-        destruct H0 ; split ; [assumption|].
-        destruct H1 ; [left | right] ; destruct H1.
-        destruct H3 ; destruct H4.
+        (* Case svalue *)
+        destruct H2 ; destruct H3 ; subst.
         repeat(split ; auto).
+        rewrite MP.ssubst_bind with (f2:=fun v0 => cast_eref v0).
+        constructor ; auto.
+        intros ; constructor.
+        apply functional_extensionality ; intros.
+        rewrite MP.ssubst_eref ; auto.
 
-        rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr => cast_eref v0)).
-        apply Admin_bind.
-        assumption.
-        intros.
-        apply Admin_refl.
-
-        assert (
-         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) 
-         (M.cast_eref v2) (phi x (compose (length t0) Injection.succ (Injection.succ acc)))) =
-         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty 
-         (M.cast_var (hole_var v)) v2 (phi x (compose (length t0) Injection.succ (Injection.succ acc)))))).
-          apply functional_extensionality.
-          intros ; apply MP.ssubst_eref.
-        assumption.
+        (* Case not svalue *)
         exists x0.
-        destruct H1 ; destruct H3 ; subst ; auto.
+        destruct H0 ; destruct H2 ; subst ; auto.
+
+      (* SubCase ERef, n=0, svalue 0 e *)
+      admit.
 
     (* Case EDeref *)
     admit.
@@ -1380,177 +1428,136 @@ Module TranslationProperties (R:Replacement)
     admit.
 
     (* Case EBox *)
-    
-    specialize (length_svalue e1 acc 0) ; intros.
-    specialize (context_stack_not_nil e1 acc) ; intros.
-    specialize (context_stack_independent e1 acc) ; intros.
-    specialize (IHe1 acc).
+    specialize (IHe1 (0::bs)).
+    specialize (length_svalue e1 (0::bs) 0) ; intros LthSvalue.
+    specialize (context_stack_not_nil e1 (0::bs)) ; intros CSNotNil.
+    specialize (depth_length e1 (0::bs)) ; intros DpthLength.
     destruct (trans e1).
+    inversion Step ; subst ; simpl in *|-*.
+    specialize (IHe1 e3 M1 M2 MemDepth0).
     destruct t ; simpl in *|-* ; intros.
 
-      (* Case of empty stack. Impossible *)
-      inversion H2 ; subst ; simpl in *|-*.
-      destruct H.
-      assert(svalue 1 e1).
-      apply H ; omega.
-      specialize (CalculusProperties.svalue_not_sprogresses 1 M1 e1 H4 (M2,e3) H5) ; intros.
-      contradiction.
+      (* Case of svalue 1 e1. Impossible *)
+      rewrite DpthLength in H1 ; simpl in *|-* ; exfalso.
+      apply CalculusProperties.svalue_not_sprogresses in H1 ; auto.
+      apply LthSvalue ; auto.
 
       (* Case of stack > 0 *)
       destruct t0.
-      
-        simpl in *|-*.
 
         (* Case of length(stack) = 1 *)
-        inversion H2 ; subst ; simpl in *|-*.
-        specialize (IHe1 e3 M1 M2 MemDepth0 H5).
+        rewrite DpthLength in *|-* ; simpl in *|-*.
+        specialize (IHe1 H1).
         destruct t.
 
           (* Case stack = [[]] Impossible *)
-          exfalso ; assumption.
+          contradiction.
    
           (* Case stack = [a :: lst] *)
-          destruct p ; clear H0.
-          unfold trans_expr ; simpl.
-          specialize (depth_length e3 acc) ; intros DL.
+          destruct p.
+          unfold trans_expr ; simpl in *|-*.
+          specialize (depth_length e3 (0::bs)) ; intros DpthLength2.
           destruct (trans e3) ; intros.
-          specialize (IHe1 acc0).
-          destruct IHe1.
+          destruct IHe1 ; destruct H.
           destruct H0.
-          destruct H3.
 
             (* Case svalue *)
-            destruct H3 ; destruct H4 ; 
-            destruct H6.
-            subst.
-            clear H.
-            inversion H6 ; subst.
-            inversion H4 ; subst ; clear H6 H4.
-            simpl.
-            specialize (depth_length e3 acc0) ; intros DL2.
-            rewrite DL in DL2.
-            destruct (trans e3 acc0).
-            simpl in DL2.
-            destruct t0 ; simpl in *|-* ; [inversion DL2 | ].
-            inversion DL2 ; subst ; destruct t1 ; simpl in *|-* ; [| inversion H0].
-            clear DL2 H0.
+            destruct H0 ; destruct H2 ; 
+            destruct H3 ; subst.
+            inversion H3 ; subst.
+            inversion H5 ; subst ; clear H3 H5.
+            simpl in *|-*.
+            rewrite svalue_phi ; auto.
             apply Rel_step with (e1:=Context.fill 
-               (Context.ssubst_context 0 StageSet.empty (hole_var v) t (phi x (Injection.succ acc)))
+               (Context.ssubst_context 0 StageSet.empty (hole_var v) t (phi x (0 :: nil)))
                (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
-               (M.ret (M.cast_ebox e)) (phi x (Injection.succ acc))))
-               (e2:=Context.fill k2 (ret (cast_ebox e2)))
-               (M1:=trans_mem M2 acc0).
-            assert(H10 := H3).
-            apply svalue_phi with (acc:=(Injection.succ acc)) in H10.
-            rewrite H10.
-            apply MP.astep_bind_2.
-            assumption.
-            rewrite ContextProperties.fill_ssubst.
-            apply MP.astep_app_abs.
-            assumption.
-            assumption.
-            destruct H1 ; assumption.
-            apply admin_context_expr.
-            assumption.
+               (M.ret (M.cast_ebox e)) (phi x (0 :: nil)))).
+            apply MP.astep_bind_2 ; auto.
+            rewrite ContextProperties.fill_ssubst ; auto.
+            apply MP.astep_app_abs ; auto.
+
+            admit. (* Todo: prove it *)
+
+            apply admin_context_expr ; auto.
             rewrite MP.ssubst_ret.
             rewrite MP.ssubst_ebox.
             constructor.
             constructor.
             assumption.
-            apply hole_rename_fill.
-            constructor.
 
             (* Case not svalue *)
-            destruct H3 ; destruct H3 ; destruct H4.
-            subst.
-            inversion H3 ; subst.
-            simpl.
+            destruct H0 ; destruct H0 ; 
+            destruct H2 ; subst.
+            inversion H0 ; subst.
             apply Rel_step with (e1:=bind e0 (fun v0 =>
                cast_eapp
                (cast_eabs (cast_var (hole_var v))
-               (Context.fill t (ret (cast_ebox e2)))) v0))
-               (e2:=bind e4
-               (fun v0 : T.expr =>
-               cast_eapp (cast_eabs (cast_var (hole_var v))
                (Context.fill t (ret (cast_ebox e2)))) v0)).
-            apply MP.astep_bind_1 ; assumption.
-            constructor ;
-            [assumption | intros ; constructor].
-            constructor.
+            apply MP.astep_bind_app_eabs.
+            rewrite trans_memory_depth_0 with (bs2:=0::bs) ; auto.
+            rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs).
             assumption.
+            rewrite <- DpthLength in H1.
+            apply CalculusProperties.depth_sstep_2 in H1 ; auto.
+            destruct H1 ; assumption.
+            simpl ; constructor ;
+            [assumption | intros ; constructor].
 
         (* Case of length(stack) > 1 *)
-        admit.
-        (*inversion H2 ; subst.
-        specialize (IHe1 e3 M1 M2 MemDepth0 H5).
+        rewrite DpthLength in H1.
+        simpl in H1, DpthLength.
+        rewrite <- DpthLength in H1.
+        specialize (IHe1 H1).
+        assert(length (t0 :: t1) > 0).
+        simpl ; clear IHe1 LthSvalue ; omega.
+        assert(~ In nil (t0 :: t1)).
+        unfold not ; intros ; apply CSNotNil.
+        destruct H0 ; right ; [left|right] ; auto.
+        specialize (context_shift_not_nil (t0::t1) H H0) ; 
+        intros CSShiftNotNil ; clear H H0.
         destruct (Context.shift (t0 :: t1)).
-        destruct t2.
-        assumption.
-        destruct p.
-        simpl.
-
-        destruct (trans e3).
-        
+        destruct CSShiftNotNil.
+        destruct t2 ; [exfalso ; auto |].
+        destruct p ; destruct (trans e3) ; intros.
         destruct IHe1.
-        destruct t4.
-        destruct H3.
-        destruct H4.
-        destruct H4.
-        destruct H6.
-        destruct H7.
-        inversion H7 ; subst.
-        destruct H4.
-        destruct H4.
-        destruct H6.
-        inversion H7.
-
-        exists x.
-        destruct H3.
-        simpl in *|-*.
-        split ; [assumption |].
-        destruct H4.
+        destruct H2.
+        destruct H3 ; subst.
 
           (* Case svalue *)
+          destruct H3 ; subst.
+          destruct H3 ; destruct H3 ; subst.
           destruct H4.
-          destruct H6.
-          destruct H7.
-          subst.
-          left.
-          repeat(split ; auto).
-
-          inversion H7 ; subst.
-          simpl in *|-*.*.
-          assumption.
-        
-          simpl in *|-*.
-          inversion H7 ; subst.
-          rewrite ssubst_fill_hole.
-          apply admin_context_expr.
-          assumption.
-          
+          inversion H3 ; subst.
+          exists x ; split ; auto ; left.
+          repeat(split; auto).
+          rewrite StageSetProperties.remove_equal in H7 ; auto.
+          rewrite ssubst_fill_hole ; auto.
+          apply admin_context_expr ; auto.
           rewrite MP.ssubst_ret.
           rewrite MP.ssubst_ebox.
           constructor.
           constructor.
+          rewrite DpthLength ; simpl.
+          rewrite <- DpthLength ; simpl.
           assumption.
-
-          destruct H1.
-          rewrite VarSetProperties.union_mem in H3.
-          apply orb_false_iff in H3.
-          destruct H3 ; assumption.
+          
+          admit. (* Todo: prove it *)
+          
 
           (* Case not svalue *)
-          destruct H4.
-          destruct H4.
-          destruct H6.
-          inversion H7 ; subst.
-          clear H7.
-          right.
+          destruct H3 ; subst.
+          destruct H2 ; destruct H3 ; subst.
+          simpl.
+          exists x ; split ; auto ; right.
           exists x0.
           repeat(split ; auto).
-    *)
+          rewrite trans_memory_depth_0 with (bs2:=0::bs) ; auto.
+          rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs) ; auto.
+          apply CalculusProperties.depth_sstep_2 in H1 ; auto.
+          destruct H1 ; assumption.
 
     (* Case EUnbox *)
+    fail.
     specialize (IHe1 (Injection.succ acc)).
     unfold trans_expr in *|-*.
     assert(trans e1 (Injection.succ acc)  = 

@@ -2,7 +2,6 @@ Require Import Coq.Arith.Arith.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import "Misc/Library".
-Require Import "Misc/Splitter".
 Require Import "Calculus/Sets".
 Require Import "Calculus/Definitions".
 Require Import "Calculus/Monad".

@@ -158,6 +158,14 @@ Module NatSetProperties.
     apply empty_spec.
   Qed.
 
+  Lemma union_add:
+     forall (l1 l2:t) (n:nat),
+     union (add n l1) l2 = add n (union l1 l2).
+  Proof.
+    intros.
+    apply eq_leibniz, MSetProps.union_add.
+  Qed.
+
   Lemma singleton_union_1:
     forall (l:t) (n:nat),
     union (singleton n) l = add n l.

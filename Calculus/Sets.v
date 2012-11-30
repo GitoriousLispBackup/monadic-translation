@@ -164,6 +164,26 @@ Module StageSetProperties.
     assumption.
   Qed.
 
+  Lemma remove_add_remove_2:
+    forall (lst:t) (m n:nat),
+    m <> n -> remove n (add m lst) = add m (remove n lst).
+  Proof.
+    intros.
+    apply equal_mem_1 ; intros.
+    case_beq_nat m0 m.
+    rewrite MSetEqProps.add_mem_1.
+    rewrite remove_mem_1.
+    apply MSetEqProps.add_mem_1.
+    auto.
+    rewrite MSetEqProps.add_mem_2 ; auto.
+    case_beq_nat m0 n.
+    rewrite MSetEqProps.remove_mem_1 ; symmetry.
+    apply MSetEqProps.remove_mem_1.
+    rewrite MSetEqProps.remove_mem_2 ; auto.
+    rewrite MSetEqProps.remove_mem_2 ; auto.
+    rewrite MSetEqProps.add_mem_2 ; auto.
+  Qed.
+
 End StageSetProperties.
 
 (** * Variable Set *)

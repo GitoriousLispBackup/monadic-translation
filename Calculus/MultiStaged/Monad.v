@@ -2162,15 +2162,13 @@ fail.
     admit.
 
     (* Case EBox *)
-    admit.
-    (*
     specialize (IHe1 (0::bs)).
     specialize (length_svalue e1 (0::bs) 0) ; intros LthSvalue.
     specialize (context_stack_not_nil e1 (0::bs)) ; intros CSNotNil.
     specialize (depth_length e1 (0::bs)) ; intros DpthLength.
     specialize (context_mem e1 (0::bs)) ; intros CMem1.
-    destruct (trans e1).
     inversion Step ; subst ; simpl in *|-*.
+    destruct (trans e1).
     specialize (IHe1 e3 M1 M2 MemDepth0).
     destruct t ; simpl in *|-* ; intros.
 
@@ -2184,7 +2182,8 @@ fail.
 
         (* Case of length(stack) = 1 *)
         rewrite DpthLength in *|-* ; simpl in *|-*.
-        specialize (IHe1 H1).
+        apply le_n_S in BSLength.
+        specialize (IHe1 BSLength H1).
         destruct t.
 
           (* Case stack = [[]] Impossible *)
@@ -2201,15 +2200,34 @@ fail.
             (* Case svalue *)
             destruct H0 ; destruct H2 ; 
             destruct H3 ; subst.
+            destruct t.
+
+            inversion H3 ; subst.
+            rewrite svalue_phi ; auto.
+            simpl.
+            apply Rel_step with (e1:=
+              (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
+                (M.ret (M.cast_ebox e)) (phi x (0 :: nil)))).
+            apply MP.astep_bind_2 ; auto.
+            apply MP.astep_app_abs ; auto.
+            rewrite MP.ssubst_ret, MP.ssubst_ebox ; repeat(constructor).
+            apply H4 ; auto.
+
             inversion H3 ; subst.
             inversion H5 ; subst ; clear H3 H5.
             simpl in *|-*.
             rewrite svalue_phi ; auto.
-            apply Rel_step with (e1:=Context.fill 
-               (Context.ssubst_context 0 StageSet.empty (hole_var v) t (phi x (0 :: nil)))
-               (M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
-               (M.ret (M.cast_ebox e)) (phi x (0 :: nil)))).
+            apply Rel_step with (e1:=
+              M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
+                (bind u1 (fun v1 => cast_eapp
+                  (cast_eabs (cast_var (hole_var h1))
+                  (Context.fill t (ret (cast_ebox e))))
+                  v1)) (phi x (0 :: nil))).
             apply MP.astep_bind_2 ; auto.
+            apply MP.astep_app_abs ; auto.
+            admit. (* TODO: prove it *)
+
+            (* Maybe some useful proof
             rewrite ContextProperties.fill_ssubst ; auto.
             apply MP.astep_app_abs ; auto.
             specialize (CMem1 0) ; simpl in CMem1 ; 
@@ -2220,7 +2238,7 @@ fail.
             rewrite MP.ssubst_ebox.
             constructor.
             constructor.
-            assumption.
+            assumption. *)
 
             (* Case not svalue *)
             destruct H0 ; destruct H0 ; 
@@ -2241,17 +2259,19 @@ fail.
             [assumption | intros ; constructor].
 
         (* Case of length(stack) > 1 *)
-        rewrite DpthLength in H1.
-        simpl in H1, DpthLength.
+        rewrite DpthLength in H1, BSLength.
+        simpl in H1, DpthLength, BSLength.
         rewrite <- DpthLength in H1.
-        specialize (IHe1 H1).
-        assert(length (t0 :: t1) > 0).
+        apply le_n_S in BSLength.
+        rewrite <- DpthLength in BSLength.
+        specialize (IHe1 BSLength H1).
+        assert(length (t0 :: t1) > 0) as Tmp1.
         simpl ; clear IHe1 LthSvalue ; omega.
-        assert(~ In nil (t0 :: t1)).
+        assert(~ In nil (t0 :: t1)) as Tmp2.
         unfold not ; intros ; apply CSNotNil.
-        destruct H0 ; right ; [left|right] ; auto.
-        specialize (context_shift_not_nil (t0::t1) H H0) ; 
-        intros CSShiftNotNil ; clear H H0.
+        right ; auto.
+        specialize (context_shift_not_nil (t0::t1) Tmp1 Tmp2) ; 
+        intros CSShiftNotNil ; clear Tmp1 Tmp2.
         destruct (Context.shift (t0 :: t1)).
         destruct CSShiftNotNil.
         destruct t2 ; [exfalso ; auto |].
@@ -2264,9 +2284,30 @@ fail.
           destruct H3 ; subst.
           destruct H3 ; destruct H3 ; subst.
           destruct H4.
+          destruct t2 ; simpl in *|-*.
+
           inversion H3 ; subst.
           exists x ; split ; auto ; left.
-          repeat(split; auto).
+          repeat(split; auto) ; simpl.
+          constructor.
+          admit. (* TODO: prove it *)
+          
+          exists x ; split ; auto ; left.
+          repeat(split; auto) ; simpl.
+          admit. (* TODO: prove it *)
+          
+          inversion H3 ; subst.
+          exists x ; split ; auto ; left.
+          repeat(split; auto) ; simpl.
+          constructor.
+          admit. (* TODO: prove it *)
+
+          inversion H3 ; subst.
+          exists x ; split ; auto ; left.
+          repeat(split; auto) ; simpl.
+          admit. (* TODO: prove it *)
+
+          (* Maybe some useful proof
           rewrite StageSetProperties.remove_equal in H7 ; auto.
           rewrite ssubst_fill_hole ; auto.
           apply admin_context_expr ; auto.
@@ -2276,15 +2317,10 @@ fail.
           constructor.
           rewrite DpthLength ; simpl.
           rewrite <- DpthLength ; simpl.
-          assumption.
-
-          admit. (* Todo: prove it *)
+          assumption. *)
           
-
           (* Case not svalue *)
-          destruct H3 ; subst.
-          destruct H2 ; destruct H3 ; subst.
-          simpl.
+          destruct H3 ; destruct H2 ; destruct H3 ; subst.
           exists x ; split ; auto ; right.
           exists x0.
           repeat(split ; auto).
@@ -2292,7 +2328,6 @@ fail.
           rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs) ; auto.
           apply CalculusProperties.depth_sstep_2 in H1 ; auto.
           destruct H1 ; assumption.
-    *)
 
     (* Case EUnbox *)
     destruct bs ; [inversion BSLength|] ; simpl.

@@ -6,6 +6,7 @@ Require Import Coq.Arith.Compare_dec.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Logic.ClassicalChoice.
+Require Import "Misc/Tactics".
 Require Import "Misc/Library".
 Require Import "Misc/Relation".
 Require Import "Calculus/Sets".
@@ -877,6 +878,194 @@ Module TranslationStaticProperties (R:Replacement)
     rewrite IHbs ; auto.
   Qed.
 
+    Lemma booker_le:
+    forall (e:S.expr) (m n:nat),
+    m <= n -> booker e m = 0 -> booker e n = 0.
+  Proof.
+    induction e ; simpl ; intros ; auto ;
+    try(apply IHe with (m:=m) ; auto ; fail) ;
+    try(apply plus_is_O in H0 ; destruct H0 ;
+    rewrite IHe1 with (m:=m) ; simpl ; auto ; 
+    rewrite IHe2 with (m:=m) ; auto ; fail).
+    rewrite IHe with (m:=S m) ; omega.
+    destruct n.
+    apply le_n_0_eq in H ; subst ; auto.
+    destruct m ; [inversion H0 |].
+    rewrite IHe with (m:=m) ; auto.
+    omega.
+  Qed.
+
+  Lemma booker_length:
+    forall (e:S.expr) (bs:list nat),
+    let (_, cs) := trans e bs in
+    forall (n:nat),
+    booker e n = length (nth n cs nil).
+  Proof.
+    induction e ; simpl ; intros ; 
+    try(destruct n ; auto ; fail) ;
+    try(specialize (IHe bs) ;
+    destruct (trans e) ; intros ; auto ; fail) ;
+    
+    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
+    specialize (IHe2 bs) ;
+    destruct (trans e1) ; destruct (trans e2) ; intros ;
+    rewrite ContextStaticProperties.merge_nth ;
+    rewrite app_length ;
+    rewrite IHe1, IHe2 ; auto ; fail).
+
+    specialize (IHe (0::bs)).
+    destruct (trans e) ; intros.
+    destruct t ; intros.
+    rewrite booker_le with (m:=n) ; auto.
+    destruct n ; auto.
+    rewrite IHe ; auto.
+    destruct n ; auto.
+    specialize (IHe (S n)).
+    simpl in IHe ; assumption.
+
+    destruct (List2.hd_cons bs 0).
+    specialize (IHe l) ; destruct (trans e) ; intros.
+    destruct n0.
+    reflexivity.
+    simpl.
+    apply IHe.
+  Qed.
+
+  Lemma length_h:
+    forall (e:S.expr) (bs:list nat),
+    let (_, cs) := trans e bs in
+    length cs <= length bs ->
+    forall (n m:nat),
+    let c := nth n cs nil in
+    let l := length c in
+    let (_, h) := nth m c (M.cast_econst 0, (nth n bs 0) + l-m-1) in
+    h = (nth n bs 0) + l-m-1.
+  Proof.
+    assert(forall (m n o p:nat),
+      p <= o -> m + n - (o - p) - 1 = m + (p + n) - o - 1) as P1.
+    clear ; intros ; omega.
+
+    induction e ; simpl ; intros ;
+
+    try(destruct n ; destruct m ; simpl ; auto ; fail) ;
+
+    try(specialize (IHe bs) ; destruct (trans e) ; intros ;
+    specialize (IHe H n m) ; assumption ; fail) ;
+    
+    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
+    specialize (IHe2 bs) ;
+    specialize (booker_length e2 bs) ; intros BookerL ;
+    destruct (trans e1) ; destruct (trans e2) ; intros ;
+    rewrite ContextStaticProperties.merge_length in H ;
+    apply max_lub_iff in H ; destruct H ;
+    specialize (IHe2 H0) ;
+    unfold map_iter_booker in IHe1 ;
+    rewrite List2Properties.length_map_iter in IHe1 ;
+    specialize (IHe1 H) ;
+    rewrite ContextStaticProperties.merge_nth ;
+    rewrite app_length ;
+    specialize (le_lt_dec (length (nth n t nil)) m) ; intros ;
+    destruct H1 ; [
+    rewrite app_nth2 ; auto ;
+    specialize (IHe2 n (m - length (nth n t nil))) ;
+    simpl in IHe2 ;
+    rewrite P1 in IHe2 ; auto |] ;
+    rewrite app_nth1 ; auto ;
+    specialize (IHe1 n m) ;
+    unfold map_iter_booker in *|-* ;
+    clear IHe2 ;
+    specialize (le_lt_dec (length bs) n) ; intros ;
+    destruct H1 ; [
+    rewrite nth_overflow with (l:=
+    (List2.map_iter (fun b n : nat => (b + booker e2 n)%nat) bs 0)) in IHe1 ;
+    [rewrite nth_overflow with (l:=bs) ; auto ;
+    rewrite nth_indep with (d':=(cast_econst 0, 0)) in IHe1 ; auto ;
+    rewrite nth_indep with (d':=(cast_econst 0, 0)) ; auto ;
+    rewrite nth_overflow with (l:=t0) ; auto ; [
+    rewrite plus_assoc ; simpl ; rewrite plus_0_r ;
+    assumption |
+    apply le_trans with (m:=length bs) ; auto ] |] ;
+    rewrite List2Properties.length_map_iter ;
+    assumption |
+    rewrite nth_indep with (d':=(cast_econst 0, 0)) in IHe1 ; auto ;
+    rewrite nth_indep with (d':=(cast_econst 0, 0)) ; auto ;
+    specialize(List2Properties.map_iter_nth 
+    (fun b n => (b + booker e2 n)%nat) bs n 0 0) ; intros ;
+    rewrite nth_indep with (d':=0) in H1 ; auto ; [
+    rewrite H1 in IHe1 ; clear H1 ;
+    rewrite plus_0_r in IHe1 ;
+    rewrite <- plus_comm with (m:=length (nth n t nil)) ;
+    rewrite plus_assoc ;
+    rewrite BookerL in IHe1 ; auto
+    | rewrite List2Properties.length_map_iter ; assumption]] ; fail).
+
+    (* Case EBox *)
+    specialize (IHe (0::bs)) ;
+    destruct (trans e).
+    destruct t ; intros.
+    destruct m ; destruct n ; simpl ; auto.
+    specialize (le_n_S (length t0) (length bs) H) ; intros.
+    specialize (IHe H0 (S n) m).
+    simpl in IHe.
+    assumption.
+    
+    (* Case EUnbox *)
+    destruct bs ; simpl.
+    specialize (IHe nil) ;
+    destruct (trans e) ; intros.
+    simpl in H.
+    exfalso ; omega.
+    
+    specialize (IHe bs) ;
+    destruct (trans e) ; intros.
+    simpl in H.
+    apply le_S_n in H.
+    specialize (IHe H (pred n0) m).
+    destruct n0.
+    simpl.
+    destruct m ; auto.
+    rewrite <- minus_n_O.
+    rewrite plus_minus_n ; auto.
+    destruct m ; auto.
+    simpl in *|-*.
+    destruct n ; assumption.
+  Qed.
+
+  Lemma length_h_match:
+    forall (e:S.expr) (bs:list nat),
+    let (_, cs) := trans e bs in
+    length cs <= length bs ->
+    match cs with
+    | nil => True
+    | cs  => let (c, cs') := Context.shift cs in
+      match c with
+      | nil => True
+      | cons (_, h) c' => h = ((nth (pred (length cs)) bs 0) + length c')%nat
+      end
+    end.
+  Proof.
+    intros.
+    specialize (length_h e bs) ; intros.
+    destruct (trans e).
+    destruct t ; auto.
+    specialize (ContextStaticProperties.shift_spec_2 (t::t0)) ; intros.
+    simpl length in *|-*.
+    simpl pred in *|-*.
+    specialize (H H1 (length t0) 0).
+    destruct (Context.shift (t::t0)).
+    subst.
+    destruct (nth (length t0) (t :: t0) nil) ; auto.
+    simpl in *|-*.
+    rewrite <- minus_n_O in H.
+    simpl in *|-*.
+    rewrite plus_minus in H.
+    simpl in *|-*.
+    rewrite <- minus_n_O in H.
+    assumption.
+    omega.
+  Qed.
+
+
 End TranslationStaticProperties.
 
 Module ContextProperties (R:Replacement) (T:StagedCalculus) 
@@ -937,6 +1126,7 @@ Module TranslationProperties (R:Replacement)
   Module ContextProperties := ContextProperties R T M MP.
   Module StaticProperties := ContextProperties.TranslationStaticProperties.
   Module CalculusProperties := CalculusProperties R M.S.
+  Module BindingSetProperties := BindingSetProperties R.
   Import StaticProperties.
   Import Translation.
   Import M.S.
@@ -1493,212 +1683,107 @@ Module TranslationProperties (R:Replacement)
     omega.
   Qed.
 
-  Lemma booker_le:
-    forall (e:S.expr) (m n:nat),
-    m <= n -> booker e m = 0 -> booker e n = 0.
-  Proof.
-    induction e ; simpl ; intros ; auto ;
-    try(apply IHe with (m:=m) ; auto ; fail) ;
-    try(apply plus_is_O in H0 ; destruct H0 ;
-    rewrite IHe1 with (m:=m) ; simpl ; auto ; 
-    rewrite IHe2 with (m:=m) ; auto ; fail).
-    rewrite IHe with (m:=S m) ; omega.
-    destruct n.
-    apply le_n_0_eq in H ; subst ; auto.
-    destruct m ; [inversion H0 |].
-    rewrite IHe with (m:=m) ; auto.
-    omega.
-  Qed.
+  Definition ltb (m n:nat) := leb (S m) n.
 
-  Lemma booker_length:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
-    forall (n:nat),
-    booker e n = length (nth n cs nil).
-  Proof.
-    induction e ; simpl ; intros ; 
-    try(destruct n ; auto ; fail) ;
-    try(specialize (IHe bs) ;
-    destruct (trans e) ; intros ; auto ; fail) ;
-    
-    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    destruct (trans e1) ; destruct (trans e2) ; intros ;
-    rewrite ContextStaticProperties.merge_nth ;
-    rewrite app_length ;
-    rewrite IHe1, IHe2 ; auto ; fail).
-
-    specialize (IHe (0::bs)).
-    destruct (trans e) ; intros.
-    destruct t ; intros.
-    rewrite booker_le with (m:=n) ; auto.
-    destruct n ; auto.
-    rewrite IHe ; auto.
-    destruct n ; auto.
-    specialize (IHe (S n)).
-    simpl in IHe ; assumption.
-
-    destruct (List2.hd_cons bs 0).
-    specialize (IHe l) ; destruct (trans e) ; intros.
-    destruct n0.
-    reflexivity.
-    simpl.
-    apply IHe.
-  Qed.
-
-  Lemma length_h:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
-    length cs <= length bs ->
-    forall (n m:nat),
-    let c := nth n cs nil in
-    let l := length c in
-    let (_, h) := nth m c (M.cast_econst 0, (nth n bs 0) + l-m-1) in
-    h = (nth n bs 0) + l-m-1.
-  Proof.
-    assert(forall (m n o p:nat),
-      p <= o -> m + n - (o - p) - 1 = m + (p + n) - o - 1) as P1.
-    clear ; intros ; omega.
-
-    induction e ; simpl ; intros ;
-
-    try(destruct n ; destruct m ; simpl ; auto ; fail) ;
-
-    try(specialize (IHe bs) ; destruct (trans e) ; intros ;
-    specialize (IHe H n m) ; assumption ; fail) ;
-    
-    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    specialize (booker_length e2 bs) ; intros BookerL ;
-    destruct (trans e1) ; destruct (trans e2) ; intros ;
-    rewrite ContextStaticProperties.merge_length in H ;
-    apply max_lub_iff in H ; destruct H ;
-    specialize (IHe2 H0) ;
-    unfold map_iter_booker in IHe1 ;
-    rewrite List2Properties.length_map_iter in IHe1 ;
-    specialize (IHe1 H) ;
-    rewrite ContextStaticProperties.merge_nth ;
-    rewrite app_length ;
-    specialize (le_lt_dec (length (nth n t nil)) m) ; intros ;
-    destruct H1 ; [
-    rewrite app_nth2 ; auto ;
-    specialize (IHe2 n (m - length (nth n t nil))) ;
-    simpl in IHe2 ;
-    rewrite P1 in IHe2 ; auto |] ;
-    rewrite app_nth1 ; auto ;
-    specialize (IHe1 n m) ;
-    unfold map_iter_booker in *|-* ;
-    clear IHe2 ;
-    specialize (le_lt_dec (length bs) n) ; intros ;
-    destruct H1 ; [
-    rewrite nth_overflow with (l:=
-    (List2.map_iter (fun b n : nat => (b + booker e2 n)%nat) bs 0)) in IHe1 ;
-    [rewrite nth_overflow with (l:=bs) ; auto ;
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) in IHe1 ; auto ;
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) ; auto ;
-    rewrite nth_overflow with (l:=t0) ; auto ; [
-    rewrite plus_assoc ; simpl ; rewrite plus_0_r ;
-    assumption |
-    apply le_trans with (m:=length bs) ; auto ] |] ;
-    rewrite List2Properties.length_map_iter ;
-    assumption |
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) in IHe1 ; auto ;
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) ; auto ;
-    specialize(List2Properties.map_iter_nth 
-    (fun b n => (b + booker e2 n)%nat) bs n 0 0) ; intros ;
-    rewrite nth_indep with (d':=0) in H1 ; auto ; [
-    rewrite H1 in IHe1 ; clear H1 ;
-    rewrite plus_0_r in IHe1 ;
-    rewrite <- plus_comm with (m:=length (nth n t nil)) ;
-    rewrite plus_assoc ;
-    rewrite BookerL in IHe1 ; auto
-    | rewrite List2Properties.length_map_iter ; assumption]] ; fail).
-
-    (* Case EBox *)
-    specialize (IHe (0::bs)) ;
-    destruct (trans e).
-    destruct t ; intros.
-    destruct m ; destruct n ; simpl ; auto.
-    specialize (le_n_S (length t0) (length bs) H) ; intros.
-    specialize (IHe H0 (S n) m).
-    simpl in IHe.
-    assumption.
-    
-    (* Case EUnbox *)
-    destruct bs ; simpl.
-    specialize (IHe nil) ;
-    destruct (trans e) ; intros.
-    simpl in H.
-    exfalso ; omega.
-    
-    specialize (IHe bs) ;
-    destruct (trans e) ; intros.
-    simpl in H.
-    apply le_S_n in H.
-    specialize (IHe H (pred n0) m).
-    destruct n0.
-    simpl.
-    destruct m ; auto.
-    rewrite <- minus_n_O.
-    rewrite plus_minus_n ; auto.
-    destruct m ; auto.
-    simpl in *|-*.
-    destruct n ; assumption.
-  Qed.
-
-  Lemma length_h_match:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
-    length cs <= length bs ->
-    match cs with
-    | nil => True
-    | cs  => let (c, cs') := Context.shift cs in
-      match c with
-      | nil => True
-      | cons (_, h) c' => h = ((nth (pred (length cs)) bs 0) + length c')%nat
-      end
+ (*
+  Definition n_iter_booker (n:nat) (h:nat) (e:S.expr) (bs:list nat) (ss:StageSet.t) : StageSet.t :=
+    match n with
+    | S (S n) => if leb (nth 0 bs 0) h && ltb h ((nth 0 bs 0) + (booker e 0)) 
+       then StageSet.add (S n) ss else ss
+    | _ => ss
     end.
-  Proof.
-    intros.
-    specialize (length_h e bs) ; intros.
-    destruct (trans e).
-    destruct t ; auto.
-    specialize (ContextStaticProperties.shift_spec_2 (t::t0)) ; intros.
-    simpl length in *|-*.
-    simpl pred in *|-*.
-    specialize (H H1 (length t0) 0).
-    destruct (Context.shift (t::t0)).
-    subst.
-    destruct (nth (length t0) (t :: t0) nil) ; auto.
-    simpl in *|-*.
-    rewrite <- minus_n_O in H.
-    simpl in *|-*.
-    rewrite plus_minus in H.
-    simpl in *|-*.
-    rewrite <- minus_n_O in H.
-    assumption.
-    omega.
-  Qed.
 
-
-  (*
-  Fixpoint compose {T:Type} (n:nat) (f:T -> T) (x:T) : T :=
+ Fixpoint n_iter {T:Type} (n:nat) (f:nat -> T -> T) (x:T) : T :=
     match n with
     | 0 => x
-    | S n => compose n f (f x)
-    end.
-  *)
-
-  Fixpoint n_iter {T:Type} (n:nat) (f:nat -> T -> T) (x:T) : T :=
-    match n with
-    | 0 => f 0 x
-    | S n => f (S n) (n_iter n f x)
+    | S n => f n (n_iter n f x)
     end.
 
-  Definition n_iter_booker (n:nat) (h:nat) (e:S.expr) : StageSet.t :=
+  Definition ltb (m n:nat) := leb (S m) n.
+
+  Definition n_iter_booker (n:nat) (h:nat) (e:S.expr) (bs:list nat) (ss:StageSet.t) : StageSet.t :=
     n_iter n (fun m ss => 
-	if leb (S h) (booker e m) then StageSet.add m ss else ss)
-	StageSet.empty.
+	if leb (nth m bs 0) h && ltb h ((nth m bs 0) + (booker e m)) 
+        then StageSet.add (pred n - m) ss else ss) ss.
+
+
+  Lemma n_iter_remove_le:
+    forall (e:S.expr) (bs:list nat) (ss:StageSet.t) (m n:nat) (h:S.var),
+    n <= m ->
+    StageSet.remove m (n_iter_booker n h e bs ss) = 
+      n_iter_booker n h e bs (StageSet.remove m ss).
+  Proof.
+    intros.
+    unfold n_iter_booker.
+    destruct n ; auto.
+    destruct n ; auto.
+    destruct (leb (nth 0 bs 0) h && ltb h (nth 0 bs 0 + booker e 0)).
+    rewrite StageSetProperties.remove_add_remove_2 ; auto ; omega.
+    reflexivity.
+  Qed.
+
+  Lemma n_iter_add:
+    forall (e:S.expr) (bs:list nat) (ss:StageSet.t) (m n:nat) (h:S.var),
+    StageSet.add m (n_iter_booker n h e bs ss) = 
+      n_iter_booker n h e bs (StageSet.add m ss).
+  Proof.
+    intros ; unfold n_iter_booker.
+    destruct n ; auto.
+    destruct n ; auto.
+    destruct (leb (nth 0 bs 0) h && ltb h (nth 0 bs 0 + booker e 0)).
+    apply StageSetProperties.add_add.
+    reflexivity.
+  Qed.
+  
+  Lemma n_iter_unbox:
+    forall (e:S.expr) (b:nat) (bs:list nat) (ss:StageSet.t) (n:nat) (h:S.var),
+    n_iter_booker (S (S n)) h (CRaw.EUnbox e) (b :: bs) ss = 
+    if beq_nat h b then StageSet.add (S n) (n_iter_booker (S n) h e bs ss)
+    else n_iter_booker (S n) h e bs ss.
+  Proof.
+    intros ; unfold n_iter_booker ; simpl.
+    destruct n.
+    case_beq_nat b h.
+    rewrite <- beq_nat_refl.
+    assert(leb h h && ltb h (h + 1) = true).
+    apply andb_true_iff ; split.
+    apply leb_iff ; omega.
+    apply leb_iff ; omega.
+    rewrite H.
+    reflexivity.
+    admit.
+    admit. (* todo: prove it *)
+  Qed.
+
+  Lemma n_iter_unbox: 
+    forall (e:S.expr) (n:nat) (h:S.var),
+    StageSet.remove (S n) (n_iter_booker (S n) h (CRaw.EUnbox e)) = n_iter_booker n h e.
+  Proof.
+  
+    induction n ; 
+    unfold n_iter_booker ; simpl ; intros.
+    destruct (match booker e 0 with
+      | 0 => false
+      | S n' => leb h n'
+      end) ; auto ; [
+    rewrite StageSetProperties.remove_add_remove_2 ; auto |].
+    destruct (leb h 0) ; [
+    rewrite StageSetProperties.remove_add_remove |] ;
+    rewrite StageSetProperties.remove_empty ;
+    reflexivity.
+    destruct (leb h 0) ; [
+    rewrite StageSetProperties.remove_add_remove |] ;
+    rewrite StageSetProperties.remove_empty ;
+    reflexivity.
+    
+    
+    destruct (match booker e (S n) with
+      | 0 => false
+      | S n' => leb h n'
+      end) ; [
+    rewrite StageSetProperties.remove_add_remove | ] ;
+    apply n_iter_remove_lt ; omega.
+  Qed.
 
   Lemma n_iter_remove_lt:
     forall (e:S.expr) (m n:nat) (h:S.var),
@@ -1728,6 +1813,8 @@ Module TranslationProperties (R:Replacement)
     omega.
   Qed.
 
+fail.
+
   Lemma n_iter_remove: 
     forall (e:S.expr) (n:nat) (h:S.var),
     StageSet.remove (S n) (n_iter_booker (S n) h e) = n_iter_booker n h e.
@@ -1741,13 +1828,104 @@ Module TranslationProperties (R:Replacement)
     rewrite StageSetProperties.remove_add_remove | ] ;
     apply n_iter_remove_lt ; omega.
   Qed.
+*)
 
+  Definition admin_ssubst (n:nat) (h:CRaw.var) 
+      (m:nat) (v:T.expr) (b:nat) (u1 u2:T.expr) : Prop :=
+      forall (ss:StageSet.t), StageSet.mem 0 ss = false ->
+      StageSet.ub (pred n) ss = true ->
+      admin
+        (M.ssubst n (match n with
+	  | S (S n) => if ltb h (b + m) 
+       		then StageSet.add (S n) ss else ss
+	  | _ => ss
+          end) (M.cast_var (hole_var h)) u1 v) u2.
+
+  Inductive admin_context_ssubst (n:nat) (h:CRaw.var)
+    (m:nat) (v:T.expr) (b:nat) : Context.t -> Context.t -> Prop :=
+  | ACSubst_nil : admin_context_ssubst n h m v b nil nil
+  | ACSubst_cons : forall (u1 u2:T.expr) (h1:CRaw.var) (c1 c2:Context.t),
+      admin_ssubst n h m v b u1 u2 ->
+      admin_context_ssubst n h m v b c1 c2 ->
+      admin_context_ssubst n h m v b (cons (u1,h1) c1) (cons (u2,h1) c2).
+
+  Inductive admin_stack_ssubst (n:nat) (h:CRaw.var) (v:T.expr) : 
+    list nat -> Context.t_stack -> Context.t_stack -> Prop :=
+  | ASSubst_nil : forall (bs:list nat), admin_stack_ssubst n h v bs nil nil
+  | ASSubst_cons_nil: forall (c1 c2:Context.t) (bs:list nat) (b:nat),
+      admin_context_ssubst n h 0 v b c1 c2 ->
+      admin_stack_ssubst n h v (b::bs) (c1::nil) (c2::nil)
+  | ASSubst_cons : forall (bs:list nat) (b:nat) (c1 c2 c1' c2':Context.t) (cs1 cs2:Context.t_stack),
+      admin_context_ssubst n h (length c1') v b c1 c2 ->
+      admin_stack_ssubst (pred n) h v bs (c1'::cs1) (c2'::cs2) ->
+      admin_stack_ssubst n h v (b::bs) (c1::c1'::cs1) (c2::c2'::cs2).
+
+(*
+  Lemma admin_fill_ssubst:
+    forall (v e1:S.expr) (bs:list nat) (n:nat) (ss:StageSet.t) (x:S.var),
+    S.svalue 0 v -> 
+    let (e, cs) := trans e1 bs in
+    match cs with
+    | nil => True
+    | c1 :: cs =>
+      VarSet.mem x (Context.context_hole_set c1) = false ->
+      forall (c2:Context.t),
+      admin_context_ssubst n x bs e1 (phi v bs) c1 c2 ->
+      admin (ssubst n ss (cast_var (hole_var x)) (Context.fill c1 e) (phi v bs))
+      (Context.fill c2 (ssubst n ss (M.cast_var (hole_var x)) e (phi v bs)))
+    end.
+  Proof.
+    induction e1 ; simpl ; intros ; auto.
+    specialize (IHe1 bs).
+    destruct (trans e1 bs).
+    destruct t ; auto.
+    intros.
+    specialize (IHe1 n ss x H H0 c2).
+    assert(admin_context_ssubst n x bs e1 (phi v bs) t c2).
+    admit. (* todo, but true *)
+    specialize (IHe1 H2).
+
+    induction H1 ; simpl.
+    constructor.
+
+    inversion H1 ; subst.
+
+    assert(beq_nat (hole_var x) (hole_var h1) = false).
+    assert(H4 := H0).
+    apply VarSetProperties.add_mem_6 in H0.
+    apply beq_nat_false_iff.
+    unfold not ; intros ; unfold hole_var in *|-*.
+    clear IHadmin_context_ssubst H H1 ; omega.
+    rewrite MP.ssubst_bind with (f2 :=(fun v1 : T.expr =>
+     cast_eapp
+     (cast_eabs (cast_var (hole_var h1))
+        (ssubst n ss (cast_var (hole_var x)) (Context.fill c1 e) (phi v bs))) v1)).
+    constructor.
+    apply H3 ; auto.
+
+    rewrite IHadmin_context_ssubst ; auto.
+    reflexivity.
+
+    apply functional_extensionality.
+    intros.
+    rewrite MP.ssubst_eapp.
+    rewrite MP.ssubst_eabs.
+    assert(S.beq_var (hole_var x) (hole_var v0) = false).
+    assumption.
+    rewrite H2.
+    reflexivity.
+    apply VarSetProperties.add_mem_5 in H0.
+    assumption.
+
+  Qed.
+*)
+
+  Eval compute in (booker (CRaw.EBox (CRaw.EUnbox (CRaw.EConst 1))) 1).
   Eval compute in (trans (CRaw.EBox (CRaw.EUnbox (CRaw.EConst 1))) (0::nil)).
   Eval compute in (trans (CRaw.EUnbox (CRaw.EConst 1)) (0::nil)).
   Eval compute in (trans ((CRaw.EApp 
     (CRaw.EUnbox (CRaw.EConst 1))
     (CRaw.EUnbox (CRaw.EConst 2)))) (0::nil)).
-  fail.
 
   (* En gros, on distingue 2 mondes de variables:
     - les variables traduites (cast_var) qui sont celles 
@@ -1761,6 +1939,7 @@ Module TranslationProperties (R:Replacement)
     forall (e1:S.expr) (bs:list nat) (e2:S.expr) (M1 M2:S.Memory.t),
     S.memory_depth M1 = 0 ->
     let n := depth e1 in
+    n <= length bs ->
     S.sstep n (M1, e1) (M2, e2) -> 
     let (e1', cs1) := trans e1 bs in
     match cs1 with
@@ -1775,16 +1954,14 @@ Module TranslationProperties (R:Replacement)
           exists eh, t_eh = trans_expr eh (0::nil) /\
           (
             S.svalue 0 eh /\ 
-            M1 = M2 /\ 
-            admin_stack 
-              (Context.ssubst_stack 
-                 (pred n) (n_iter_booker (pred n) h e1)
-                 (hole_var h) (Context.unshift cs1' c1') 
-                 (phi eh (0::nil))) cs2 /\
-            admin
-               (M.ssubst n (n_iter_booker n h e1) 
-               (M.cast_var (hole_var h)) e1' 
-               (phi eh (0::nil))) e2'
+            M1 = M2 /\
+            match c1' with
+            | nil => admin_stack_ssubst (pred n) h (phi eh (0::nil)) 
+                       (List.tl bs) cs1' cs2
+            | _ =>   admin_stack_ssubst (pred n) h (phi eh (0::nil))
+                       (List.tl bs) (Context.unshift cs1' c1') cs2
+            end /\
+            admin_ssubst n h (booker e1 0) (phi eh (0::nil)) (nth 0 bs 0) e1' e2'
           \/ 
             exists eh', let t_eh' := trans_expr eh' (0::nil) in
             rstep (M1', t_eh) (M2', t_eh') /\
@@ -1795,7 +1972,7 @@ Module TranslationProperties (R:Replacement)
     end.
   Proof.
     induction e1 ; simpl ; 
-    intros bs e2 M1 M2 MemDepth0 Step ; intros.
+    intros bs e2 M1 M2 MemDepth0 BSLength Step ; intros.
 
     (* Case EConst *)
     inversion Step.
@@ -1805,8 +1982,8 @@ Module TranslationProperties (R:Replacement)
 
     (* Case EAbs *)
     inversion Step ; subst.
-    rewrite <- H in IHe1.
-    specialize (IHe1 bs e3 M1 M2 MemDepth0 H1).
+    rewrite <- H in IHe1, BSLength.
+    specialize (IHe1 bs e3 M1 M2 MemDepth0 BSLength H1).
     specialize (depth_length e1 bs) ; intros.
     destruct (trans e1).
     rewrite <- H in H0.
@@ -1821,14 +1998,21 @@ Module TranslationProperties (R:Replacement)
       (* Case svalue *)
       destruct H4 ; destruct H5 ; subst.
       repeat(split ; auto).
+      unfold admin_ssubst ; intros.
+      assert(beq_var (hole_var v0) (source_var v) = false).
+      clear ; unfold hole_var, source_var ; apply beq_nat_false_iff ; omega.
+      destruct t0 ; simpl in *|-*.
       rewrite MP.ssubst_ret, MP.ssubst_eabs.
-      apply Admin_ret, Admin_abs.
-      assert(S.beq_var (hole_var v0) (source_var v) = false).
-        apply beq_nat_false_iff.
-        unfold hole_var, source_var.
-        omega.
-      simpl in *|-*.
-      rewrite H2 ; assumption.
+      repeat(constructor).
+      apply H6.
+      rewrite H7 ; assumption.
+      rewrite H7 ; assumption.
+      unfold admin_ssubst in H6.
+      destruct (ltb v0 (nth 0 bs 0 + booker e1 0)) ;
+      rewrite MP.ssubst_ret, MP.ssubst_eabs ;
+      repeat(constructor) ;
+      rewrite H7 ;
+      apply H6 ; auto.
 
       (* Case not svalue *)
       exists x0.
@@ -1837,8 +2021,8 @@ Module TranslationProperties (R:Replacement)
 
     (* Case EFix *)
     inversion Step ; subst.
-    rewrite <- H in IHe1.
-    specialize (IHe1 bs e3 M1 M2 MemDepth0 H1).
+    rewrite <- H in IHe1, BSLength.
+    specialize (IHe1 bs e3 M1 M2 MemDepth0 BSLength H1).
     specialize (depth_length e1 bs) ; intros.
     destruct (trans e1).
     rewrite <- H in H0.
@@ -1853,14 +2037,24 @@ Module TranslationProperties (R:Replacement)
       (* Case svalue *)
       destruct H4 ; destruct H5 ; subst.
       repeat(split ; auto).
+      intros.
+      unfold admin_ssubst ; intros.
+      assert(beq_var (hole_var v1) (source_var v)
+               || beq_var (hole_var v1) (source_var v0) = false).
+      clear ; unfold hole_var, source_var ;
+      apply orb_false_iff ; split ; apply beq_nat_false_iff ; omega.
+      destruct t0 ; simpl in *|-*.
       rewrite MP.ssubst_ret, MP.ssubst_efix.
-      apply Admin_ret, Admin_fix.
-      assert(orb (S.beq_var (hole_var v1) (source_var v)) 
-          (S.beq_var (hole_var v1) (source_var v0)) = false).
-        apply orb_false_intro ; apply beq_nat_false_iff ;
-        unfold hole_var, source_var ; omega.
-      simpl in *|-*.
-      rewrite H2 ; assumption.
+      repeat(constructor).
+      apply H6.
+      rewrite H7 ; assumption.
+      rewrite H7 ; assumption.
+      unfold admin_ssubst in H6.
+      destruct (ltb v0 (nth 0 bs 0 + booker e1 0)) ;
+      rewrite MP.ssubst_ret, MP.ssubst_efix ;
+      repeat(constructor) ;
+      rewrite H7 ;
+      apply H6 ; auto.
 
       (* Case not svalue *)
       exists x0.
@@ -2101,52 +2295,54 @@ Module TranslationProperties (R:Replacement)
     *)
 
     (* Case EUnbox *)
-    assert(List2.hd_cons bs 0 = List2.hd_cons bs ((fun x => x) 0)) as RemCons.
+    destruct bs ; [inversion BSLength|] ; simpl.
+    specialize (depth_length e1 bs) ; intros DpthLength1.
+    specialize (length_h_match e1 bs) ; intros LengthH.
+    specialize (booker_length e1 bs) ; intros BKLength1.
+    specialize (IHe1 bs).
+    assert(trans e1 bs = trans e1 ((fun x => x) bs)) as TransE1.
     reflexivity.
-    destruct (List2.hd_cons bs 0).
-    specialize (depth_length e1 l) ; intros DpthLength1.
-    specialize (length_h_match e1 l) ; intros LengthH.
-    specialize (IHe1 l).
-    assert(trans e1 l = trans e1 ((fun x => x) l)) as TransE1.
-    reflexivity.
-    destruct (trans e1 l).
+    destruct (trans e1 bs).
     inversion Step ; subst.
 
       (* Case EUnbox -> EUnbox *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H1).
-      specialize (depth_length e3 l) ; intros DpthLength2.
+      apply le_S_n in BSLength.
+      specialize (IHe1 e3 M1 M2 MemDepth0 BSLength H1).
+      specialize (depth_length e3 bs) ; intros DpthLength2.
       specialize (CalculusProperties.depth_sstep_2 M1 e1 M2 e3 MemDepth0 H1) ; 
       intros DpthStep ; simpl.
       destruct t.
 
         (* Case n = 1 *)
         unfold trans_expr in *|-* ; simpl in *|-*.
-        assert(trans e3 l = trans e3 ((fun x => x) l)) as TransE3.
+        assert(trans e3 bs = trans e3 ((fun x => x) bs)) as TransE3.
         reflexivity.
-        rewrite <- RemCons.
-        destruct (trans e3 l).
+        destruct (trans e3 bs).
         exists e1.
-        rewrite trans_depth_0 with (bs2:=l) ; auto.
+        rewrite trans_depth_0 with (bs2:=bs) ; auto.
         rewrite <- TransE1.
         split ; auto.
         right.
         exists e3.
         destruct DpthStep.
         rewrite DpthLength1 in H ; apply le_n_0_eq in H.
-        rewrite trans_depth_0 with (bs2:=l) ; auto.
+        rewrite trans_depth_0 with (bs2:=bs) ; auto.
         rewrite <- TransE3.
-        rewrite trans_memory_depth_0 with (bs2:=l) ; auto.
-        rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=l) ; auto.
+        rewrite trans_memory_depth_0 with (bs2:=bs) ; auto.
+        rewrite trans_memory_depth_0 with (bs1:=n::bs) (bs2:=bs) ; auto.
         repeat(split ; auto).
         rewrite <- H in DpthLength2 ; destruct t ; 
         inversion DpthLength2 ; auto.
 
         (* Case n > 1 *)
+        assert(Context.shift (t :: t0) = Context.shift ((fun x => x) (t :: t0))) as Shift1.
+        reflexivity.
         destruct (Context.shift (t :: t0)).
         destruct t1 ; simpl in *|-*.
         assumption.
-        rewrite <- RemCons.
-        destruct p ; destruct (trans e3 l).
+        assert(trans e3 bs = trans e3 ((fun x => x) bs)) as TransE3.
+        reflexivity.
+        destruct p ; destruct (trans e3 bs).
         destruct IHe1.
         exists x.
         destruct H ; split ; auto.
@@ -2155,59 +2351,128 @@ Module TranslationProperties (R:Replacement)
           (* Case svalue *)
           destruct H2 ; destruct H3.
           repeat(split ; auto).
-          constructor.
+          destruct bs.
+          rewrite DpthLength1 in BSLength ; inversion BSLength.
+          destruct t1.
+          destruct t2 ; simpl in *|-* ; inversion H3 ; subst ;
+          constructor ; rewrite BKLength1 in H4 ; simpl in H4.
+          constructor ; auto.
+          assert(t0 = nil).
+          destruct t0 ; auto.
+          destruct(Context.shift (t0 :: t1)).
+          inversion Shift1 ; subst.
+          subst ; simpl in *|-*.
+          unfold admin_ssubst ; intros.
           rewrite DpthLength1.
-          simpl.
-          rewrite n_iter_remove.
-          rewrite DpthLength1 in H3, H4 ; simpl in *|-*.
-          unfold n_iter_booker.
-          simpl booker.
-          
-          
-
-          if (leb (S v) 1) then StageSet.add 0 ss else ss
-          n_iter_booker (pred (length t0)) e1
-
-          admit. (* todo: prove it *)
-          admit.
-
-          unfold n_iter_booker ; simpl booker.
-          simpl.
-          simpl n_iter.
-          
-
-          fail.
-          rewrite StageSetProperties.remove_empty.
+          inversion Shift1 ; subst ; simpl in *|-*.
+          unfold admin_ssubst in H4.
+          rewrite DpthLength1 in H4.
+          apply H4 ; auto.
+          rewrite DpthLength1 in H2 ; assumption.
+          constructor ; assumption.
+          constructor ; auto.
+          destruct t0.
+          inversion Shift1 ; subst.
+          destruct (Context.shift (t0 :: t2)) ; inversion Shift1 ; subst.
           assumption.
-          constructor.
-          constructor.
+          constructor ; auto.
+          constructor ; auto.
+          constructor ; auto.
+          destruct t0.
+          inversion Shift1 ; subst.
+          destruct (Context.shift (t0 :: t2)) ; inversion Shift1 ; subst.
           assumption.
+          constructor ; auto.
+          constructor ; auto.
+
+          destruct t2 ; simpl in *|-* ; inversion H3 ; subst ;
+          constructor ; rewrite BKLength1 in H4 ; simpl in H4.
+          constructor ; auto.
+          assert(t0 = nil).
+          destruct t0 ; auto.
+          destruct(Context.shift (t0 :: t2)).
+          inversion Shift1 ; subst.
+          subst ; simpl in *|-*.
+          unfold admin_ssubst ; intros.
+          rewrite DpthLength1.
+          inversion Shift1 ; subst ; simpl in *|-*.
+          unfold admin_ssubst in H4.
+          rewrite DpthLength1 in H4.
+          apply H4 ; auto.
+          rewrite DpthLength1 in H2 ; assumption.
+          constructor ; assumption.
+          constructor ; auto.
+          destruct t0.
+          inversion Shift1 ; subst.
+          destruct (Context.shift (t0 :: t3)) ; inversion Shift1 ; subst.
+          constructor ; auto.
+          constructor.
+          constructor ; auto.
+          destruct t0.
+          inversion Shift1 ; subst.
+          destruct (Context.shift (t0 :: t3)) ; inversion Shift1 ; subst.
+          constructor ; auto.
+          constructor.
+          constructor ; auto.
+
+          unfold admin_ssubst ; intros.
+          rewrite DpthLength1.
           rewrite MP.ssubst_eunbox.
-          constructor ; simpl.
+          simpl.
           rewrite MP.ssubst_evar.
-          fail.
-          
+          case_beq_nat v n.
+          rewrite <- beq_nat_refl.
+          assert(ltb n (n+1) = true).
+          clear ; unfold ltb ;
+          apply leb_iff ; omega.
+          rewrite H7, andb_true_l.
+          rewrite BindingSetProperties.rho_false_mem ; auto.
+          constructor.
+          apply StageSetProperties.add_mem_3.
+          assert(beq_nat (hole_var v) (hole_var n) = false).
+          apply beq_nat_false_iff ; unfold hole_var ; omega.
+          rewrite H7, andb_false_l.
+          constructor.
+
           (* Case not svalue *)
-          
-
-        rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr => cast_eref v0)).
-        apply Admin_bind.
-        assumption.
-        intros.
-        apply Admin_refl.
-
-        assert (
-         (fun v2 => M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) (M.cast_eref v2) (phi x acc)) =
-         (fun v2 => M.cast_eref (M.ssubst (S (length t0)) StageSet.empty (M.cast_var (hole_var v)) v2 (phi x acc)))).
-          apply functional_extensionality.
-          intros ; apply MP.ssubst_eref.
-        assumption.
-        exists x0.
-        destruct H1 ; destruct H3 ; subst ; auto.
-        fail.
+          exists x0.
+          destruct H0 ; destruct H2 ; subst ; auto.
+          repeat(split ; auto).
+          rewrite trans_memory_depth_0 with (bs2:=bs) ; auto.
+          destruct DpthStep.
+          rewrite trans_memory_depth_0 with (bs1:=n::bs) (bs2:=bs) ; auto.
 
       (* Case EUnbox Box e -> e *)
-      admit.
+      rewrite <- H in DpthLength1.
+      destruct t ; [| inversion DpthLength1] ; simpl in *|-*.
+      specialize (CalculusProperties.depth_svalue e2 0) ; intros.
+      destruct H0 ; specialize (H2 H1).
+      apply le_S_n, le_n_0_eq in H2.
+      rewrite trans_depth_0 with (bs2:=0::bs) ; auto.
+      specialize (depth_length e2 (0::bs)) ; intros DpthLength3.
+      assert(trans e2 (0::bs) = trans e2 ((fun x => x) (0::bs))) as TransE3.
+      reflexivity.
+      assert((let (e8, _) := trans e2 (0::bs) in e8) = trans_expr e2 (0::bs)) as TransExpr.
+      unfold trans_expr ; reflexivity.
+      destruct (trans e2 (0::bs)).
+      rewrite <- H2 in DpthLength3 ; destruct t ; [|inversion DpthLength3].
+      exists (CRaw.EBox e2).
+      unfold trans_expr ; simpl.
+      rewrite trans_depth_0 with (bs2:=0::bs) ; auto.
+      rewrite <- TransE3.
+      inversion TransE1 ; subst.
+      split ; auto ; left.
+      repeat(split ; auto).
+      constructor ; auto.
+      constructor.
+
+      unfold admin_ssubst ; intros.
+      rewrite MP.ssubst_eunbox.
+      rewrite MP.ssubst_evar.
+      rewrite <- beq_nat_refl, andb_true_l ; simpl.
+      rewrite BindingSetProperties.rho_O_true ; auto.
+      constructor.
+      apply H1.
 
     (* Case ERun *)
     admit.
@@ -2218,36 +2483,21 @@ Module TranslationProperties (R:Replacement)
 
   Theorem sstep_rstep_O:
     forall (e1 e2:S.expr) (M1 M2:S.Memory.t),
-    let acc := Injection.id in
+    let bs := 0::nil in
     depth e1 = 0 ->
     memory_depth M1 = 0 ->
     S.sstep 0 (M1, e1) (M2, e2) -> 
-    rstep (trans_mem M1 acc, trans_expr e1 acc) 
-      (trans_mem M2 acc, trans_expr e2 acc).
+    rstep (trans_mem M1 bs, trans_expr e1 bs) 
+      (trans_mem M2 bs, trans_expr e2 bs).
   Proof.
     intros.
-    specialize (sstep_rstep e1 acc e2 M1 M2 H0) ; intros.
-
-    assert(forall (e1':T.expr) (cs1:Context.t_stack), 
-    trans e1 acc = (e1', cs1) -> cs1 = nil).
-    intros.
-      assert(0 = length cs1).
-      rewrite <- H.
-      specialize (depth_length e1) ; intros.
-      specialize (H4 acc) ;
-      rewrite H3 in H4 ; destruct H4.
-      reflexivity.
-    destruct cs1 ; simpl in *|-* ;
-    [reflexivity | inversion H4].
-
-    unfold trans_expr in *|-*.
-    destruct (trans e1).
-    specialize (H3 e t).
-    rewrite H3 in H2.
+    specialize (sstep_rstep e1 bs e2 M1 M2 H0) ; intros.
     simpl in H2.
-    destruct (trans e2).
-    auto.
-    auto.
+    specialize (depth_length e1 bs) ; intros.
+    unfold trans_expr ; destruct (trans e1).
+    rewrite H in H3 ; destruct t ; [|inversion H3].
+    rewrite H in *|-*.
+    apply H2 ; auto.
   Qed.
 
 End TranslationProperties.

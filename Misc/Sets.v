@@ -92,6 +92,13 @@ Module NatSetProperties.
     rewrite add_mem_4 in H ; assumption.
   Qed.
 
+  Lemma add_add:
+    forall (lst:t) (m n:nat),
+    add m (add n lst) = add n (add m lst).
+  Proof.
+    intros ; apply eq_leibniz, MSetProps.add_add.
+  Qed.
+
   Lemma remove_mem_1:
     forall (lst:t) (n m:nat),
     m <> n -> mem n (remove m lst) = mem n lst.

@@ -485,6 +485,33 @@ Module BindingSetProperties(Repl:Replacement).
     rewrite H3, andb_false_r ; trivial.
   Qed.
 
+  Lemma rho_false_mem:
+    forall (n:nat) (s:StageSet.t),
+    mem n s = true -> rho n s = false.
+  Proof.
+    unfold rho ; intros.
+    remember(Repl.rho n).
+    destruct b ; symmetry in Heqb.
+    specialize (MSetEqProps.add_remove s n H) ; intros.
+    apply MSetIntern.equal_spec, MSetIntern.eq_leibniz in H0.
+    rewrite <- H0.
+    rewrite MSetEqProps.fold_add ; auto.
+    apply andb_false_iff ; left.
+    apply negb_false_iff ; assumption.
+    clear ; constructor ; auto.
+    unfold Transitive ; intros ; subst ; auto.
+    clear ; unfold Proper.
+    unfold respectful ; intros.
+    subst ; reflexivity.
+    unfold SetoidList.transpose ; intros.
+    rewrite andb_assoc.
+    rewrite andb_comm with (b1:=negb (Repl.rho x)).
+    rewrite <- andb_assoc ; reflexivity.
+    apply MSetEqProps.remove_mem_1.
+    specialize (rho_false n s Heqb) ; intros.
+    unfold rho in H0 ; rewrite Heqb in H0 ; assumption.
+  Qed.
+
   Lemma rho_le_true:
     forall (s:StageSet.t) (n:nat),
     (forall m, m <= n -> 

@@ -1722,10 +1722,19 @@ Module TranslationProperties (R:Replacement)
     let (e1, cs) := trans e (0 :: bs) in
     match cs with
     | nil => True
-    | c1 :: nil => True
+    | c1 :: nil => 
+      match c1 with
+      | nil => False
+      | (eh, h) :: c1' => let b := hd 0 bs in
+        forall (v e2:T.expr) (c2:Context.t),
+        admin_context_ssubst 0 h 0 v b c1' c2 ->
+        admin_ssubst 1 h (booker e 0) v 0 e1 e2 ->
+        admin_ssubst 0 h (booker e 1) v b
+        (Context.fill c1' (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
+      end
     | c1 :: c1' :: nil => 
       match c1' with
-      | nil => True
+      | nil => False
       | (eh, h) :: c1'' => let b := hd 0 bs in
         forall (v e2:T.expr) (c2:Context.t),
         admin_context_ssubst (pred (depth e)) h (length c1'') v b c1 c2 ->
@@ -1733,12 +1742,17 @@ Module TranslationProperties (R:Replacement)
         admin_ssubst (pred (depth e)) h (booker e 1) v b
         (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
       end
-    | c1 :: c1' :: cs => let b := hd 0 bs in
-      forall (v e2:T.expr) (c2:Context.t) (h:S.var),
-      admin_context_ssubst (pred (depth e)) h (length c1') v b c1 c2 ->
-      admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
-      admin_ssubst (pred (depth e)) h (booker e 1) v b
-      (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
+    | c1 :: c1' :: cs => 
+	let (ch, _) := Context.shift (c1 :: c1' :: cs) in
+	match ch with
+	| nil => False
+	| (eh, h) :: _ => let b := hd 0 bs in
+          forall (v e2:T.expr) (c2:Context.t),
+          admin_context_ssubst (pred (depth e)) h (length c1') v b c1 c2 ->
+          admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
+          admin_ssubst (pred (depth e)) h (booker e 1) v b
+          (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
+	end
     end.
   Proof.
     admit. (* TODO: prove it *)
@@ -2103,7 +2117,7 @@ admit. (* Todo prove it *)
             apply H4 ; auto.
 
             inversion H3 ; subst.
-            inversion H5 ; subst ; clear H3 H5.
+            inversion H5 ; subst.
             simpl in *|-*.
             rewrite svalue_phi ; auto.
             apply Rel_step with (e1:=
@@ -2114,29 +2128,11 @@ admit. (* Todo prove it *)
                   v1)) (phi x (0 :: nil))).
             apply MP.astep_bind_2 ; auto.
             apply MP.astep_app_abs ; auto.
-
-            (* fail.
-
             assert(1 <= S (S (length bs0))) as Tmp1.
             clear ; omega.
-            rewrite svalue_phi in FillSubst ; auto.
-            specialize (FillSubst Tmp1 (phi x (0 :: nil))).
-            apply FillSubst.
-            *)
-            admit. (* TODO: prove it *)
-
-            (* Maybe some useful proof
-            rewrite ContextProperties.fill_ssubst ; auto.
-            apply MP.astep_app_abs ; auto.
-            specialize (CMem1 0) ; simpl in CMem1 ; 
-            apply CMem1 ; clear ; omega.
-
-            apply admin_context_expr ; auto.
-            rewrite MP.ssubst_ret.
-            rewrite MP.ssubst_ebox.
-            constructor.
-            constructor.
-            assumption. *)
+            specialize (FillSubst Tmp1 
+              (phi x (0 :: nil)) e2 ((u2,h1)::c0) H5 H4).
+            apply FillSubst ; auto.
 
             (* Case not svalue *)
             destruct H0 ; destruct H0 ; 

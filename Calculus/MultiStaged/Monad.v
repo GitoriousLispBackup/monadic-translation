@@ -379,7 +379,7 @@ Module Type MonadProperties (R:Replacement)
   Parameter ssubst_eunbox :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
      ssubst n ss (cast_var x) (cast_eunbox e) v
-       = cast_eunbox (ssubst (pred n) ss (cast_var x) e v).
+       = cast_eunbox (ssubst (pred n) (StageSet.remove n ss) (cast_var x) e v).
 
   Parameter ssubst_erun :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e v:expr),
@@ -1457,7 +1457,7 @@ Module TranslationProperties (R:Replacement)
     simpl.
     rewrite MP.ssubst_evar.
     assert(beq_nat (source_var x) (hole_var n0) &&
-       CRaw.BindingSet.rho (pred n) ss = false).
+       CRaw.BindingSet.rho (pred n) (StageSet.remove n ss) = false).
     apply andb_false_iff ; left.
     apply beq_nat_false_iff.
     unfold source_var, hole_var ; omega.
@@ -1688,7 +1688,7 @@ Module TranslationProperties (R:Replacement)
   Definition admin_ssubst (n:nat) (h:CRaw.var) 
       (m:nat) (v:T.expr) (b:nat) (u1 u2:T.expr) : Prop :=
       forall (ss:StageSet.t), StageSet.mem 0 ss = false ->
-      StageSet.ub (pred n) ss = true ->
+      StageSet.ub n ss = true ->
       admin
         (M.ssubst n (match n with
 	  | S (S n) => if ltb h (b + m) 
@@ -1697,24 +1697,25 @@ Module TranslationProperties (R:Replacement)
           end) (M.cast_var (hole_var h)) u1 v) u2.
 
   Inductive admin_context_ssubst (n:nat) (h:CRaw.var)
-    (m:nat) (v:T.expr) (b:nat) : Context.t -> Context.t -> Prop :=
-  | ACSubst_nil : admin_context_ssubst n h m v b nil nil
-  | ACSubst_cons : forall (u1 u2:T.expr) (h1:CRaw.var) (c1 c2:Context.t),
-      admin_ssubst n h m v b u1 u2 ->
-      admin_context_ssubst n h m v b c1 c2 ->
-      admin_context_ssubst n h m v b (cons (u1,h1) c1) (cons (u2,h1) c2).
+    (m:nat) (v:T.expr) (b1 b2:nat) : Context.t -> Context.t -> Prop :=
+  | ACSubst_nil : admin_context_ssubst n h m v b1 b2 nil nil
+  | ACSubst_cons : forall (u1 u2:T.expr) (c1 c2:Context.t),
+      admin_ssubst n h m v b1 u1 u2 ->
+      admin_context_ssubst n h m v b1 b2 c1 c2 ->
+      admin_context_ssubst n h m v b1 b2
+        (cons (u1,(b2+(length c1))%nat) c1) 
+        (cons (u2,(b2+(length c1))%nat) c2).
 
   Inductive admin_stack_ssubst (n:nat) (h:CRaw.var) (v:T.expr) : 
-    list nat -> Context.t_stack -> Context.t_stack -> Prop :=
-  | ASSubst_nil : forall (bs:list nat), admin_stack_ssubst n h v bs nil nil
-  | ASSubst_cons_nil: forall (c1 c2:Context.t) (bs:list nat) (b:nat),
-      admin_context_ssubst n h 0 v b c1 c2 ->
-      admin_stack_ssubst n h v (b::bs) (c1::nil) (c2::nil)
-  | ASSubst_cons : forall (bs:list nat) (b:nat) (c1 c2 c1' c2':Context.t) (cs1 cs2:Context.t_stack),
-      admin_context_ssubst n h (length c1') v b c1 c2 ->
-      admin_stack_ssubst (pred n) h v bs (c1'::cs1) (c2'::cs2) ->
-      admin_stack_ssubst n h v (b::bs) (c1::c1'::cs1) (c2::c2'::cs2).
-
+    list nat -> nat -> Context.t_stack -> Context.t_stack -> Prop :=
+  | ASSubst_nil : forall (bs:list nat) (b:nat), admin_stack_ssubst n h v bs b nil nil
+  | ASSubst_cons_nil: forall (c1 c2:Context.t) (bs:list nat) (b1 b2:nat),
+      admin_context_ssubst n h 0 v b1 b2 c1 c2 ->
+      admin_stack_ssubst n h v (b1::bs) b2 (c1::nil) (c2::nil)
+  | ASSubst_cons : forall (bs:list nat) (b1 b2:nat) (c1 c2 c1' c2':Context.t) (cs1 cs2:Context.t_stack),
+      admin_context_ssubst n h (length c1') v b1 b2 c1 c2 ->
+      admin_stack_ssubst (pred n) h v bs b1 (c1'::cs1) (c2'::cs2) ->
+      admin_stack_ssubst n h v (b1::bs) b2 (c1::c1'::cs1) (c2::c2'::cs2).
 
   Lemma admin_fill_ssubst:
     forall (e:S.expr) (bs:list nat),
@@ -1727,7 +1728,7 @@ Module TranslationProperties (R:Replacement)
       | nil => False
       | (eh, h) :: c1' => let b := hd 0 bs in
         forall (v e2:T.expr) (c2:Context.t),
-        admin_context_ssubst 0 h 0 v b c1' c2 ->
+        admin_context_ssubst 0 h 0 v b 0 c1' c2 ->
         admin_ssubst 1 h (booker e 0) v 0 e1 e2 ->
         admin_ssubst 0 h (booker e 1) v b
         (Context.fill c1' (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
@@ -1737,7 +1738,7 @@ Module TranslationProperties (R:Replacement)
       | nil => False
       | (eh, h) :: c1'' => let b := hd 0 bs in
         forall (v e2:T.expr) (c2:Context.t),
-        admin_context_ssubst (pred (depth e)) h (length c1'') v b c1 c2 ->
+        admin_context_ssubst (pred (depth e)) h (length c1'') v b 0 c1 c2 ->
         admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
         admin_ssubst (pred (depth e)) h (booker e 1) v b
         (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
@@ -1748,85 +1749,144 @@ Module TranslationProperties (R:Replacement)
 	| nil => False
 	| (eh, h) :: _ => let b := hd 0 bs in
           forall (v e2:T.expr) (c2:Context.t),
-          admin_context_ssubst (pred (depth e)) h (length c1') v b c1 c2 ->
+          admin_context_ssubst (pred (depth e)) h (length c1') v b 0 c1 c2 ->
           admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
           admin_ssubst (pred (depth e)) h (booker e 1) v b
           (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
 	end
     end.
   Proof.
-    admit. (* TODO: prove it *)
-  Qed.
-
+    admit.
 (*
-  Lemma admin_fill_ssubst:
-    forall (e:S.expr) (bs:list nat),
-    depth e <= length (0 :: bs) ->
-    let (e1, cs) := trans e (0 :: bs) in
-    match cs with
-    | nil => True
-    | c1 :: nil => True
-    | c1 :: c1' :: nil => 
-      let cs 
-      let b := hd 0 bs in
-      forall (v e2:T.expr) (c2:Context.t) (h:S.var),
-      admin_context_ssubst (pred (depth e)) h (length c1') v b c1 c2 ->
-      admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
-      admin_ssubst (pred (depth e)) h (booker e 1) v b
-      (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
-    | c1 :: c1' :: cs => let b := hd 0 bs in
-      forall (v e2:T.expr) (c2:Context.t) (h:S.var),
-      admin_context_ssubst (pred (depth e)) h (length c1') v b c1 c2 ->
-      admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
-      admin_ssubst (pred (depth e)) h (booker e 1) v b
-      (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
-    end.
-admit. (* Todo prove it *)
-  (*  induction e1 ; simpl ; intros ; auto.
-    specialize (IHe1 bs).
-    destruct (trans e1 bs).
+    intros.
+    specialize (depth_length e (0::bs)) ; intros DpthLength1.
+    specialize (context_stack_not_nil e (0::bs)) ; intros CSNotNil.
+    specialize (length_h_match e (0::bs)) ; intros LengthHMatch.
+    specialize (booker_length e (0::bs)) ; intros BookerLength.
+    destruct (trans e (0 :: bs)).
     destruct t ; auto.
-    intros.
-    specialize (IHe1 n ss x H H0 c2).
-    assert(admin_context_ssubst n x bs e1 (phi v bs) t c2).
-    admit. (* todo, but true *)
-    specialize (IHe1 H2).
+    destruct t0 ; auto.
+    destruct t ; auto.
+    exfalso ; apply CSNotNil ; simpl ; auto.
+    
+    (* Case 1 *)
+    simpl in *|-*.
+    assert (1 <= S (length bs)) as Tmp1.
+    clear ; omega.
+    specialize (LengthHMatch Tmp1).
+    simpl ; clear BookerLength.
+    simpl in *|-* ; clear Tmp1.
+    assert(let (_, h) := p in h >= length t) as Tmp3.
+    destruct p ; omega.
+    clear LengthHMatch.
+    induction t ; simpl ; intros.
+    destruct p ; subst ; intros.
+    unfold admin_ssubst ; intros.
+    inversion H0 ; subst ; simpl.
+    rewrite MP.ssubst_ret, MP.ssubst_ebox ; auto.
+    repeat(constructor).
+    apply H1 ; auto.
+    simpl in *|-*.
+    destruct p ; subst ; intros.
+    assert(Tmp4 := Tmp3).
+    apply lt_le_weak in Tmp3.
+    inversion H0 ; subst ; simpl.
+    unfold admin_ssubst ; intros.
+    simpl in *|-*.
+    assert(~ ((e1, v) :: t = nil \/ False)) as Tmp2.
+    unfold not ; clear ; intros ; destruct H ; auto ; inversion H.
+    specialize (IHt Tmp2 Tmp3 v0 e2 c0 H6 H1).
 
-    induction H1 ; simpl.
+    assert(beq_var (hole_var v) (hole_var (length t)) = false) as BeqFalse1.
+    subst ; unfold hole_var ; apply beq_nat_false_iff ; 
+    generalize Tmp4 ; clear ; intros ; omega.
+
+    rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+         (ssubst 0 ss (cast_var (hole_var v)) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+    constructor ; auto ; intros.
+    constructor ; [| constructor].
     constructor.
+    apply IHt ; auto ; intros.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_eapp, MP.ssubst_eabs, BeqFalse1 ; auto.
+    
+    (* Case 2 *)
+    destruct t1.
+    admit.
 
-    inversion H1 ; subst.
 
-    assert(beq_nat (hole_var x) (hole_var h1) = false).
-    assert(H4 := H0).
-    apply VarSetProperties.add_mem_6 in H0.
-    apply beq_nat_false_iff.
-    unfold not ; intros ; unfold hole_var in *|-*.
-    clear IHadmin_context_ssubst H H1 ; omega.
-    rewrite MP.ssubst_bind with (f2 :=(fun v1 : T.expr =>
-     cast_eapp
-     (cast_eabs (cast_var (hole_var h1))
-        (ssubst n ss (cast_var (hole_var x)) (Context.fill c1 e) (phi v bs))) v1)).
+    specialize (context_shift_not_nil (t :: t0 :: t1 :: t2)) ; intros CShift1.
+    destruct (Context.shift (t :: t0 :: t1 :: t2)).
+    destruct t3.
+    generalize CSNotNil CShift1 ; clear ; intros.
+    assert(length (t :: t0 :: t1 :: t2) > 0).
+    clear ; simpl ; omega.
+    specialize (CShift1 H CSNotNil).
+    destruct CShift1 ; apply H0 ; reflexivity.
+    destruct p ; subst ; intros.
+    rewrite BookerLength ; simpl.
+    clear CShift1 LengthHMatch BookerLength CSNotNil.
+    generalize dependent c2.
+    induction t ; simpl ; intros.
+    inversion H0 ; subst ; simpl.
+    unfold admin_ssubst ; intros.
+    rewrite DpthLength1 ; simpl.
+    rewrite DpthLength1 in H1 ; simpl in H1.
+    unfold admin_ssubst in H1 ; simpl in H1.
+    rewrite MP.ssubst_ret, MP.ssubst_ebox ; auto.
+    repeat(constructor).
+    admit. (* todo: prove it *)
+
+    simpl in *|-*.
+    specialize (IHt DpthLength1).
+    destruct a.
+    inversion H0 ; subst ; simpl in *|-*.
+    unfold admin_ssubst ; intros.
+    rewrite DpthLength1 ; simpl.
+    rewrite DpthLength1 in IHt, H6, H7, H3.
+    simpl in IHt, H6, H7, H3.
+
+    case_beq_nat v (length t).
+    rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+         (ssubst (S (S (length t2))) (StageSet.add (S (S (length t2))) (if ltb (length t) (b + length t0) then StageSet.add (S (length t2)) ss else ss)) (cast_var (hole_var (length t))) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+    constructor ; auto ; intros.
+    constructor ; [| constructor].
     constructor.
-    apply H3 ; auto.
-
-    rewrite IHadmin_context_ssubst ; auto.
-    reflexivity.
-
-    apply functional_extensionality.
-    intros.
-    rewrite MP.ssubst_eapp.
-    rewrite MP.ssubst_eabs.
-    assert(S.beq_var (hole_var x) (hole_var v0) = false).
-    assumption.
-    rewrite H2.
-    reflexivity.
-    apply VarSetProperties.add_mem_5 in H0.
-    assumption.
+    assert((StageSet.add (S (S (length t2)))
+        (if ltb (length t) (b + length t0)
+         then StageSet.add (S (length t2)) ss
+         else ss)) = if ltb (length t) (b + length t0)
+         then StageSet.add (S (length t2)) (StageSet.add (S (S (length t2))) ss)
+         else (StageSet.add (S (S (length t2))) ss)) as Tmp1.
+    destruct (ltb (length t) (b + length t0)) ; auto.
+    apply StageSetProperties.add_add.
+    rewrite Tmp1.
+    apply IHt ; auto ; intros.
+    rewrite StageSetProperties.add_mem_4 ; auto.
+    simpl.
+    admit. (* Todo: prove it *)
+    (*rewrite <- StageSetProperties.ub_le_1 with (m:=S (length t2)) ; auto.*)
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
+    rewrite <- beq_nat_refl ; auto.
+    
+    rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+         (ssubst (S (S (length t2))) (if ltb v (b + length t0) then StageSet.add (S (length t2)) ss else ss) (cast_var (hole_var v)) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+    constructor ; auto ; intros.
+    constructor ; [| constructor].
+    constructor.
+    apply IHt ; auto ; intros.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
 *)
   Qed.
 
-*)
 
   (* En gros, on distingue 2 mondes de variables:
     - les variables traduites (cast_var) qui sont celles 
@@ -1858,9 +1918,9 @@ admit. (* Todo prove it *)
             M1 = M2 /\
             match c1' with
             | nil => admin_stack_ssubst (pred n) h (phi eh (0::nil)) 
-                       (List.tl bs) cs1' cs2
+                       (List.tl bs) (List.hd 0 bs) cs1' cs2
             | _ =>   admin_stack_ssubst (pred n) h (phi eh (0::nil))
-                       (List.tl bs) (Context.unshift cs1' c1') cs2
+                       (List.tl bs) (List.hd 0 bs) (Context.unshift cs1' c1') cs2
             end /\
             admin_ssubst n h (booker e1 0) (phi eh (0::nil)) (nth 0 bs 0) e1' e2'
           \/ 
@@ -2117,13 +2177,13 @@ admit. (* Todo prove it *)
             apply H4 ; auto.
 
             inversion H3 ; subst.
-            inversion H5 ; subst.
+            inversion H6 ; subst.
             simpl in *|-*.
             rewrite svalue_phi ; auto.
             apply Rel_step with (e1:=
               M.ssubst 0 StageSet.empty (M.cast_var (hole_var v)) 
                 (bind u1 (fun v1 => cast_eapp
-                  (cast_eabs (cast_var (hole_var h1))
+                  (cast_eabs (cast_var (hole_var (length t)))
                   (Context.fill t (ret (cast_ebox e))))
                   v1)) (phi x (0 :: nil))).
             apply MP.astep_bind_2 ; auto.
@@ -2131,7 +2191,7 @@ admit. (* Todo prove it *)
             assert(1 <= S (S (length bs0))) as Tmp1.
             clear ; omega.
             specialize (FillSubst Tmp1 
-              (phi x (0 :: nil)) e2 ((u2,h1)::c0) H5 H4).
+              (phi x (0 :: nil)) e2 ((u2,(length t)%nat)::c0) H6 H4).
             apply FillSubst ; auto.
 
             (* Case not svalue *)
@@ -2199,7 +2259,7 @@ admit. (* Todo prove it *)
           apply FillSubst ; auto.
           
           inversion H3 ; subst.
-          destruct t3 ; simpl in H8 ; inversion H8.
+          destruct t3 ; simpl in H9 ; inversion H9.
 
           exists x ; split ; auto ; left.
           repeat(split; auto) ; simpl.
@@ -2208,7 +2268,8 @@ admit. (* Todo prove it *)
           apply FillSubst ; simpl ; auto.
           destruct (Context.shift (t1 :: t4)) ; inversion Shift1 ; subst.
           simpl in H6 ; inversion H6 ; subst ; auto.
-          
+          simpl in *|-*.
+
           (* Case not svalue *)
           destruct H3 ; destruct H2 ; destruct H3 ; subst.
           exists x ; split ; auto ; right.
@@ -2222,7 +2283,8 @@ admit. (* Todo prove it *)
     (* Case EUnbox *)
     destruct bs ; [inversion BSLength|] ; simpl.
     specialize (depth_length e1 bs) ; intros DpthLength1.
-    specialize (length_h_match e1 bs) ; intros LengthH.
+    specialize (length_h e1 bs) ; intros LengthH.
+    specialize (length_h_match e1 bs) ; intros LengthHMatch.
     specialize (booker_length e1 bs) ; intros BKLength1.
     specialize (IHe1 bs).
     assert(trans e1 bs = trans e1 ((fun x => x) bs)) as TransE1.
@@ -2281,64 +2343,106 @@ admit. (* Todo prove it *)
           destruct t1.
           destruct t2 ; simpl in *|-* ; inversion H3 ; subst ;
           constructor ; rewrite BKLength1 in H4 ; simpl in H4.
-          constructor ; auto.
-          assert(t0 = nil).
-          destruct t0 ; auto.
-          destruct(Context.shift (t0 :: t1)).
-          inversion Shift1 ; subst.
-          subst ; simpl in *|-*.
-          unfold admin_ssubst ; intros.
-          rewrite DpthLength1.
-          inversion Shift1 ; subst ; simpl in *|-*.
-          unfold admin_ssubst in H4.
-          rewrite DpthLength1 in H4.
+          assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
+          simpl ; rewrite plus_0_r ; reflexivity.
+          simpl tl in Tmp1.
+          rewrite Tmp1.
+          rewrite Tmp1.
+          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (b1:=n0) (b2:=n) ; auto.
+          unfold admin_ssubst ; intros ; simpl.
+          rewrite DpthLength1 ; simpl.
+          rewrite DpthLength1 in H4 ; simpl in H4.
+          unfold admin_ssubst in H4 ; simpl in H4.
+          destruct t0.
+          simpl in *|-*.
           apply H4 ; auto.
-          rewrite DpthLength1 in H2 ; assumption.
+          rewrite DpthLength1 in H2 ; simpl in H2 ; auto.
+          simpl in *|-*.
+          destruct t1.
+          inversion Shift1.
+          destruct (Context.shift (t1 :: t2)).
+          inversion Shift1.
+          constructor.
+
+          destruct t0.
+          inversion Shift1 ; subst.
+          destruct (Context.shift (t0 :: t2)) ; inversion Shift1 ; subst.
+          assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
+          simpl ; rewrite plus_0_r ; reflexivity.
+          simpl tl in Tmp1.
+          rewrite Tmp1.
+          rewrite Tmp1.
+          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (b1:=n0) (b2:=n) ; auto.
           constructor ; assumption.
-          constructor ; auto.
+
           destruct t0.
           inversion Shift1 ; subst.
-          destruct (Context.shift (t0 :: t2)) ; inversion Shift1 ; subst.
-          assumption.
+          simpl in *|-* ; inversion H3.
           constructor ; auto.
-          constructor ; auto.
-          constructor ; auto.
-          destruct t0.
-          inversion Shift1 ; subst.
-          destruct (Context.shift (t0 :: t2)) ; inversion Shift1 ; subst.
-          assumption.
-          constructor ; auto.
+          admit.
           constructor ; auto.
 
-          destruct t2 ; simpl in *|-* ; inversion H3 ; subst ;
-          constructor ; rewrite BKLength1 in H4 ; simpl in H4.
+          assert(Context.unshift t2 (p :: t1) = Context.unshift t2 ((fun x => x) (p :: t1))) as Shift2.
+          reflexivity.
+          destruct (Context.unshift t2 (p :: t1)).
+          destruct t2 ; simpl in Shift2 ; inversion Shift2.
+          inversion H3 ; subst.
           constructor ; auto.
-          assert(t0 = nil).
-          destruct t0 ; auto.
-          destruct(Context.shift (t0 :: t2)).
-          inversion Shift1 ; subst.
-          subst ; simpl in *|-*.
-          unfold admin_ssubst ; intros.
-          rewrite DpthLength1.
-          inversion Shift1 ; subst ; simpl in *|-*.
-          unfold admin_ssubst in H4.
-          rewrite DpthLength1 in H4.
+          assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
+          simpl ; rewrite plus_0_r ; reflexivity.
+          simpl tl in Tmp1.
+          rewrite Tmp1.
+          rewrite Tmp1.
+          
+          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (b1:=n0) (b2:=n) ; auto.
+          rewrite BKLength1 in H4.
+          simpl in *|-*.
+          rewrite DpthLength1 in H4. 
+          rewrite DpthLength1 ; 
+          unfold admin_ssubst in H4 ; unfold admin_ssubst ; intros ;
+          simpl in *|-*.
+          destruct t0 ; simpl in *|-*.
           apply H4 ; auto.
-          rewrite DpthLength1 in H2 ; assumption.
-          constructor ; assumption.
-          constructor ; auto.
-          destruct t0.
+          assert(t4 = t).
+          destruct t3 ; simpl.
           inversion Shift1 ; subst.
-          destruct (Context.shift (t0 :: t3)) ; inversion Shift1 ; subst.
-          constructor ; auto.
-          constructor.
-          constructor ; auto.
-          destruct t0.
+          simpl in Shift2 ; inversion Shift2 ; auto.
+          destruct (Context.shift (t3 :: t5)).
           inversion Shift1 ; subst.
-          destruct (Context.shift (t0 :: t3)) ; inversion Shift1 ; subst.
+          simpl in Shift2 ; inversion Shift2 ; auto.
+          subst.
+          auto.
           constructor ; auto.
+
+          constructor ; auto.
+          assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
+          simpl ; rewrite plus_0_r ; reflexivity.
+          simpl tl in Tmp1.
+          rewrite Tmp1.
+          rewrite Tmp1.
+          
+          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (b1:=n0) (b2:=n) ; auto.
+          rewrite BKLength1 in H4.
+          simpl in *|-*.
+          assert(t4 = t).
+          destruct t0 ; simpl.
+          inversion Shift1 ; subst.
+          simpl in Shift2 ; inversion Shift2 ; auto.
+          destruct (Context.shift (t0 :: t3)).
+          inversion Shift1 ; subst.
+          simpl in Shift2 ; inversion Shift2 ; auto.
+          subst.
+          assumption.
           constructor.
-          constructor ; auto.
+
 
           unfold admin_ssubst ; intros.
           rewrite DpthLength1.
@@ -2353,6 +2457,7 @@ admit. (* Todo prove it *)
           rewrite H7, andb_true_l.
           rewrite BindingSetProperties.rho_false_mem ; auto.
           constructor.
+          rewrite StageSetProperties.remove_mem_1 ; auto.
           apply StageSetProperties.add_mem_3.
           assert(beq_nat (hole_var v) (hole_var n) = false).
           apply beq_nat_false_iff ; unfold hole_var ; omega.
@@ -2398,6 +2503,9 @@ admit. (* Todo prove it *)
       rewrite BindingSetProperties.rho_O_true ; auto.
       constructor.
       apply H1.
+      rewrite StageSetProperties.remove_mem_3 ; auto.
+      specialize (StageSetProperties.ub_pred ss 1) ; intros.
+      simpl in H5 ; rewrite H4 in H5 ; symmetry in H5 ; auto.
 
     (* Case ERun *)
     admit.

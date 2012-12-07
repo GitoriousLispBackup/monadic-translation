@@ -1717,6 +1717,270 @@ Module TranslationProperties (R:Replacement)
       admin_stack_ssubst (pred n) h v bs b1 (c1'::cs1) (c2'::cs2) ->
       admin_stack_ssubst n h v (b1::bs) b2 (c1::c1'::cs1) (c2::c2'::cs2).
 
+  Lemma admin_fill_ssubst_1:
+    forall (e:S.expr) (bs:list nat),
+    depth e <= length (0 :: bs) ->
+    let (e1, cs) := trans e (0 :: bs) in
+    match cs with
+    | c1 :: nil => 
+      match c1 with
+      | nil => False
+      | (eh, h) :: c1' => let b := hd 0 bs in
+        forall (v e2:T.expr) (c2:Context.t),
+        admin_context_ssubst 0 h 0 v b 0 c1' c2 ->
+        admin_ssubst 1 h (booker e 0) v 0 e1 e2 ->
+        admin_ssubst 0 h (booker e 1) v b
+        (Context.fill c1' (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
+      end
+    | _ => True
+    end.
+  Proof.
+    intros.
+    specialize (context_stack_not_nil e (0::bs)) ; intros CSNotNil.
+    specialize (length_h_match e (0::bs)) ; intros LengthHMatch.
+    destruct (trans e (0 :: bs)).
+    destruct t ; auto.
+    destruct t0 ; auto.
+    destruct t ; auto.
+    exfalso ; apply CSNotNil ; simpl ; auto.
+    
+    simpl in *|-*.
+    assert (1 <= S (length bs)) as Tmp1.
+    clear ; omega.
+    specialize (LengthHMatch Tmp1).
+    simpl in *|-* ; clear Tmp1.
+    assert(let (_, h) := p in h >= length t) as Tmp3.
+    destruct p ; omega.
+    clear LengthHMatch.
+    induction t ; simpl ; intros.
+    destruct p ; subst ; intros.
+    unfold admin_ssubst ; intros.
+    inversion H0 ; subst ; simpl.
+    rewrite MP.ssubst_ret, MP.ssubst_ebox ; auto.
+    repeat(constructor).
+    apply H1 ; auto.
+    simpl in *|-*.
+    rewrite StageSetProperties.ub_le_2 with (m:=0) ; auto.
+    destruct p ; subst ; intros.
+    assert(Tmp4 := Tmp3).
+    apply lt_le_weak in Tmp3.
+    inversion H0 ; subst ; simpl.
+    unfold admin_ssubst ; intros.
+    simpl in *|-*.
+    assert(~ ((e1, v) :: t = nil \/ False)) as Tmp2.
+    unfold not ; clear ; intros ; destruct H ; auto ; inversion H.
+    specialize (IHt Tmp2 Tmp3 v0 e2 c0 H6 H1).
+
+    assert(beq_var (hole_var v) (hole_var (length t)) = false) as BeqFalse1.
+    subst ; unfold hole_var ; apply beq_nat_false_iff ; 
+    generalize Tmp4 ; clear ; intros ; omega.
+
+    rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+         (ssubst 0 ss (cast_var (hole_var v)) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+    constructor ; auto ; intros.
+    constructor ; [| constructor].
+    constructor.
+    apply IHt ; auto ; intros.
+    apply functional_extensionality ; intros.
+    rewrite MP.ssubst_eapp, MP.ssubst_eabs, BeqFalse1 ; auto.
+  Qed.
+
+  Lemma admin_fill_ssubst_2_strong:
+    forall (e:S.expr) (bs:list nat),
+    depth e <= length (0 :: bs) ->
+    let (e1, cs) := trans e (0 :: bs) in
+    match cs with
+    | c1 :: c1' :: nil => 
+      match c1' with
+      | nil => False
+      | (eh, h) :: c1'' => let b := hd 0 bs in
+        forall (v e2:T.expr) (c2:Context.t) (ss:StageSet.t),
+        StageSet.mem 0 ss = false ->
+        StageSet.ub 1 ss = true ->
+        admin_context_ssubst 1 h (length c1'') v b 0 c1 c2 ->
+        admin (M.ssubst 2 (if ltb h (booker e 0) then StageSet.add 1 ss else ss)
+	  (M.cast_var (hole_var h)) e1 v) e2 ->
+        admin (M.ssubst 1 ss (M.cast_var (hole_var h)) 
+          (Context.fill c1 (ret (cast_ebox e1))) v) 
+          (Context.fill c2 (ret (cast_ebox e2)))
+      end
+    | _ => True
+    end.
+  Proof.
+    intros.
+    specialize (depth_length e (0::bs)) ; intros DpthLength1.
+    specialize (context_stack_not_nil e (0::bs)) ; intros CSNotNil.
+    specialize (length_h_match e (0::bs)) ; intros LengthHMatch.
+    specialize (booker_length e (0::bs)) ; intros BookerLength.
+    destruct (trans e (0 :: bs)).
+    destruct t ; auto.
+    destruct t0 ; auto.
+    destruct t1 ; auto.
+    destruct t0 ; auto.
+    exfalso ; apply CSNotNil ; simpl ; auto.
+
+    rewrite BookerLength ; simpl.
+    clear LengthHMatch BookerLength CSNotNil.
+    induction t.
+    destruct p ; intros.
+    inversion H2 ; subst ; simpl in *|-*.
+    rewrite MP.ssubst_ret, MP.ssubst_ebox ; repeat(constructor) ; auto.
+
+    simpl in *|-*.
+    destruct p ; intros.
+    inversion H2 ; subst ; simpl in *|-*.
+    rewrite DpthLength1 in H ; destruct bs.
+    exfalso ; generalize H ; clear ; simpl ; intros ; omega.
+    specialize (IHt DpthLength1 v0 e2 c0) ; simpl in *|-*.
+    case_beq_nat v (length t).
+      rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+         (ssubst 1 (StageSet.add 1 ss) (cast_var (hole_var (length t))) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+      constructor ; auto ; intros.
+      repeat(constructor).
+      apply IHt ; auto.
+      rewrite StageSetProperties.add_mem_4 ; auto.
+      rewrite <- StageSetProperties.ub_le_1 ; auto.
+      assert(ltb (length t) (S (length t)) = true).
+      clear ; unfold ltb ; apply leb_iff ; omega.
+      rewrite H4 in H3 ; clear H4.
+      assert(ltb (length t) (length t) = false).
+      clear ; unfold ltb ; apply leb_iff_conv ; omega.
+      rewrite H4 ; clear H4 ; auto.
+      apply functional_extensionality ; intros.
+      rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
+      rewrite <- beq_nat_refl ; auto.
+
+      assert(ltb v (length t) = ltb v (S (length t))) as LtbEq.
+      generalize E ; clear ; intros ; unfold ltb.
+      remember (leb (S v) (S (length t))).
+      destruct b ; symmetry in Heqb.
+      apply leb_iff ; apply leb_iff in Heqb ; omega.
+      apply leb_iff_conv ; apply leb_iff_conv in Heqb ; omega.
+      rewrite LtbEq in IHt ; clear LtbEq.
+
+      rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+         (ssubst 1 ss (cast_var (hole_var v)) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+      constructor ; auto ; intros.
+      repeat(constructor).
+      apply IHt ; auto.
+      apply functional_extensionality ; intros.
+      rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
+      assert(beq_var (hole_var v) (hole_var (length t)) = false).
+      generalize E ; clear ; intros ; unfold hole_var ; 
+      apply beq_nat_false_iff ; omega.
+      rewrite H4 ; auto.
+  Qed.
+
+  Lemma admin_fill_ssubst_2:
+    forall (e:S.expr) (bs:list nat),
+    depth e <= length (0 :: bs) ->
+    let (e1, cs) := trans e (0 :: bs) in
+    match cs with
+    | c1 :: c1' :: nil => 
+      match c1' with
+      | nil => False
+      | (eh, h) :: c1'' => let b := hd 0 bs in
+        forall (v e2:T.expr) (c2:Context.t),
+        admin_context_ssubst (pred (depth e)) h (length c1'') v b 0 c1 c2 ->
+        admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
+        admin_ssubst (pred (depth e)) h (booker e 1) v b
+        (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
+      end
+    | _ => True
+    end.
+  Proof.
+    intros.
+    specialize (admin_fill_ssubst_2_strong e bs H) ; intros Strong.
+    specialize (depth_length e (0::bs)) ; intros DpthLength1.
+    specialize (booker_length e (0::bs)) ; intros BookerLength.
+    destruct (trans e (0 :: bs)).
+    destruct t ; auto.
+    destruct t0 ; auto.
+    destruct t1 ; auto.
+    destruct t0 ; auto.
+    destruct p ; intros ; auto.
+    rewrite DpthLength1 in *|-* ; simpl in *|-* ; auto.
+    rewrite BookerLength in *|-* ; simpl in *|-* ; auto.
+    unfold admin_ssubst ; simpl ; intros.
+    apply Strong ; auto.
+    apply H1 ; auto.
+    rewrite StageSetProperties.ub_le_2 with (m:=1) ; auto.
+  Qed.
+
+  Lemma admin_fill_ssubst_3_strong:
+    forall (e:S.expr) (bs:list nat),
+    depth e <= length (0 :: bs) ->
+    let (e1, cs) := trans e (0 :: bs) in
+    match cs with
+    | _ :: _ :: nil => True
+    | c1 :: c1' :: cs => 
+	let (ch, _) := Context.shift (c1 :: c1' :: cs) in
+	match ch with
+	| nil => False
+	| (eh, h) :: _ => let b := hd 0 bs in
+          forall (v e2:T.expr) (c2:Context.t) (ss:StageSet.t),
+          StageSet.mem 0 ss = false ->
+          StageSet.ub (pred (depth e)) ss = true ->
+          admin_context_ssubst (pred (depth e)) h (length c1') v b 0 c1 c2 ->
+          admin (M.ssubst (depth e) (if ltb h (0 + (booker e 0)) 
+       		then StageSet.add (pred (depth e)) ss else ss)
+        	  (M.cast_var (hole_var h)) e1 v) e2 ->
+          admin (M.ssubst (pred (depth e)) (if ltb h (b + (booker e 1)) 
+       		then StageSet.add (pred (pred (depth e))) ss else ss)
+          	  (M.cast_var (hole_var h)) 
+            (Context.fill c1 (ret (cast_ebox e1))) v) 
+            (Context.fill c2 (ret (cast_ebox e2)))
+	end
+    | _ => True
+    end.
+  Proof.
+   admit. (* todo: prove it *)
+  Qed.
+
+  Lemma admin_fill_ssubst_3:
+    forall (e:S.expr) (bs:list nat),
+    depth e <= length (0 :: bs) ->
+    let (e1, cs) := trans e (0 :: bs) in
+    match cs with
+    | _ :: _ :: nil => True
+    | c1 :: c1' :: cs => 
+	let (ch, _) := Context.shift (c1 :: c1' :: cs) in
+	match ch with
+	| nil => False
+	| (eh, h) :: _ => let b := hd 0 bs in
+          forall (v e2:T.expr) (c2:Context.t),
+          admin_context_ssubst (pred (depth e)) h (length c1') v b 0 c1 c2 ->
+          admin_ssubst (depth e) h (booker e 0) v 0 e1 e2 ->
+          admin_ssubst (pred (depth e)) h (booker e 1) v b
+          (Context.fill c1 (ret (cast_ebox e1))) (Context.fill c2 (ret (cast_ebox e2)))
+	end
+    | _ => True
+    end.
+  Proof.
+    intros.
+    specialize (depth_length e (0::bs)) ; intros DpthLength1.
+    specialize (admin_fill_ssubst_3_strong e bs H) ; intros Strong.
+    destruct (trans e (0 :: bs)).
+    destruct t ; auto.
+    destruct t0 ; auto.
+    destruct t1 ; auto.
+    destruct (Context.shift).
+    destruct t3 ; auto.
+    destruct p ; intros ; auto.
+    rewrite DpthLength1 in *|-* ; simpl in *|-* ; auto.
+    unfold admin_ssubst ; simpl ; intros.
+    apply Strong ; auto.
+    unfold admin_ssubst in H1 ; simpl in H1.
+    apply H1 ; auto.
+    rewrite StageSetProperties.ub_le_2 with (m:=S (S (length t2))) ; auto.
+  Qed.
+
   Lemma admin_fill_ssubst:
     forall (e:S.expr) (bs:list nat),
     depth e <= length (0 :: bs) ->
@@ -1756,146 +2020,23 @@ Module TranslationProperties (R:Replacement)
 	end
     end.
   Proof.
-    admit.
-(*
     intros.
-    specialize (depth_length e (0::bs)) ; intros DpthLength1.
-    specialize (context_stack_not_nil e (0::bs)) ; intros CSNotNil.
-    specialize (length_h_match e (0::bs)) ; intros LengthHMatch.
-    specialize (booker_length e (0::bs)) ; intros BookerLength.
+    specialize (admin_fill_ssubst_1 e bs) ; intros Case1.
+    specialize (admin_fill_ssubst_2 e bs) ; intros Case2.
+    specialize (admin_fill_ssubst_3 e bs) ; intros Case3.
     destruct (trans e (0 :: bs)).
     destruct t ; auto.
     destruct t0 ; auto.
     destruct t ; auto.
-    exfalso ; apply CSNotNil ; simpl ; auto.
-    
-    (* Case 1 *)
-    simpl in *|-*.
-    assert (1 <= S (length bs)) as Tmp1.
-    clear ; omega.
-    specialize (LengthHMatch Tmp1).
-    simpl ; clear BookerLength.
-    simpl in *|-* ; clear Tmp1.
-    assert(let (_, h) := p in h >= length t) as Tmp3.
-    destruct p ; omega.
-    clear LengthHMatch.
-    induction t ; simpl ; intros.
-    destruct p ; subst ; intros.
-    unfold admin_ssubst ; intros.
-    inversion H0 ; subst ; simpl.
-    rewrite MP.ssubst_ret, MP.ssubst_ebox ; auto.
-    repeat(constructor).
-    apply H1 ; auto.
-    simpl in *|-*.
-    destruct p ; subst ; intros.
-    assert(Tmp4 := Tmp3).
-    apply lt_le_weak in Tmp3.
-    inversion H0 ; subst ; simpl.
-    unfold admin_ssubst ; intros.
-    simpl in *|-*.
-    assert(~ ((e1, v) :: t = nil \/ False)) as Tmp2.
-    unfold not ; clear ; intros ; destruct H ; auto ; inversion H.
-    specialize (IHt Tmp2 Tmp3 v0 e2 c0 H6 H1).
-
-    assert(beq_var (hole_var v) (hole_var (length t)) = false) as BeqFalse1.
-    subst ; unfold hole_var ; apply beq_nat_false_iff ; 
-    generalize Tmp4 ; clear ; intros ; omega.
-
-    rewrite MP.ssubst_bind with (f2:= fun v2 =>
-        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
-         (ssubst 0 ss (cast_var (hole_var v)) 
-           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
-    constructor ; auto ; intros.
-    constructor ; [| constructor].
-    constructor.
-    apply IHt ; auto ; intros.
-    apply functional_extensionality ; intros.
-    rewrite MP.ssubst_eapp, MP.ssubst_eabs, BeqFalse1 ; auto.
-    
-    (* Case 2 *)
-    destruct t1.
-    admit.
-
-
-    specialize (context_shift_not_nil (t :: t0 :: t1 :: t2)) ; intros CShift1.
-    destruct (Context.shift (t :: t0 :: t1 :: t2)).
-    destruct t3.
-    generalize CSNotNil CShift1 ; clear ; intros.
-    assert(length (t :: t0 :: t1 :: t2) > 0).
-    clear ; simpl ; omega.
-    specialize (CShift1 H CSNotNil).
-    destruct CShift1 ; apply H0 ; reflexivity.
-    destruct p ; subst ; intros.
-    rewrite BookerLength ; simpl.
-    clear CShift1 LengthHMatch BookerLength CSNotNil.
-    generalize dependent c2.
-    induction t ; simpl ; intros.
-    inversion H0 ; subst ; simpl.
-    unfold admin_ssubst ; intros.
-    rewrite DpthLength1 ; simpl.
-    rewrite DpthLength1 in H1 ; simpl in H1.
-    unfold admin_ssubst in H1 ; simpl in H1.
-    rewrite MP.ssubst_ret, MP.ssubst_ebox ; auto.
-    repeat(constructor).
-    admit. (* todo: prove it *)
-
-    simpl in *|-*.
-    specialize (IHt DpthLength1).
-    destruct a.
-    inversion H0 ; subst ; simpl in *|-*.
-    unfold admin_ssubst ; intros.
-    rewrite DpthLength1 ; simpl.
-    rewrite DpthLength1 in IHt, H6, H7, H3.
-    simpl in IHt, H6, H7, H3.
-
-    case_beq_nat v (length t).
-    rewrite MP.ssubst_bind with (f2:= fun v2 =>
-        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
-         (ssubst (S (S (length t2))) (StageSet.add (S (S (length t2))) (if ltb (length t) (b + length t0) then StageSet.add (S (length t2)) ss else ss)) (cast_var (hole_var (length t))) 
-           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
-    constructor ; auto ; intros.
-    constructor ; [| constructor].
-    constructor.
-    assert((StageSet.add (S (S (length t2)))
-        (if ltb (length t) (b + length t0)
-         then StageSet.add (S (length t2)) ss
-         else ss)) = if ltb (length t) (b + length t0)
-         then StageSet.add (S (length t2)) (StageSet.add (S (S (length t2))) ss)
-         else (StageSet.add (S (S (length t2))) ss)) as Tmp1.
-    destruct (ltb (length t) (b + length t0)) ; auto.
-    apply StageSetProperties.add_add.
-    rewrite Tmp1.
-    apply IHt ; auto ; intros.
-    rewrite StageSetProperties.add_mem_4 ; auto.
-    simpl.
-    admit. (* Todo: prove it *)
-    (*rewrite <- StageSetProperties.ub_le_1 with (m:=S (length t2)) ; auto.*)
-    apply functional_extensionality ; intros.
-    rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
-    rewrite <- beq_nat_refl ; auto.
-    
-    rewrite MP.ssubst_bind with (f2:= fun v2 =>
-        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
-         (ssubst (S (S (length t2))) (if ltb v (b + length t0) then StageSet.add (S (length t2)) ss else ss) (cast_var (hole_var v)) 
-           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
-    constructor ; auto ; intros.
-    constructor ; [| constructor].
-    constructor.
-    apply IHt ; auto ; intros.
-    apply functional_extensionality ; intros.
-    rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
-*)
+    destruct p ; intros ; auto.
+    destruct t1 ; auto.
+    destruct t0 ; auto.
+    destruct p ; intros ; auto.
+    destruct (Context.shift) ; auto.
+    destruct t3 ; auto.
+    destruct p ; intros ; auto.
   Qed.
 
-
-  (* En gros, on distingue 2 mondes de variables:
-    - les variables traduites (cast_var) qui sont celles 
-   des expressions initiales et celles créées pour le contexte
-    - les variables des opérateurs monadiques.
-   On peut implémenter ça par une séparation par parité: cast_var
-   enverrait n vers 2n, etles variables des opérateurs monadiques
-   seraient 2n+1.
-  *)
   Lemma sstep_rstep:
     forall (e1:S.expr) (bs:list nat) (e2:S.expr) (M1 M2:S.Memory.t),
     S.memory_depth M1 = 0 ->

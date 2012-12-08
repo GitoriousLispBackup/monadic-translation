@@ -1929,7 +1929,11 @@ Module TranslationProperties (R:Replacement)
           StageSet.ub (pred (depth e)) ss = true ->
           admin_context_ssubst (pred (depth e)) h (length c1') v b 0 c1 c2 ->
           admin (M.ssubst (depth e) (if ltb h (0 + (booker e 0)) 
-       		then StageSet.add (pred (depth e)) ss else ss)
+       		then StageSet.add (pred (depth e)) 
+                (if ltb h (b + (booker e 1)) 
+       		then StageSet.add (pred (pred (depth e))) ss else ss)
+                else (if ltb h (b + (booker e 1)) 
+       		then StageSet.add (pred (pred (depth e))) ss else ss))
         	  (M.cast_var (hole_var h)) e1 v) e2 ->
           admin (M.ssubst (pred (depth e)) (if ltb h (b + (booker e 1)) 
        		then StageSet.add (pred (pred (depth e))) ss else ss)
@@ -1940,7 +1944,98 @@ Module TranslationProperties (R:Replacement)
     | _ => True
     end.
   Proof.
-   admit. (* todo: prove it *)
+    intros.
+    specialize (depth_length e (0::bs)) ; intros DpthLength1.
+    specialize (context_stack_not_nil e (0::bs)) ; intros CSNotNil.
+    specialize (length_h_match e (0::bs)) ; intros LengthHMatch.
+    specialize (booker_length e (0::bs)) ; intros BookerLength.
+    destruct (trans e (0 :: bs)).
+    destruct t ; auto.
+    destruct t0 ; auto.
+    destruct t1 ; auto.
+    specialize (context_shift_not_nil (t :: t0 :: t1 :: t2)) ; intros CShiftNotNil.
+    destruct (Context.shift).
+    destruct t3 ; auto.
+    assert(length (t :: t0 :: t1 :: t2) > 0).
+    simpl ; omega.
+    specialize (CShiftNotNil H0 CSNotNil) ; destruct CShiftNotNil.
+    apply H1 ; auto.
+
+    rewrite BookerLength ; rewrite BookerLength ; simpl.
+    clear LengthHMatch BookerLength CShiftNotNil CSNotNil.
+    induction t.
+    destruct p ; intros.
+    inversion H2 ; subst ; rewrite DpthLength1 in *|-* ; simpl in *|-*.
+    rewrite MP.ssubst_ret, MP.ssubst_ebox ; repeat(constructor) ; auto.
+
+    simpl in *|-*.
+    destruct p ; intros.
+    inversion H2 ; subst ; simpl in *|-*.
+    rewrite DpthLength1 in H ; destruct bs.
+    exfalso ; generalize H ; clear ; simpl ; intros ; omega.
+    destruct bs.
+    exfalso ; generalize H ; clear ; simpl ; intros ; omega.
+    specialize (IHt DpthLength1 v0 e2 c0) ; simpl in *|-*.
+    rewrite DpthLength1 in *|-* ; simpl in *|-*.
+
+    case_beq_nat v (length t).
+      assert((if ltb (length t) (n + length t0) 
+         then StageSet.add (S (length t2)) (StageSet.add (S (S (length t2))) ss) 
+         else (StageSet.add (S (S (length t2))) ss)) =
+         (StageSet.add (S (S (length t2))) (if ltb (length t) (n + length t0) 
+         then StageSet.add (S (length t2)) ss 
+         else ss))) as Eq1.
+         destruct (ltb (length t) (n + length t0)) ; auto.
+         apply StageSetProperties.add_add.
+      rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+         (ssubst (S (S (length t2)))
+         (if ltb (length t) (n + length t0) 
+         then StageSet.add (S (length t2)) (StageSet.add (S (S (length t2))) ss) 
+         else (StageSet.add (S (S (length t2))) ss))
+           (cast_var (hole_var (length t))) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+      constructor ; auto ; intros.
+      repeat(constructor).
+      apply IHt ; auto.
+      rewrite StageSetProperties.add_mem_4 ; auto.
+      rewrite <- StageSetProperties.ub_le_1 ; auto.
+      assert(ltb (length t) (S (length t)) = true).
+      clear ; unfold ltb ; apply leb_iff ; omega.
+      rewrite H4 in H3 ; clear H4.
+      assert(ltb (length t) (length t) = false).
+      clear ; unfold ltb ; apply leb_iff_conv ; omega.
+      rewrite H4 ; clear H4 ; auto.
+      rewrite <- Eq1 in H3 ; auto.
+      apply functional_extensionality ; intros.
+      rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
+      rewrite <- beq_nat_refl ; auto.
+      destruct (ltb (length t) (n + length t0)) ;
+      auto ; rewrite Eq1 ; auto.
+
+      assert(ltb v (length t) = ltb v (S (length t))) as LtbEq.
+      generalize E ; clear ; intros ; unfold ltb.
+      remember (leb (S v) (S (length t))).
+      destruct b ; symmetry in Heqb.
+      apply leb_iff ; apply leb_iff in Heqb ; omega.
+      apply leb_iff_conv ; apply leb_iff_conv in Heqb ; omega.
+      rewrite LtbEq in IHt ; clear LtbEq.
+
+      rewrite MP.ssubst_bind with (f2:= fun v2 =>
+        (cast_eapp (cast_eabs (cast_var (hole_var (length t)))
+          (ssubst (S (S (length t2))) 
+          (if ltb v (n + length t0) then StageSet.add (S (length t2)) ss else ss)
+          (cast_var (hole_var v)) 
+           (Context.fill t (ret (cast_ebox e0))) v0)) v2)); auto.
+      constructor ; auto ; intros.
+      repeat(constructor).
+      apply IHt ; auto.
+      apply functional_extensionality ; intros.
+      rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
+      assert(beq_var (hole_var v) (hole_var (length t)) = false).
+      generalize E ; clear ; intros ; unfold hole_var ; 
+      apply beq_nat_false_iff ; omega.
+      rewrite H4 ; auto.
   Qed.
 
   Lemma admin_fill_ssubst_3:
@@ -1978,6 +2073,10 @@ Module TranslationProperties (R:Replacement)
     apply Strong ; auto.
     unfold admin_ssubst in H1 ; simpl in H1.
     apply H1 ; auto.
+    destruct (ltb v (hd 0 bs + booker e 1)) ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto.
+    destruct (ltb v (hd 0 bs + booker e 1)) ; [
+    rewrite <- StageSetProperties.ub_le_1 ; auto |] ;
     rewrite StageSetProperties.ub_le_2 with (m:=S (S (length t2))) ; auto.
   Qed.
 

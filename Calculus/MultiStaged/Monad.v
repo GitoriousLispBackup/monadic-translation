@@ -229,12 +229,6 @@ Module Translation (R:Replacement)
   Definition trans_expr (e:S.expr) (bs:list nat) : T.expr :=
     let (e, _) := trans e bs in e.
 
-  Fixpoint trans_mem (m:S.Memory.t) (bs:list nat) : T.Memory.t :=
-    match m with
-    | nil => nil
-    | e :: m => trans_expr e bs :: (trans_mem m bs)
-    end.
-
   Definition phi (e:S.expr) (bs:list nat) : T.expr :=
     match e with
     | EConst i => M.cast_econst i
@@ -252,6 +246,12 @@ Module Translation (R:Replacement)
         let (e, _) := trans e (0 :: bs) in
         M.cast_ebox e
     | _ => M.cast_econst 0
+    end.
+
+  Fixpoint trans_mem (m:S.Memory.t) (bs:list nat) : T.Memory.t :=
+    match m with
+    | nil => nil
+    | e :: m => phi e bs :: (trans_mem m bs)
     end.
 
   (** ** Administrative Reduction Step *)
@@ -411,6 +411,12 @@ Module Type MonadProperties (R:Replacement)
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind e1 f) (M2, bind e2 f).
 
+  Parameter astep_bind_ederef :
+    forall (e1 e2:expr) (M1 M2:Memory.t),
+    let f := fun v => cast_ederef v in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
   Parameter astep_bind_2 :
     forall (v:S.expr) (e:expr) (bs:list nat) (M1 M2:Memory.t) (f:expr -> expr),
     S.svalue 0 v -> astep (M1, (f (phi v bs))) (M2, e) ->
@@ -421,6 +427,18 @@ Module Type MonadProperties (R:Replacement)
     S.svalue 0 v -> astep (M, cast_eapp
       (cast_eabs (cast_var x) e) (phi v bs))
       (M, ssubst 0 StageSet.empty (cast_var x) e (phi v bs)).
+
+  Parameter astep_eref :
+    forall (v:S.expr) (M:Memory.t) (bs:list nat),
+    S.svalue 0 v -> 
+    astep (M, cast_eref (phi v bs))
+    (Memory.set (Memory.fresh M) (phi v bs) M,
+      ret (cast_eloc (Memory.fresh M))).
+    
+  Parameter astep_ederef :
+    forall (l:S.location) (M:Memory.t) (bs:list nat),
+    l < length M ->
+    astep (M, cast_ederef (cast_eloc l)) (M, ret (Memory.get l M)).
 
 End MonadProperties.
 
@@ -817,6 +835,19 @@ Module TranslationStaticProperties (R:Replacement)
     simpl ; omega.
   Qed.
 
+  Lemma phi_depth_0:
+    forall (v:expr) (bs1 bs2:list nat),
+    depth v = 0 -> phi v bs1 = phi v bs2.
+  Proof.
+    destruct v ; simpl ; intros ; auto.
+    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
+    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
+    specialize (trans_depth v (0::nil) bs1 bs2) ; intros.
+    simpl in *|-*.
+    rewrite H0 ; auto.
+    destruct (depth v) ; simpl in *|-* ; omega.
+  Qed.
+
   Lemma trans_memory_depth_0:
     forall (M:Memory.t) (bs1 bs2:list nat),
     memory_depth M = 0 -> trans_mem M bs1 = trans_mem M bs2.
@@ -826,20 +857,7 @@ Module TranslationStaticProperties (R:Replacement)
     simpl in *|-*.
     apply max_0 in H ; destruct H.
     rewrite IHM with (bs2:=bs2) ; auto.
-    unfold trans_expr.
-    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
-  Qed.
-
-  Lemma phi_depth_0:
-    forall (v:expr) (bs1 bs2:list nat),
-    svalue 0 v -> depth v = 0 -> phi v bs1 = phi v bs2.
-  Proof.
-    intros ; inversion H ; subst ; simpl in *|-* ; auto.
-    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
-    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
-    rewrite trans_depth_0 with (bs2:=0 :: bs2) ; auto.
-    apply CalculusProperties.depth_svalue in H1.
-    omega.
+    rewrite phi_depth_0 with (bs2:=bs2) ; auto.
   Qed.
 
   Lemma booker_depth:
@@ -1683,6 +1701,49 @@ Module TranslationProperties (R:Replacement)
     omega.
   Qed.
 
+  Lemma trans_mem_length:
+    forall (M:Memory.t) (bs:list nat), 
+    length (trans_mem M bs) = length M.
+  Proof.
+    induction M ; simpl ; intros ; auto.
+  Qed.
+
+  Lemma trans_mem_fresh:
+    forall (M:Memory.t) (bs:list nat), 
+    T.Memory.fresh (trans_mem M bs) = Memory.fresh M.
+  Proof.
+    induction M ; simpl ; intros ; auto.
+  Qed.
+
+  Lemma trans_mem_set:
+    forall (M:Memory.t) (l:CRaw.location) (bs:list nat) (v:S.expr),
+    l <= length M ->
+    trans_mem (CRaw.Memory.set l v M) bs =
+    T.Memory.set l (phi v bs) (trans_mem M bs).
+  Proof.
+    induction M ; simpl ; intros.
+    apply le_n_0_eq in H ; subst ; auto.
+    destruct l ; simpl ; auto.
+    apply le_S_n in H.
+    rewrite IHM ; auto.
+  Qed.
+
+  Lemma trans_mem_get:
+    forall (M:Memory.t) (l:CRaw.location) (bs:list nat),
+    l < length M ->
+    phi (CRaw.Memory.get l M) bs =
+    T.Memory.get l (trans_mem M bs).
+  Proof.
+    induction M ; simpl ; intros.
+    apply lt_n_O in H ; contradiction.
+    destruct l ; simpl ; auto.
+    apply lt_S_n in H.
+    unfold CRaw.Memory.get, T.Memory.get ; simpl.
+    specialize (IHM l bs H).
+    unfold CRaw.Memory.get, T.Memory.get in IHM ; simpl in IHM.
+    rewrite IHM ; auto.
+  Qed.
+
   Definition ltb (m n:nat) := leb (S m) n.
 
   Definition admin_ssubst (n:nat) (h:CRaw.var) 
@@ -2138,6 +2199,7 @@ Module TranslationProperties (R:Replacement)
 
   Lemma sstep_rstep:
     forall (e1:S.expr) (bs:list nat) (e2:S.expr) (M1 M2:S.Memory.t),
+    S.memory_svalue 0 M1 ->
     S.memory_depth M1 = 0 ->
     let n := depth e1 in
     n <= length bs ->
@@ -2173,7 +2235,7 @@ Module TranslationProperties (R:Replacement)
     end.
   Proof.
     induction e1 ; simpl ; 
-    intros bs e2 M1 M2 MemDepth0 BSLength Step ; intros.
+    intros bs e2 M1 M2 MemSvalue0 MemDepth0 BSLength Step ; intros.
 
     (* Case EConst *)
     inversion Step.
@@ -2184,7 +2246,7 @@ Module TranslationProperties (R:Replacement)
     (* Case EAbs *)
     inversion Step ; subst.
     rewrite <- H in IHe1, BSLength.
-    specialize (IHe1 bs e3 M1 M2 MemDepth0 BSLength H1).
+    specialize (IHe1 bs e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
     specialize (depth_length e1 bs) ; intros.
     destruct (trans e1).
     rewrite <- H in H0.
@@ -2223,7 +2285,7 @@ Module TranslationProperties (R:Replacement)
     (* Case EFix *)
     inversion Step ; subst.
     rewrite <- H in IHe1, BSLength.
-    specialize (IHe1 bs e3 M1 M2 MemDepth0 BSLength H1).
+    specialize (IHe1 bs e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
     specialize (depth_length e1 bs) ; intros.
     destruct (trans e1).
     rewrite <- H in H0.
@@ -2314,24 +2376,23 @@ Module TranslationProperties (R:Replacement)
     inversion Step.
 
     (* Case ERef *)
-    admit.
-    (*
+    specialize (depth_length e1 bs) ; intros DpthLength.
+    inversion Step ; subst.
     specialize (IHe1 bs).
     destruct (trans e1).
-    inversion Step ; subst.
     destruct t ; intros.
 
       (* SubCase ERef, n=0, e -> e' *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H1).
-      inversion IHe1 ; subst.
-      apply Rel_step with (e1:=bind e0 (fun v => cast_eref v)).
-      apply MP.astep_bind_eref ; assumption.
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
       unfold trans_expr in *|-* ; simpl in *|-*.
+      inversion IHe1 ; subst.
+      apply Rel_step with (e1:=bind e0 (fun v => cast_eref v)) ; auto.
+      apply MP.astep_bind_eref ; assumption.
       destruct (trans e3).
       constructor ; [auto | intros ; constructor].
 
       (* SubCase ERef, n>0 *)
-      specialize (IHe1 e3 M1 M2 MemDepth0 H1).
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
       destruct (Context.shift (t :: t0)).
       destruct t1 ; simpl in *|-* ; auto.
       destruct p ; destruct (trans e3) ; intros.
@@ -2342,6 +2403,7 @@ Module TranslationProperties (R:Replacement)
         (* Case svalue *)
         destruct H2 ; destruct H3 ; subst.
         repeat(split ; auto).
+        unfold admin_ssubst ; intros.
         rewrite MP.ssubst_bind with (f2:=fun v0 => cast_eref v0).
         constructor ; auto.
         intros ; constructor.
@@ -2353,11 +2415,70 @@ Module TranslationProperties (R:Replacement)
         destruct H0 ; destruct H2 ; subst ; auto.
 
       (* SubCase ERef, n=0, svalue 0 e *)
-      admit.
-    *)
+      specialize (svalue_phi e1 bs H1) ; intros SValuePhi.
+      unfold trans_expr in SValuePhi.
+      destruct (trans e1 bs).
+      rewrite <- H in DpthLength ; destruct t ; [|inversion DpthLength].
+      unfold trans_expr in *|-* ; clear IHe1 ; subst.
+      apply Rel_step with (e1:=ret (cast_eloc (CRaw.Memory.fresh M1))).
+      apply MP.astep_bind_2 ; auto.
+      rewrite trans_mem_set ; auto.
+      rewrite <- trans_mem_fresh with (bs:=bs) ; auto.
+      apply MP.astep_eref ; auto.
+      simpl ; constructor.
 
     (* Case EDeref *)
-    admit.
+    specialize (depth_length e1 bs) ; intros DpthLength.
+    inversion Step ; subst.
+    specialize (IHe1 bs).
+    destruct (trans e1).
+    destruct t ; intros.
+
+      (* SubCase EDeref, n=0, e -> e' *)
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      unfold trans_expr in *|-* ; simpl in *|-*.
+      inversion IHe1 ; subst.
+      apply Rel_step with (e1:=bind e0 (fun v => cast_ederef v)) ; auto.
+      apply MP.astep_bind_ederef ; assumption.
+      destruct (trans e3).
+      constructor ; [auto | intros ; constructor].
+
+      (* SubCase EDeref, n>0 *)
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      destruct (Context.shift (t :: t0)).
+      destruct t1 ; simpl in *|-* ; auto.
+      destruct p ; destruct (trans e3) ; intros.
+      destruct IHe1 ; exists x.
+      destruct H ; split ; [assumption|].
+      destruct H0 ; [left | right] ; destruct H0.
+
+        (* Case svalue *)
+        destruct H2 ; destruct H3 ; subst.
+        repeat(split ; auto).
+        unfold admin_ssubst ; intros.
+        rewrite MP.ssubst_bind with (f2:=fun v0 => cast_ederef v0).
+        constructor ; auto.
+        intros ; constructor.
+        apply functional_extensionality ; intros.
+        rewrite MP.ssubst_ederef ; auto.
+
+        (* Case not svalue *)
+        exists x0.
+        destruct H0 ; destruct H2 ; subst ; auto.
+
+      (* SubCase EDeref, n=0, svalue 0 e *)
+      simpl.
+      apply Rel_step with (e1:=trans_expr (CRaw.Memory.get l M2) bs).
+      assert(phi (CRaw.ELoc l) bs = (cast_eloc l)) as Phi1.
+      reflexivity.
+      rewrite <- Phi1.
+      apply MP.astep_bind_2 ; [constructor | simpl].
+      rewrite svalue_phi.
+      rewrite trans_mem_get ; auto.
+      apply MP.astep_ederef ; auto.
+      rewrite trans_mem_length ; auto.
+      apply CalculusProperties.memory_svalue_get ; auto.
+      simpl ; constructor.
 
     (* Case EAssign *)
     admit.
@@ -2372,7 +2493,7 @@ Module TranslationProperties (R:Replacement)
     specialize (booker_length e1 (0::bs)) ; intros BKLength1.
     inversion Step ; subst ; simpl in *|-*.
     destruct (trans e1).
-    specialize (IHe1 e3 M1 M2 MemDepth0).
+    specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0).
     destruct t ; simpl in *|-* ; intros.
 
       (* Case of svalue 1 e1. Impossible *)
@@ -2534,7 +2655,7 @@ Module TranslationProperties (R:Replacement)
 
       (* Case EUnbox -> EUnbox *)
       apply le_S_n in BSLength.
-      specialize (IHe1 e3 M1 M2 MemDepth0 BSLength H1).
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
       specialize (depth_length e3 bs) ; intros DpthLength2.
       specialize (CalculusProperties.depth_sstep_2 M1 e1 M2 e3 MemDepth0 H1) ; 
       intros DpthStep ; simpl.
@@ -2758,6 +2879,7 @@ Module TranslationProperties (R:Replacement)
     forall (e1 e2:S.expr) (M1 M2:S.Memory.t),
     let bs := 0::nil in
     depth e1 = 0 ->
+    memory_svalue 0 M1 ->
     memory_depth M1 = 0 ->
     S.sstep 0 (M1, e1) (M2, e2) -> 
     rstep (trans_mem M1 bs, trans_expr e1 bs) 
@@ -2765,12 +2887,12 @@ Module TranslationProperties (R:Replacement)
   Proof.
     intros.
     specialize (sstep_rstep e1 bs e2 M1 M2 H0) ; intros.
-    simpl in H2.
+    simpl in H3.
     specialize (depth_length e1 bs) ; intros.
     unfold trans_expr ; destruct (trans e1).
-    rewrite H in H3 ; destruct t ; [|inversion H3].
+    rewrite H in H4 ; destruct t ; [|inversion H4].
     rewrite H in *|-*.
-    apply H2 ; auto.
+    apply H3 ; auto.
   Qed.
 
 End TranslationProperties.

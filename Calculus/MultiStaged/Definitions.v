@@ -66,6 +66,11 @@ Module CalculusData.
   End MemoryType.
   Module Memory := Memory MemoryType.
 
+  Inductive memory_svalue (n:nat) : Memory.t -> Prop :=
+    | MSValue_nil : memory_svalue n nil
+    | MSValue_cons : forall (e:expr) (M:Memory.t), 
+	svalue n e -> memory_svalue n M -> memory_svalue n (cons e M).
+
 End CalculusData.
 
 (** * Raw Calculus *)
@@ -139,14 +144,15 @@ Module CalculusRaw (Repl:Replacement).
     | EStep_deref : forall (n:nat) (M N:Memory.t) (e1 e2:expr),
        ⟨M, e1⟩ ⊨ n ⇒ (N, e2) -> ⟨M, EDeref e1⟩ ⊨ n ⇒ ⟨N, EDeref e2⟩
     | EStep_deref_O : forall (M:Memory.t) (l:Memory.Loc.t),
-       ⟨M, EDeref (ELoc l)⟩ ⊨ 0 ⇒ ⟨M, Memory.get l M⟩
+	l < length M -> ⟨M, EDeref (ELoc l)⟩ ⊨ 0 ⇒ ⟨M, Memory.get l M⟩
     | EStep_assign_l : forall (n:nat) (M N:Memory.t) (e1 e2 e3:expr), 
        ⟨M, e1⟩ ⊨ n ⇒ (N, e3) -> ⟨M, EAssign e1 e2⟩ ⊨ n ⇒ ⟨N, EAssign e3 e2⟩
     | EStep_assign_r : forall (n:nat) (M N:Memory.t) (v e1 e2:expr),
        svalue n v -> ⟨M, e1⟩ ⊨ n ⇒ (N, e2) -> 
        ⟨M, EAssign v e1⟩ ⊨ n ⇒ ⟨N, EAssign v e2⟩
     | EStep_assign : forall (M:Memory.t) (l:Memory.Loc.t) (e v:expr), 
-       svalue 0 v -> ⟨M, EAssign (ELoc l) v⟩ ⊨ 0 ⇒ ⟨Memory.set l v M, v⟩
+       l < length M -> svalue 0 v -> 
+       ⟨M, EAssign (ELoc l) v⟩ ⊨ 0 ⇒ ⟨Memory.set l v M, v⟩
     | EStep_box : forall (n:nat) (M N:Memory.t) (e1 e2:expr),
        ⟨M, e1⟩ ⊨ S n ⇒ (N, e2) -> ⟨M, EBox e1⟩ ⊨ n ⇒ ⟨N, EBox e2⟩
     | EStep_unbox : forall (n:nat) (M N:Memory.t) (e1 e2:expr),
@@ -261,6 +267,7 @@ Module Type ReplacementCalculus (Repl:Replacement) <: StagedCalculus.
   Definition expr := expr.
 
   Definition svalue := svalue.
+  Definition memory_svalue := memory_svalue.
   Definition ssticks := ssticks.
 
   Definition state := state.

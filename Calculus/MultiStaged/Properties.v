@@ -63,6 +63,20 @@ Module CalculusProperties (Repl:Replacement)
       contradiction).
   Qed.
 
+  Lemma memory_svalue_get:
+    forall (n:nat) (M:Memory.t) (l:location),
+    l < length M -> memory_svalue n M -> 
+    svalue n (Memory.get l M).
+  Proof.
+    induction M ; simpl ; intros.
+    apply lt_n_O in H ; contradiction.
+    inversion H0 ; subst.
+    destruct l ; simpl ; auto.
+    unfold Memory.get ; unfold Memory.get in IHM ; simpl in *|-*.
+    apply IHM ; auto.
+    omega.
+  Qed.
+
   (** ** Partial Functions *)
   
   Lemma sstep_partial_function:
@@ -91,7 +105,7 @@ Module CalculusProperties (Repl:Replacement)
     try(apply svalue_not_sprogresses in H7) ;
     try(contradiction) ; try(trivial) ; fail) ;
 
-    (* App Abs, App Fix, Assign O *)
+    (* App Abs, App Fix *)
     try(inversion H0 ; subst ; try(reflexivity) ;
     try(apply svalue_not_sprogresses in H6) ;
     try(apply svalue_not_sprogresses in H7) ;
@@ -111,10 +125,16 @@ Module CalculusProperties (Repl:Replacement)
     try(constructor) ; trivial ; fail) ;
 
     (* Abs, Fix *)
-    inversion H0 ; subst ;
+    try(inversion H0 ; subst ;
     try(specialize (IHsstep (N0, e3) H6)) ;
     try(specialize (IHsstep (N0, e3) H7)) ;
-    inversion IHsstep ; subst ; reflexivity.
+    inversion IHsstep ; subst ; reflexivity) ;
+
+    (* Assign 0 *)
+    try(inversion H1 ; subst ; try(reflexivity) ;
+    try(apply svalue_not_sprogresses in H7) ;
+    try(apply svalue_not_sprogresses in H8) ;
+    try(contradiction) ; try(trivial) ; constructor ; fail).
   Qed.
 
   (** ** Depth *)

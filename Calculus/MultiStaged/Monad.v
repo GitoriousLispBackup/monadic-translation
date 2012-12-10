@@ -1213,68 +1213,6 @@ Module TranslationProperties (R:Replacement)
     assumption.
   Qed.
 
-(*
-  Lemma ssubst_context_hole:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
-    forall (m n:nat) (h:var) (v:T.expr) (ss:StageSet.t),
-    Context.ssubst_context m ss (hole_var h) (nth n cs nil) v = (nth n cs nil).
-  Proof.
-    admit.
-  Qed.
-
-  Lemma ssubst_fill_hole:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
-    forall (m n:nat) (h:var) (e v:T.expr) (ss:StageSet.t),
-      ssubst m ss (M.cast_var (hole_var h)) (Context.fill (nth n cs nil) e) v =
-      Context.fill (Context.ssubst_context m ss (hole_var h) (nth n cs nil) v) 
-      (ssubst m ss (M.cast_var (hole_var h)) e v).
-  Proof.
-    intros.
-    specialize (ssubst_context_hole e bs) ; intros.
-    destruct (trans e) ; intros.
-    specialize (H m n).
-    induction (nth n t nil).
-    reflexivity.
-
-    simpl in *|-* ; destruct a.
-    apply MP.ssubst_bind.
-    apply functional_extensionality.
-    intros.
-    rewrite MP.ssubst_eapp.
-    rewrite MP.ssubst_eabs.
-    specialize (H h v (if beq_var (hole_var h) (hole_var v0) then StageSet.add m ss else ss)).
-    inversion H ; simpl.
-    
-    rewrite H2.
-    rewrite H2.
-    rewrite IHc.
-    
-
-    simpl in H.
-    assert(beq_nat (hole_var h) (hole_var v0) = false).
-    apply VarSetProperties.add_mem_6 in H.
-    apply beq_nat_false_iff.
-    unfold not ; intros ; unfold hole_var in *|-*.
-    clear IHc ; omega.
-    rewrite H0.
-    simpl.
-    apply MP.ssubst_bind.
-    apply functional_extensionality.
-    intros.
-    rewrite MP.ssubst_eapp.
-    rewrite MP.ssubst_eabs.
-    assert(beq_var (hole_var h) (hole_var v0) = false).
-    assumption.
-    rewrite H1.
-    rewrite IHc.
-    reflexivity.
-    apply VarSetProperties.add_mem_5 in H.
-    assumption.
-  Qed.
-*)
-
   Lemma ssubst_fill_source:
     forall (x:var) (e v:T.expr) (c:Context.t) (ss:StageSet.t) (n:nat),
       ssubst n ss (M.cast_var (source_var x)) (Context.fill c e) v =
@@ -2809,7 +2747,18 @@ Module TranslationProperties (R:Replacement)
           inversion Shift1 ; subst.
           simpl in *|-* ; inversion H3.
           constructor ; auto.
-          admit.
+          assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
+          simpl ; rewrite plus_0_r ; reflexivity.
+          simpl tl in Tmp1.
+          rewrite Tmp1.
+          rewrite Tmp1.
+          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (b1:=n0) (b2:=n) ; auto.
+          destruct t0 ; [inversion Shift1 |].
+          destruct (Context.shift (t0 :: t2)) ; inversion Shift1 ; subst.
+          assumption.
+          constructor ; auto.
           constructor ; auto.
 
           assert(Context.unshift t2 (p :: t1) = Context.unshift t2 ((fun x => x) (p :: t1))) as Shift2.

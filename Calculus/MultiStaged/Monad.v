@@ -423,6 +423,12 @@ Module Type MonadProperties (R:Replacement)
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind e1 f) (M2, bind e2 f).
 
+  Parameter astep_bind_elift :
+    forall (e1 e2:expr) (M1 M2:Memory.t),
+    let f := fun v => cast_elift v in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
   Parameter astep_bind_2 :
     forall (v:S.expr) (e:expr) (bs:list nat) (M1 M2:Memory.t) (f:expr -> expr),
     S.svalue 0 v -> astep (M1, (f (phi v bs))) (M2, e) ->
@@ -450,6 +456,11 @@ Module Type MonadProperties (R:Replacement)
     forall (M:Memory.t) (e:S.expr) (bs:list nat),
     S.svalue 1 e ->
     astep (M, cast_erun (cast_ebox (trans_expr e bs))) (M, trans_expr e bs).
+
+  Parameter astep_elift :
+    forall (M:Memory.t) (e:S.expr) (bs:list nat),
+    S.svalue 0 e ->
+    astep (M, cast_elift (phi e bs)) (M, ret (cast_ebox (ret (phi e bs)))).
 
 End MonadProperties.
 
@@ -2945,7 +2956,57 @@ Module TranslationProperties (R:Replacement)
       exfalso ; generalize H1 ; clear ; simpl ; intros ; omega.
 
     (* Case ELift *)
-    admit.
+    specialize (depth_length e1 bs) ; intros DpthLength.
+    inversion Step ; subst.
+    specialize (IHe1 bs).
+    destruct (trans e1).
+    destruct t ; intros.
+
+      (* SubCase ELift, n=0, e -> e' *)
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      unfold trans_expr in *|-* ; simpl in *|-*.
+      inversion IHe1 ; subst.
+      apply Rel_step with (e1:=bind e0 (fun v => cast_elift v)) ; auto.
+      apply MP.astep_bind_elift ; assumption.
+      destruct (trans e3).
+      constructor ; [auto | intros ; constructor].
+
+      (* SubCase ELift, n>0 *)
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      destruct (Context.shift (t :: t0)).
+      destruct t1 ; simpl in *|-* ; auto.
+      destruct p ; destruct (trans e3) ; intros.
+      destruct IHe1 ; exists x.
+      destruct H ; split ; [assumption|].
+      destruct H0 ; [left | right] ; destruct H0.
+
+        (* Case svalue *)
+        destruct H2 ; destruct H3 ; subst.
+        repeat(split ; auto).
+        unfold admin_ssubst ; intros.
+        rewrite MP.ssubst_bind with (f2:=fun v0 => cast_elift v0).
+        constructor ; auto.
+        intros ; constructor.
+        apply functional_extensionality ; intros.
+        rewrite MP.ssubst_elift ; auto.
+
+        (* Case not svalue *)
+        exists x0.
+        destruct H0 ; destruct H2 ; subst ; auto.
+
+      (* SubCase ELift, n=0, svalue 0 e *)
+      specialize (svalue_phi e1 bs H1) ; intros SValuePhi.
+      unfold trans_expr in SValuePhi.
+      unfold trans_expr.
+      simpl.
+      rewrite trans_depth_0 with (bs1:=0::bs) (bs2:=bs) ; auto.
+      destruct (trans e1 bs).
+      rewrite <- H in DpthLength ; destruct t ; [|inversion DpthLength].
+      clear IHe1 ; subst.
+      apply Rel_step with (e1:=ret (cast_ebox (ret (phi e1 bs)))).
+      apply MP.astep_bind_2 ; auto.
+      apply MP.astep_elift ; auto.
+      simpl ; constructor.
   Qed.
 
   Theorem sstep_rstep_O:

@@ -440,6 +440,14 @@ Module Type MonadProperties (R:Replacement)
       (cast_eabs (cast_var x) e) (phi v bs))
       (M, ssubst 0 StageSet.empty (cast_var x) e (phi v bs)).
 
+  Parameter astep_app_fix :
+    forall (v:S.expr) (f x:S.var) (e:expr) (bs:list nat) (M:Memory.t),
+    S.svalue 0 v -> astep (M, cast_eapp
+      (cast_efix (cast_var f) (cast_var x) e) (phi v bs))
+      (M, ssubst 0 StageSet.empty (cast_var f)
+      (ssubst 0 StageSet.empty (cast_var x) e (phi v bs))
+      (cast_efix (cast_var f) (cast_var x) e)).
+
   Parameter astep_eref :
     forall (v:S.expr) (M:Memory.t) (bs:list nat),
     S.svalue 0 v -> 
@@ -2346,8 +2354,6 @@ Module TranslationProperties (R:Replacement)
       destruct H3 ; destruct H4 ; subst ; auto.
 
     (* Case EApp *)
-    admit.
-    (*
     inversion Step ; subst ; simpl in *|-*.
     
       (* Case EApp e1 e2,  e1 -> e1' *)
@@ -2360,24 +2366,22 @@ Module TranslationProperties (R:Replacement)
       symmetry in H ; apply max_0 in H.
       destruct H.
       clear IHe1_2 IHe1_1.
-      specialize (depth_length e (List2.map_iter (fun b n => (b + booker e1_2 n)%nat) bs 0)) ; intros.
-      assert(let (e0, _) := trans e (List2.map_iter (fun b n => (b + booker e1_2 n)%nat) bs 0) in
-      cast_eabs (cast_var (source_var x)) e0 = 
-      phi (CRaw.EAbs x e) (List2.map_iter (fun b n => (b + booker e1_2 n)%nat) bs 0)).
-      simpl ; destruct (trans e) ; reflexivity.
+      specialize (svalue_phi (CRaw.EAbs x e) (map_iter_booker e1_2 bs 0)) ; intros SValuePhi1.
+      specialize (depth_length e (map_iter_booker e1_2 bs 0)) ; intros DpthLength1.
+      unfold trans_expr in SValuePhi1 ; simpl trans in SValuePhi1 ;
       destruct (trans e).
-      rewrite H3.
-      rewrite H in H2 ; destruct t ; simpl in *|- ;
-      [clear H2 |inversion H2].
-      specialize (depth_length e1_2 bs) ; intros.
-      specialize (svalue_phi e1_2 bs H1) ; intros.
-      unfold trans_expr in H4.
+      rewrite H in DpthLength1 ; destruct t ;
+      [clear DpthLength1 |inversion DpthLength1].
+      specialize (depth_length e1_2 bs) ; intros DpthLength2.
+      specialize (svalue_phi e1_2 bs H1) ; intros SValuePhi2.
+      unfold trans_expr in SValuePhi2 ;
       destruct (trans e1_2).
-      rewrite H0 in H2 ; destruct t ; simpl in *|-;
-      [clear H2 |inversion H2].
-      rewrite H4 ; unfold Context.merge.
+      rewrite H0 in DpthLength2 ; destruct t ;
+      [clear DpthLength2 |inversion DpthLength2].
+      simpl.
       apply Rel_step with 
       (e1:=trans_expr (S.ssubst 0 StageSet.empty x e e1_2) bs).
+      rewrite SValuePhi1, SValuePhi2 ; [|constructor].
       apply MP.astep_bind_2 ; [constructor|].
       apply MP.astep_bind_2 ; [assumption|].
       specialize (trans_ssubst_source e e1_2 bs x StageSet.empty 0) ; intros.
@@ -2391,8 +2395,47 @@ Module TranslationProperties (R:Replacement)
       constructor.
 
       (* Case EApp (EFix), n = 0 *)
-      admit.
-    *)
+      symmetry in H ; apply max_0 in H.
+      destruct H.
+      clear IHe1_2 IHe1_1.
+      specialize (svalue_phi (CRaw.EFix f x e) (map_iter_booker e1_2 bs 0)) ; intros SValuePhi1.
+      specialize (depth_length e (map_iter_booker e1_2 bs 0)) ; intros DpthLength1.
+      unfold trans_expr in SValuePhi1 ; simpl trans in SValuePhi1 ;
+      destruct (trans e).
+      rewrite H in DpthLength1 ; destruct t ;
+      [clear DpthLength1 |inversion DpthLength1].
+      specialize (depth_length e1_2 bs) ; intros DpthLength2.
+      specialize (svalue_phi e1_2 bs H1) ; intros SValuePhi2.
+      unfold trans_expr in SValuePhi2 ;
+      destruct (trans e1_2).
+      rewrite H0 in DpthLength2 ; destruct t ;
+      [clear DpthLength2 |inversion DpthLength2].
+      simpl.
+      apply Rel_step with 
+      (e1:=trans_expr (CRaw.ssubst 0 StageSet.empty f 
+        (CRaw.ssubst 0 StageSet.empty x e e1_2)
+        (CRaw.EFix f x e)) bs).
+      rewrite SValuePhi1, SValuePhi2 ; [|constructor].
+      apply MP.astep_bind_2 ; [constructor|].
+      apply MP.astep_bind_2 ; [assumption|].
+      specialize (trans_ssubst_source (S.ssubst 0 StageSet.empty x e e1_2) 
+        (CRaw.EFix f x e) bs f StageSet.empty 0) ; intros Ssubst1.
+      unfold trans_expr ; simpl.
+      rewrite trans_depth_0 with (bs2:=bs) ; auto.
+      specialize (depth_length e bs) ; intros.
+      specialize (trans_ssubst_source e e1_2 bs x StageSet.empty 0) ; intros Ssubst2.
+      simpl in *|-*.
+      destruct (trans e bs).
+      rewrite Ssubst2 in Ssubst1 ; auto.
+      assert(CRaw.ssubst = S.ssubst) as Eq1.
+      reflexivity.
+      rewrite Eq1, Ssubst1 ; auto.
+      simpl.
+      apply MP.astep_app_fix ; auto.
+      constructor.
+      rewrite H in H2 ; destruct t ; [simpl ; omega|inversion H2].
+      omega.
+      constructor.
 
     (* Case ELoc *)
     inversion Step.

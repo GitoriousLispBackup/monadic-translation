@@ -3,6 +3,7 @@ Require Import Coq.Arith.Arith.
 Require Import Coq.Arith.MinMax.
 Require Import Coq.Arith.NatOrderedType.
 Require Import Coq.Bool.Bool.
+Require Import Coq.Arith.Compare_dec.
 Require Import "Calculus/Sets".
 Require Import "Calculus/Definitions".
 
@@ -31,6 +32,33 @@ Module CalculusData.
    | ERun : expr -> expr
    | ELift : expr -> expr.
 
+  Inductive complexity : nat -> expr -> Prop :=
+    | Compl_const : forall (c:const), complexity 0 (EConst c)
+    | Compl_var : forall (x:var), complexity 0 (EVar x)
+    | Compl_abs : forall (n:nat) (x:var) (e:expr), 
+        complexity n e -> complexity (S n) (EAbs x e)
+    | Compl_fix : forall (n:nat) (f x:var) (e:expr), 
+        complexity n e -> complexity (S n) (EFix f x e)
+    | Compl_app : forall (m n:nat) (e1 e2:expr), 
+        complexity m e1 -> complexity n e2 ->
+	complexity (S (max m n)) (EApp e1 e2)
+    | Compl_loc : forall (l:location), complexity 0 (ELoc l)
+    | Compl_ref : forall (n:nat) (e:expr), 
+        complexity n e -> complexity (S n) (ERef e)
+    | Compl_deref : forall (n:nat) (e:expr), 
+        complexity n e -> complexity (S n) (EDeref e)
+    | Compl_assign : forall (m n:nat) (e1 e2:expr), 
+        complexity m e1 -> complexity n e2 ->
+	complexity (S (max m n)) (EAssign e1 e2)
+    | Compl_box : forall (n:nat) (e:expr), 
+        complexity n e -> complexity (S n) (EBox e)
+    | Compl_unbox : forall (n:nat) (e:expr),
+        complexity n e -> complexity (S n) (EUnbox e)
+    | Compl_run : forall (n:nat) (e:expr),
+        complexity n e -> complexity (S n) (ERun e)
+    | Compl_lift : forall (n:nat) (e:expr),
+        complexity n e -> complexity (S n) (ELift e).
+
   (** ** Values *)
   Inductive svalue : nat -> expr -> Prop :=
     | EVal_const : forall (n:nat) (c:const), svalue n (EConst c)
@@ -58,6 +86,23 @@ Module CalculusData.
         svalue (S n) e -> svalue (S n) (ERun e)
     | EVal_lift : forall (n:nat) (e:expr),
         svalue (S n) e -> svalue (S n) (ELift e).
+
+  Fixpoint svalueb (n:nat) (e:expr) : bool :=
+    match e with
+    | EConst _ => true
+    | EVar _ => true
+    | EAbs _ e => beq_nat n 0 || svalueb n e
+    | EFix _ _ e => beq_nat n 0 || svalueb n e
+    | EApp e1 e2 => (leb 1 n) && svalueb n e1 && svalueb n e2
+    | ELoc _ => true
+    | ERef e => (leb 1 n) && svalueb n e
+    | EDeref e => (leb 1 n) && svalueb n e
+    | EAssign e1 e2 => (leb 1 n) && svalueb n e1 && svalueb n e2
+    | EBox e => svalueb (S n) e
+    | EUnbox e => (leb 2 n) && svalueb (pred n) e
+    | ERun e => (leb 1 n) && svalueb n e
+    | ELift e => (leb 1 n) && svalueb n e
+    end.
 
   (** ** Memory **)
   Module MemoryType <: MemoryType.

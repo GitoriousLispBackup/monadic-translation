@@ -393,6 +393,12 @@ Module Type MonadProperties (R:Replacement)
 
   (** Abstract Reduction Properties *)
 
+  Parameter astep_bind_app :
+    forall (e1 e2 ef:expr) (M1 M2:Memory.t),
+    let f := fun v1 => bind ef (fun v2 : T.expr => cast_eapp v1 v2) in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
   Parameter astep_bind_app_eabs :
     forall (e1 e2 ef:expr) (M1 M2:Memory.t) (x:var),
     let f := fun v => cast_eapp (cast_eabs x ef) v in
@@ -414,6 +420,12 @@ Module Type MonadProperties (R:Replacement)
   Parameter astep_bind_ederef :
     forall (e1 e2:expr) (M1 M2:Memory.t),
     let f := fun v => cast_ederef v in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
+  Parameter astep_bind_assign :
+    forall (e1 e2 ef:expr) (M1 M2:Memory.t),
+    let f := fun v1 => bind ef (fun v2 : T.expr => cast_eassign v1 v2) in
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind e1 f) (M2, bind e2 f).
 
@@ -668,7 +680,7 @@ Module TranslationStaticProperties (R:Replacement)
     length cs2 <= depth e1.
   Proof.
     intros.
-    specialize (CalculusProperties.depth_sstep_2 M1 e1 M2 e2 H0 H) ; intros.
+    specialize (CalculusProperties.depth_sstep_eq M1 e1 M2 e2 H0 H) ; intros.
     destruct H1.
     specialize (depth_length e2 bs) ; intros.
     destruct (trans e2).
@@ -2295,10 +2307,82 @@ Module TranslationProperties (R:Replacement)
     inversion Step ; subst ; simpl in *|-*.
     
       (* Case EApp e1 e2,  e1 -> e1' *)
-      admit.
+      specialize (max_spec (depth e1_1) (depth e1_2)) ; intros MaxLeft.
+      destruct MaxLeft ; destruct H.
+      rewrite H0 in H1.
+      specialize (CalculusProperties.depth_sstep_lt 
+        M1 e1_1 M2 e3 (depth e1_2) H H1) ;
+      intros ; contradiction.
+      rewrite H0 in *|-* ; clear IHe1_2.
+      specialize (IHe1_1 (map_iter_booker e1_2 bs 0) 
+        e3 M1 M2 MemSvalue0 MemDepth0).
+      assert(length (map_iter_booker e1_2 bs 0) = length bs) as Eq2.
+      unfold map_iter_booker ; 
+      rewrite List2Properties.length_map_iter ; auto.
+      rewrite Eq2 in IHe1_1 ; specialize (IHe1_1 BSLength H1).
+      specialize (depth_length e1_1 (map_iter_booker e1_2 bs 0)) ; intros DpthLength3.
+      specialize (depth_length e1_2 bs) ; intros DpthLength4.
+      unfold trans_expr ; simpl.
+      destruct (trans e1_1).
+      destruct (trans e1_2).
+      destruct t.
+ 
+        (* Case EApp e1 e2, n = 0, e1 -> e1' *)
+        destruct t0 ; [|exfalso ; simpl in *|-* ; omega] ; simpl.
+        unfold trans_expr in IHe1_1 ; destruct (trans e3).
+        inversion IHe1_1 ; subst.
+        specialize (CalculusProperties.depth_sstep_eq 
+          M1 e1_1 M2 e3 MemDepth0 H1) ; intros Dpth1.
+        simpl in *|-* ; destruct Dpth1.
+        apply Rel_step with (e1:=bind e2 (fun v1 => bind e0 
+          (fun v2 => cast_eapp v1 v2))).
+        apply MP.astep_bind_app ; auto.
+        rewrite trans_memory_depth_0 with (bs2:=bs) in H5 ; auto.
+        rewrite trans_memory_depth_0 with 
+          (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H5 ; auto.
+        constructor ; auto ; intros.
+        constructor.
+
+        (* Case EApp e1 e2, n > 0, e1 -> e1' *)
+        admit.
 
       (* Case EApp e1 e2,  e2 -> e2' *)
-      admit.
+      specialize (max_spec (depth e1_2) (depth e1_1)) ; intros MaxRight.
+      destruct MaxRight ; destruct H ; rewrite max_comm in H0.
+      rewrite H0 in H6.
+      specialize (CalculusProperties.depth_sstep_lt 
+        M1 e1_2 M2 e0 (depth e1_1) H H6) ;
+      intros ; contradiction.
+      rewrite H0 in *|-* ; clear IHe1_1.
+      specialize (IHe1_2 bs e0 M1 M2 MemSvalue0 MemDepth0 BSLength H6).
+      specialize (depth_length e1_1 (map_iter_booker e1_2 bs 0)) ; intros DpthLength3.
+      specialize (depth_length e1_2 bs) ; intros DpthLength4.
+      unfold trans_expr ; simpl.
+      destruct (trans e1_2).
+      destruct t.
+ 
+        (* Case EApp e1 e2, n = 0, e2 -> e2' *)
+        rewrite DpthLength4 in H ; apply le_n_0_eq in H.
+        rewrite trans_depth_0 with (bs1:=map_iter_booker e0 bs 0) (bs2:=map_iter_booker e1_2 bs 0) ; auto.
+        destruct (trans e1_1).
+        destruct t ; [|exfalso ; simpl in *|-* ; omega] ; simpl.
+        unfold trans_expr in IHe1_2 ; destruct (trans e0).
+        inversion IHe1_2 ; subst.
+        specialize (CalculusProperties.depth_sstep_eq 
+          M1 e1_2 M2 e0 MemDepth0 H6) ; intros Dpth1.
+        simpl in *|-* ; destruct Dpth1.
+        fail.
+        apply Rel_step with (e1:=bind e2 (fun v1 => bind e0 
+          (fun v2 => cast_eapp v1 v2))).
+        apply MP.astep_bind_app ; auto.
+        rewrite trans_memory_depth_0 with (bs2:=bs) in H5 ; auto.
+        rewrite trans_memory_depth_0 with 
+          (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H5 ; auto.
+        constructor ; auto ; intros.
+        constructor.
+
+        (* Case EApp e1 e2, n > 0, e2 -> e2' *)
+        admit.
 
       (* Case EApp (EAbs), n = 0 *)
       symmetry in H ; apply max_0 in H.
@@ -2571,7 +2655,7 @@ Module TranslationProperties (R:Replacement)
             rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs).
             assumption.
             rewrite <- DpthLength in H1.
-            apply CalculusProperties.depth_sstep_2 in H1 ; auto.
+            apply CalculusProperties.depth_sstep_eq in H1 ; auto.
             destruct H1 ; assumption.
             simpl ; constructor ;
             [assumption | intros ; constructor].
@@ -2641,7 +2725,7 @@ Module TranslationProperties (R:Replacement)
           repeat(split ; auto).
           rewrite trans_memory_depth_0 with (bs2:=0::bs) ; auto.
           rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs) ; auto.
-          apply CalculusProperties.depth_sstep_2 in H1 ; auto.
+          apply CalculusProperties.depth_sstep_eq in H1 ; auto.
           destruct H1 ; assumption.
 
     (* Case EUnbox *)
@@ -2660,7 +2744,7 @@ Module TranslationProperties (R:Replacement)
       apply le_S_n in BSLength.
       specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
       specialize (depth_length e3 bs) ; intros DpthLength2.
-      specialize (CalculusProperties.depth_sstep_2 M1 e1 M2 e3 MemDepth0 H1) ; 
+      specialize (CalculusProperties.depth_sstep_eq M1 e1 M2 e3 MemDepth0 H1) ; 
       intros DpthStep ; simpl.
       destruct t.
 

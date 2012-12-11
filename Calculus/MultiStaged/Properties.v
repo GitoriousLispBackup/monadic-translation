@@ -20,7 +20,78 @@ Module CalculusProperties (Repl:Replacement)
   Import Calculus.
   Import Terminology.
 
+  (** ** Complexity *)
+  
+  Lemma complexity_exists:
+    forall (e:expr), exists n, complexity n e.
+  Proof.
+    induction e ; simpl ; intros ;
+    try(exists 0 ; constructor ; fail) ;
+    try(destruct IHe ; exists (S x) ; constructor ; auto ; fail) ;
+    try(destruct IHe1 ; destruct IHe2 ; 
+    exists (S (max x x0)) ; constructor ; auto).
+  Qed.
+
+  Lemma complexity_unique:
+    forall (e:expr) (m n:nat),
+    complexity m e -> complexity n e -> m = n.
+  Proof.
+    induction e ; intros ; 
+    try(inversion H ; inversion H0 ; auto ; fail).
+  Qed.
+
   (** ** Values *)
+
+  Lemma svalueb_iff:
+    forall (e:expr) (n:nat),
+    svalueb n e = true <-> svalue n e.
+  Proof.
+    induction e ; simpl ; split ; intros ; auto ;
+
+    (* Case EConst, ELoc *)
+    try(constructor ; auto ; fail) ;
+
+    (* Case ERef, EDeref, ERun, ELift *)
+    try(destruct n ; [inversion H|] ; 
+      apply IHe in H ; constructor ; auto ; fail) ;
+    try(inversion H ; subst ; apply IHe in H2 ; auto ; fail) ;
+
+    (* Case EApp, EAssign *)
+    try(apply andb_true_iff in H ; destruct H ;
+    destruct n ; [inversion H|] ;
+    apply IHe1 in H ; apply IHe2 in H0 ; constructor ; auto ; fail) ;
+    try(inversion H ; subst ;
+    apply IHe1 in H3 ; apply IHe2 in H4 ;
+    apply andb_true_iff ; split ; auto ; fail).
+
+    (* Case EAbs *)
+    apply orb_true_iff in H.
+    destruct H.
+    apply beq_nat_true_iff in H ; subst ; constructor.
+    apply IHe in H.
+    destruct n ; constructor ; auto.
+    apply orb_true_iff.
+    inversion H ; subst.
+    apply IHe in H2 ; right ; auto.
+    left ; rewrite <- beq_nat_refl ; auto.
+
+    (* Case EFix *)
+    apply orb_true_iff in H.
+    destruct H.
+    apply beq_nat_true_iff in H ; subst ; constructor.
+    apply IHe in H.
+    destruct n ; constructor ; auto.
+    apply orb_true_iff.
+    inversion H ; subst.
+    apply IHe in H2 ; right ; auto.
+    left ; rewrite <- beq_nat_refl ; auto.
+
+    (* Case EUnbox *)
+    destruct n ; [inversion H|].
+    destruct n ; [inversion H|].
+    simpl in H.
+    apply IHe in H ; constructor ; auto.
+  Qed.
 
   Lemma svalue_n_Sn_O:
     forall (n:nat) (e:expr),
@@ -138,51 +209,6 @@ Module CalculusProperties (Repl:Replacement)
   Qed.
 
   (** ** Depth *)
-  Lemma depth_sstep:
-    forall (M1:Memory.t) (e1:expr)
-    (M2:Memory.t) (e2:expr) (n:nat),
-    depth e1 < n -> (M1, e1) ⊨ n ⇒ (M2, e2) ->
-    e1 = e2 /\ M1 = M2.
-  Proof.
-    induction e1 ; simpl ; intros ;
-    destruct n ; try(inversion H ; fail) ;
-
-    (* EConst, ELoc, EVar *)
-    try(inversion H0 ; fail) ;
-
-    (* EAbs, EFix *)
-    try(inversion H0 ; subst ;
-    specialize (IHe1 M2 e3 (S n) H H3) ;
-    destruct IHe1 ; subst ; auto ; fail) ;
-
-    (* ERef, EDeref, ERun, ELift *)
-    try(inversion H0 ; subst ;
-    specialize (IHe1 M2 e3 (S n) H H3) ;
-    destruct IHe1 ; subst ; auto ; fail) ;
-
-    (* EApp, EAssign *)
-    try(apply max_lub_lt_iff in H ; destruct H ;
-    inversion H0 ; subst ; [
-    specialize (IHe1_1 M2 e3 (S n) H H4) ;
-    destruct IHe1_1 ; subst ; auto |
-    specialize (IHe1_2 M2 e0 (S n) H1 H9) ;
-    destruct IHe1_2 ; subst ; auto ] ; fail).
-
-    (* EBox *)
-    inversion H0 ; subst.
-    destruct (depth e1) ; simpl in H ;
-    [ assert(0 < S (S n)) ; auto |
-     assert(S n0 < S (S n)) ; try(omega)] ;
-    specialize (IHe1 M2 e3 (S (S n)) H1 H3) ;
-    destruct IHe1 ; subst ; auto.
-    
-    (* EUnbox *)
-    inversion H0 ; subst.
-    apply lt_S_n in H.
-    specialize (IHe1 M2 e3 n H H3).
-    destruct IHe1 ; subst ; auto.
-    exfalso ; omega.
-  Qed.
 
   Lemma depth_svalue:
     forall (e:expr) (n:nat),
@@ -330,7 +356,30 @@ Module CalculusProperties (Repl:Replacement)
     reflexivity.
   Qed.
 
-  Lemma depth_sstep_2:
+  Lemma depth_sstep_lt:
+    forall (M1:Memory.t) (e1:expr)
+    (M2:Memory.t) (e2:expr) (n:nat),
+    depth e1 < n -> ~ (M1, e1) ⊨ n ⇒ (M2, e2).
+  Proof.
+    induction e1 ; simpl ; unfold not ; intros ;
+    try(inversion H0 ; fail) ;
+    try(destruct n ; [omega|] ;
+      inversion H0 ; subst ;
+      apply IHe1 in H3 ; auto ; omega ; fail) ;
+    try(destruct n ; [omega|] ;
+      apply le_S_n in H ;
+      apply max_lub_iff in H ;
+      destruct H ;
+      inversion H0 ; subst ; [
+      apply IHe1_1 in H4 | apply IHe1_2 in H9] ; 
+      auto ; omega ; fail).
+    destruct n ; [omega|].
+    destruct n ; [omega|].
+    inversion H0 ; subst.
+    apply IHe1 in H3 ; auto ; omega.
+  Qed.
+
+  Lemma depth_sstep_eq:
     forall (M1:Memory.t) (e1:expr)
     (M2:Memory.t) (e2:expr),
     memory_depth M1 = 0 ->
@@ -358,7 +407,7 @@ Module CalculusProperties (Repl:Replacement)
     try(specialize (max_spec (depth e1_1) (depth e1_2)) ; intros ;
     destruct H1 ; destruct H1 ;
     rewrite H2 in *|-* ;
-    [ apply depth_sstep in H3 ; [destruct H3 ; subst ; 
+    [ apply depth_sstep_lt in H3 ; [destruct H3 ; subst ; 
     rewrite max_r ; auto ; apply lt_le_weak |] ; assumption |
     specialize (IHe1_1 M2 e3 H3) ;
     destruct IHe1_1 ; split ; 
@@ -371,7 +420,7 @@ Module CalculusProperties (Repl:Replacement)
     [ destruct (depth e1_1) ; 
     [apply lt_n_O in H1 ; contradiction|
     apply depth_svalue in H4 ;
-    apply depth_sstep in H8 ; [destruct H8; subst ;
+    apply depth_sstep_lt in H8 ; [destruct H8; subst ;
     rewrite max_l ; auto ; apply lt_le_weak |] ; assumption ] | 
     specialize (IHe1_2 M2 e0 H8) ;
     destruct IHe1_2 ; split ; 
@@ -422,15 +471,14 @@ Module CalculusProperties (Repl:Replacement)
     simpl in H2 ; apply le_n_0_eq in H2 ; split ; auto.
     
     (* Case EBox *)
-    specialize (depth_sstep M1 e1 M2 e3 1) ; intros.
+    specialize (depth_sstep_lt M1 e1 M2 e3 1) ; intros.
     assert(depth e1 = depth ((fun x => x) e1)).
     reflexivity.
     destruct (depth e1) ; simpl in *|-*.
     assert(0 < 1).
     auto.
     specialize (H1 H4 H3).
-    destruct H1 ; subst.
-    rewrite <- H2 ; split ; auto.
+    contradiction.
     specialize (IHe1 M2 e3 H3).
     destruct IHe1 ; split ; auto.
     assert(n = pred (S n)).

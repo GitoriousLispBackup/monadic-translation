@@ -93,6 +93,19 @@ Module CalculusProperties (Repl:Replacement)
     apply IHe in H ; constructor ; auto.
   Qed.
 
+  Lemma svalueb_iff_conv:
+    forall (e:expr) (n:nat),
+    svalueb n e = false <-> ~ svalue n e.
+  Proof.
+    intros ; split ; unfold not ; intros.
+    apply svalueb_iff in H0.
+    rewrite H in H0 ; inversion H0.
+    remember (svalueb n e) ; destruct b ; symmetry in Heqb.
+    apply svalueb_iff in Heqb.
+    exfalso ; tauto.
+    reflexivity.
+  Qed.
+
   Lemma svalue_n_Sn_O:
     forall (n:nat) (e:expr),
     svalue n e -> svalue (S n) e \/ n = 0.
@@ -118,20 +131,14 @@ Module CalculusProperties (Repl:Replacement)
     destruct H ; [assumption|inversion H].
   Qed.
 
-  Lemma svalue_not_sprogresses:
-    forall (n:nat) (M:Memory.t) (v:expr),
-    svalue n v -> not_sprogresses n (M,v).
+  Lemma svalue_le:
+    forall (n m:nat) (e:expr),
+    svalue (S n) e -> (S n) <= m -> svalue m e.
   Proof.
-    unfold not_sprogresses ;
-    induction 1 ; red ; intros ;
-    try(inversion H ; fail) ;
-    try(inversion H0 ; subst ;
-      try(apply IHsvalue in H5) ; 
-      try(apply IHsvalue in H6) ;
-      try(apply IHsvalue in H7) ; contradiction) ;
-    try(inversion H1 ; subst ;
-      [apply IHsvalue1 in H7 | apply IHsvalue2 in H8] ;
-      contradiction).
+    intros.
+    induction H0 ; subst ; auto.
+    destruct m ; [exfalso ; omega|].
+    apply svalue_Sn_SSn ; auto.
   Qed.
 
   Lemma memory_svalue_get:
@@ -146,6 +153,53 @@ Module CalculusProperties (Repl:Replacement)
     unfold Memory.get ; unfold Memory.get in IHM ; simpl in *|-*.
     apply IHM ; auto.
     omega.
+  Qed.
+
+  (** ** Trichotomy *)
+  Lemma sprogresses_not_svalue:
+    forall (M1:Memory.t) (e:expr) (n:nat),
+    sprogresses n (M1,e) -> ~ svalue n e.
+  Proof.
+    induction e ; unfold sprogresses, not in *|-* ; simpl ; intros ;
+    try(destruct H ; inversion H ; fail) ;
+    
+    (* Case EAbs, EFix *)
+    try(destruct H ; inversion H ; subst ;
+    specialize (IHe (S n0)) ;
+    inversion H0 ; subst ;
+    apply IHe in H3 ; auto ;
+    exists (N,e2) ; auto ; fail) ;
+
+    (* Case EApp, EAssign *)
+    try(inversion H0 ; subst ;
+    destruct H ;
+    inversion H ; subst ; [
+    apply IHe1 in H4 ; auto ;
+    exists (N,e4) ; auto |
+    apply IHe2 in H5 ; auto ;
+    exists (N,e3) ; auto] ; fail) ;
+
+    (* Case ERef, EDeref, ERun, ELift *)
+    try(inversion H0 ; subst ;
+    destruct H ; inversion H ; subst ;
+    apply IHe in H3 ; auto ;
+    exists (N, e2) ; auto ; fail).
+  Qed.
+
+  Lemma svalue_not_sprogresses:
+    forall (n:nat) (M:Memory.t) (v:expr),
+    svalue n v -> not_sprogresses n (M,v).
+  Proof.
+    unfold not_sprogresses ;
+    induction 1 ; red ; intros ;
+    try(inversion H ; fail) ;
+    try(inversion H0 ; subst ;
+      try(apply IHsvalue in H5) ; 
+      try(apply IHsvalue in H6) ;
+      try(apply IHsvalue in H7) ; contradiction) ;
+    try(inversion H1 ; subst ;
+      [apply IHsvalue1 in H7 | apply IHsvalue2 in H8] ;
+      contradiction).
   Qed.
 
   (** ** Partial Functions *)
@@ -251,6 +305,45 @@ Module CalculusProperties (Repl:Replacement)
    inversion H ; subst.
    apply IHe in H2 ; omega.
   Qed.
+
+  Lemma svalue_ssubst:
+    forall (e v:expr) (m n:nat) (x:var) (ss:StageSet.t),
+    depth v = 0 -> svalue 0 v ->
+    (svalue n (ssubst m ss x e v) <-> svalue n e).
+  Proof.
+    induction e ; simpl ; intros ; split ; intros ;
+    try(constructor ; auto ; fail) ;
+    try(inversion H1 ; subst ; constructor ; 
+    apply IHe in H4 ; auto ; fail) ;
+    try(inversion H1 ; constructor ; apply IHe ; auto ; fail).
+
+    (* Case EVar *)
+    destruct (beq_nat x v && BindingSet.rho m ss) ; auto.
+    inversion H0 ; subst ; try(constructor) ; auto.
+
+    (* Case EAbs *)
+    destruct n ; [constructor|].
+    apply depth_svalue ; auto ; omega.
+    destruct n ; [constructor|].
+    apply depth_svalue ; auto ; omega.
+    simpl in H.
+    apply svalue_le with (n:=0) ; auto ; omega.
+
+    (* Case EApp *)
+    inversion H1 ; subst.
+    apply IHe1 in H5 ; auto ; apply IHe2 in H6 ; auto.
+    constructor ; auto.
+    inversion H1 ; subst.
+    constructor ; [apply IHe1 | apply IHe2] ; auto.
+
+    (* Case EAssign *)
+    inversion H1 ; subst.
+    apply IHe1 in H5 ; auto ; apply IHe2 in H6 ; auto.
+    constructor ; auto.
+    inversion H1 ; subst.
+    constructor ; [apply IHe1 | apply IHe2] ; auto.
+  Qed.
+
 
   Lemma depth_ssubst:
     forall (e1 e2:expr) (ss:StageSet.t) (x:var) (n:nat),

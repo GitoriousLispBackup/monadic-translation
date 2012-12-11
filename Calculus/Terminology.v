@@ -131,7 +131,7 @@ Module TerminologyProperties (C:Calculus).
 End TerminologyProperties.
 
 (** ** Staged Terminology Properties *)
-(*
+
 Module StagedTerminologyProperties (C:StagedCalculus).
 
   Module Terminology := StagedTerminology C.
@@ -139,8 +139,8 @@ Module StagedTerminologyProperties (C:StagedCalculus).
   Import C.
 
   Lemma shalts_not_shalts:
-    forall t1:term,
-    shalts t1 -> ~ not_shalts t1.
+    forall (n:nat) (s:state),
+    shalts n s -> ~ not_shalts n s.
   Proof.
     intros ; red ; intros.
     apply all_not_not_ex in H0.
@@ -148,8 +148,8 @@ Module StagedTerminologyProperties (C:StagedCalculus).
   Qed.
 
   Lemma not_shalts_shalts:
-    forall t1:term,
-    not_shalts t1 -> ~ shalts t1.
+    forall (n:nat) (s:state),
+    not_shalts n s -> ~ shalts n s.
   Proof.
     intros.
     apply all_not_not_ex in H.
@@ -157,8 +157,8 @@ Module StagedTerminologyProperties (C:StagedCalculus).
   Qed.
 
   Lemma sprogresses_not_sprogresses:
-    forall t1:term,
-    sprogresses t1 -> ~ not_sprogresses t1.
+    forall (n:nat) (s:state),
+    sprogresses n s -> ~ not_sprogresses n s.
   Proof.
     intros ; red ; intros.
     apply all_not_not_ex in H0.
@@ -166,8 +166,8 @@ Module StagedTerminologyProperties (C:StagedCalculus).
   Qed.
 
   Lemma not_sprogresses_sprogresses:
-    forall t1:expr,
-    not_sprogresses t1 -> ~ sprogresses t1.
+    forall (n:nat) (s:state),
+    not_sprogresses n s -> ~ sprogresses n s.
   Proof.
     intros.
     apply all_not_not_ex in H.
@@ -175,8 +175,8 @@ Module StagedTerminologyProperties (C:StagedCalculus).
   Qed.
 
   Lemma seventually_not_salways:
-    forall (P:expr -> Prop) (t1:expr),
-    seventually P t1 -> ~ salways (fun t => ~ P t) t1.
+    forall (P:state -> Prop) (n:nat) (s:state),
+    seventually n P s -> ~ salways n (fun s => ~ P s) s.
   Proof.
     intros ; red ; intros.
     destruct H ; destruct H.
@@ -184,8 +184,8 @@ Module StagedTerminologyProperties (C:StagedCalculus).
   Qed.
 
   Lemma salways_not_seventually:
-    forall (P:term -> Prop) (t1:term),
-    salways P t1 -> ~ seventually (fun t => ~ P t) t1.
+    forall (P:state -> Prop) (n:nat) (s:state),
+    salways n P s -> ~ seventually n (fun s => ~ P s) s.
   Proof.
     intros ; red ; intros.
     destruct H0 ; destruct H0.
@@ -193,4 +193,3 @@ Module StagedTerminologyProperties (C:StagedCalculus).
   Qed.
 
 End StagedTerminologyProperties.
-*)

@@ -597,6 +597,25 @@ Module ContextStaticProperties (R:Replacement)
     rewrite IHcs.
     destruct cs ; reflexivity.
   Qed.
+  
+  Lemma unshift_spec:
+    forall (cs:t_stack) (c:t),
+    Context.unshift cs c = cs ++ (c::nil).
+  Proof.
+    induction cs ; intros ; simpl in *|-* ; auto.
+    rewrite IHcs ; auto.
+  Qed.
+
+  Lemma shift_length:
+    forall (cs:t_stack),
+    let (_, cs') := shift cs in
+    length cs' = pred (length cs).
+  Proof.
+    induction cs ; simpl ; intros ; auto.
+    destruct (shift cs).
+    destruct cs ; auto.
+    simpl in IHcs ; simpl ; auto.
+  Qed.
 
   Lemma context_hole_set_app:
     forall (c1 c2:t),
@@ -625,6 +644,92 @@ Module ContextStaticProperties (R:Replacement)
     reflexivity.
     rewrite IHcs1.
     reflexivity.
+  Qed.
+
+  Lemma merge_nil_r:
+    forall (cs:t_stack),
+    merge cs nil = cs.
+  Proof.
+    induction cs ; auto.
+  Qed.
+
+  Lemma merge_nil_l:
+    forall (cs:t_stack),
+    merge nil cs = cs.
+  Proof.
+    induction cs ; auto.
+  Qed.
+
+  Lemma merge_app:
+    forall (cs1 cs2 cs3 cs4:t_stack),
+    length cs1 = length cs2 -> 
+    merge (cs1++cs3) (cs2++cs4) = (merge cs1 cs2) ++ (merge cs3 cs4).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    destruct cs2 ; [|inversion H] ; auto.
+    destruct cs2 ; [inversion H|].
+    simpl in H ; inversion H ; subst.
+    rewrite <- app_comm_cons.
+    rewrite IHcs1 ; auto.
+  Qed.
+
+  Lemma shift_merge_1:
+    forall (cs1 cs2:t_stack),
+    length cs2 < length cs1 ->
+    shift (merge cs1 cs2) = let (c1, cs1) := shift cs1 in (c1, merge cs1 cs2).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    destruct cs2 ; auto ; simpl in *|-* ; exfalso ; omega.
+    destruct cs2 ; auto ; simpl in *|-*.
+    destruct (shift cs1).
+    destruct cs1 ; auto.
+
+    rewrite IHcs1 ; auto.
+    destruct (shift cs1).
+    destruct cs1.
+    exfalso ; simpl in *|-* ; omega.
+    simpl.
+    destruct cs2 ; auto.
+    omega.
+  Qed.
+
+  Lemma shift_merge_2:
+    forall (cs1 cs2:t_stack),
+    length cs2 < length cs1 ->
+    shift (merge cs2 cs1) = let (c1, cs1) := shift cs1 in (c1, merge cs2 cs1).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    destruct cs2 ; auto ; simpl in *|-* ; exfalso ; omega.
+    destruct cs2 ; auto ; simpl in *|-*.
+    destruct (shift cs1).
+    destruct cs1 ; auto.
+
+    rewrite IHcs1 ; auto.
+    destruct (shift cs1).
+    destruct cs1.
+    exfalso ; simpl in *|-* ; omega.
+    simpl.
+    destruct cs2 ; auto.
+    omega.
+  Qed.
+
+  Lemma shift_merge_3:
+    forall (cs1 cs2:t_stack),
+    length cs2 = length cs1 ->
+    shift (merge cs1 cs2) = 
+      let (c1, cs1) := shift cs1 in
+      let (c2, cs2) := shift cs2 in
+      (c1++c2, merge cs1 cs2).
+  Proof.
+    induction cs1 ; simpl ; intros.
+    destruct cs2 ; auto ; simpl in *|-* ; exfalso ; omega.
+    destruct cs2 ; inversion H ; subst ; auto ; simpl in *|-*.
+    rewrite IHcs1 ; auto.
+    destruct (shift cs1).
+    destruct (shift cs2).
+    destruct cs1 ; destruct cs2 ; auto.
+    inversion H1 ; subst.
+    inversion H1 ; subst.
   Qed.
 
 End ContextStaticProperties.
@@ -2323,7 +2428,8 @@ Module TranslationProperties (R:Replacement)
           \/ 
             exists eh', let t_eh' := trans_expr eh' (0::nil) in
             rstep (M1', t_eh) (M2', t_eh') /\
-            e1' = e2' /\
+            e1' = e2' /\ phi e1 bs = phi e2 bs /\ 
+            (forall m, m <= n -> S.CRaw.svalueb m e1 = S.CRaw.svalueb m e2) /\
             cs2 = Context.unshift cs1' ((t_eh', h) :: c1')
           )
       end
@@ -2374,8 +2480,10 @@ Module TranslationProperties (R:Replacement)
 
       (* Case not svalue *)
       exists x0.
-      destruct H3 ; destruct H4 ; subst.
-      auto.
+      destruct H3 ; destruct H4 ; destruct H5 ; 
+      destruct H6 ; subst ; auto.
+      repeat(split) ; intros ; auto.
+      rewrite H6 ; auto.
 
     (* Case EFix *)
     inversion Step ; subst.
@@ -2416,7 +2524,11 @@ Module TranslationProperties (R:Replacement)
 
       (* Case not svalue *)
       exists x0.
-      destruct H3 ; destruct H4 ; subst ; auto.
+      destruct H3 ; destruct H4 ; destruct H5 ; 
+      destruct H6 ; subst ; auto.
+      repeat(split) ; intros ; auto.
+      rewrite H6 ; auto.
+
 
     (* Case EApp *)
     inversion Step ; subst ; simpl in *|-*.
@@ -2438,6 +2550,8 @@ Module TranslationProperties (R:Replacement)
       specialize (depth_length e1_1 (map_iter_booker e1_2 bs 0)) ; intros DpthLength3.
       specialize (depth_length e1_2 bs) ; intros DpthLength4.
       unfold trans_expr ; simpl.
+      specialize (CalculusProperties.depth_sstep_eq 
+          M1 e1_1 M2 e3 MemDepth0 H1) ; intros Dpth1.
       destruct (trans e1_1).
       destruct (trans e1_2).
       destruct t.
@@ -2449,8 +2563,6 @@ Module TranslationProperties (R:Replacement)
         reflexivity.
         destruct (trans e3).
         inversion IHe1_1 ; subst.
-        specialize (CalculusProperties.depth_sstep_eq 
-          M1 e1_1 M2 e3 MemDepth0 H1) ; intros Dpth1.
         simpl in *|-* ; destruct Dpth1.
         assert(S.CRaw.svalueb 0 e1_1 = false).
         apply CalculusProperties.svalueb_iff_conv.
@@ -2487,9 +2599,65 @@ Module TranslationProperties (R:Replacement)
         assert (Context.merge (t::t1) t0 = 
           Context.merge (t::t1) ((fun x => x) t0)) as Merge1.
           reflexivity.
-        destruct (Context.merge (t::t1) t0).
-        simpl in Merge1 ; destruct t0 ; inversion Merge1.
-        admit. (* TODO *)
+        inversion H.
+        
+          (* Case depth(e1) = depth(e2) *)
+          rewrite ContextStaticProperties.shift_merge_3 ;
+          [| rewrite DpthLength4 in H3 ; rewrite DpthLength3 in H3] ; auto.
+          destruct (Context.merge (t::t1) t0).
+          simpl in Merge1 ; destruct t0 ; inversion Merge1.
+          assert (Context.shift (t::t1) =  Context.shift ((fun x => x) (t::t1))) as Merge2.
+          reflexivity.
+          destruct (Context.shift (t :: t1)).
+          assert (Context.shift t0 =  Context.shift ((fun x => x) t0)) as Merge3.
+          reflexivity.
+          destruct (Context.shift t0).
+          destruct t4 ; [exfalso |] ; auto ; simpl.
+          destruct p.
+          destruct (trans e3).
+          destruct IHe1_1.
+          exists x.
+          destruct H2 ; split ; auto.
+          destruct H4 ; [left|right] ; destruct H4.
+
+            (* Case svalue *)
+            admit.
+
+            (* Case not svalue *)
+            exists x0.
+            destruct H4 ; destruct H5 ; destruct H6 ; 
+            destruct H7 ; subst ; repeat(split) ; auto.
+            rewrite trans_memory_depth_0 with (bs2:=bs) in H4 ; auto.
+            rewrite trans_memory_depth_0 with (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H4 ; auto.
+            tauto.
+            rewrite H6 ; rewrite H7 ; auto.
+            omega.
+            intros ; rewrite H7 ; auto.
+            rewrite <- H3 ; auto.
+            unfold trans_expr ; destruct (trans x0).
+            simpl.
+            specialize (ContextStaticProperties.unshift_spec t5 ((e, v) :: t4)) ; intros Spec1.
+            rewrite Spec1 ; clear Spec1.
+            specialize (ContextStaticProperties.unshift_spec (Context.merge t5 t7) ((e, v) :: t4 ++ t6)) ; intros Spec2.
+            rewrite Spec2 ; clear Spec2.
+            specialize (ContextStaticProperties.shift_spec t0) ; intros Spec3.
+            rewrite <- Merge3 in Spec3.
+            destruct t0 ; simpl.
+            simpl in Merge3 ; inversion Merge3.
+            rewrite ContextStaticProperties.merge_nil_r.
+            rewrite ContextStaticProperties.merge_nil_r.
+            rewrite app_nil_r ; auto.
+            rewrite Spec3 ; simpl ; auto ; [|omega].
+            rewrite ContextStaticProperties.merge_app ; auto.
+            rewrite DpthLength4, DpthLength3 in H3.
+            specialize (ContextStaticProperties.shift_length (t0 :: t9)) ; intros L1.
+            specialize (ContextStaticProperties.shift_length (t :: t1)) ; intros L2.
+            rewrite <- Merge3 in L1.
+            rewrite <- Merge2 in L2.
+            rewrite L1, L2, H3 ; auto.
+            
+          (* Case depth(e1) < depth(e2) *)
+          admit.
 
       (* Case EApp e1 e2,  e2 -> e2' *)
       specialize (max_spec (depth e1_2) (depth e1_1)) ; intros MaxRight.
@@ -2636,7 +2804,10 @@ Module TranslationProperties (R:Replacement)
 
         (* Case not svalue *)
         exists x0.
-        destruct H0 ; destruct H2 ; subst ; auto.
+        destruct H0 ; destruct H2 ; destruct H3 ; 
+        destruct H4 ; subst ; auto.
+        repeat(split) ; intros ; auto.
+        rewrite H4 ; auto.
 
       (* SubCase ERef, n=0, svalue 0 e *)
       specialize (svalue_phi e1 bs H1) ; intros SValuePhi.
@@ -2688,7 +2859,10 @@ Module TranslationProperties (R:Replacement)
 
         (* Case not svalue *)
         exists x0.
-        destruct H0 ; destruct H2 ; subst ; auto.
+        destruct H0 ; destruct H2 ; destruct H3 ; 
+        destruct H4 ; subst ; auto.
+        repeat(split) ; intros ; auto.
+        rewrite H4 ; auto.
 
       (* SubCase EDeref, n=0, svalue 0 e *)
       simpl.
@@ -2781,7 +2955,7 @@ Module TranslationProperties (R:Replacement)
 
             (* Case not svalue *)
             destruct H0 ; destruct H0 ; 
-            destruct H2 ; subst.
+            destruct H2 ; destruct H3 ; destruct H4 ; subst.
             inversion H0 ; subst.
             apply Rel_step with (e1:=bind e0 (fun v0 =>
                cast_eapp
@@ -2856,7 +3030,8 @@ Module TranslationProperties (R:Replacement)
           simpl in *|-*.
 
           (* Case not svalue *)
-          destruct H3 ; destruct H2 ; destruct H3 ; subst.
+          destruct H3 ; destruct H2 ; destruct H3 ; 
+          destruct H4 ; destruct H5 ; subst.
           exists x ; split ; auto ; right.
           exists x0.
           repeat(split ; auto).
@@ -2864,6 +3039,10 @@ Module TranslationProperties (R:Replacement)
           rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs) ; auto.
           apply CalculusProperties.depth_sstep_eq in H1 ; auto.
           destruct H1 ; assumption.
+          intros ; auto.
+          apply H5 ; auto.
+          rewrite DpthLength in *|-* ; simpl in *|- * ; 
+          generalize H3 ; clear ; intros ; omega.
 
     (* Case EUnbox *)
     destruct bs ; [inversion BSLength|] ; simpl.
@@ -2903,6 +3082,11 @@ Module TranslationProperties (R:Replacement)
         rewrite trans_memory_depth_0 with (bs2:=bs) ; auto.
         rewrite trans_memory_depth_0 with (bs1:=n::bs) (bs2:=bs) ; auto.
         repeat(split ; auto).
+        intros.
+        rewrite DpthLength1 in H2.
+        destruct m ; auto.
+        destruct m ; auto.
+        exfalso ; generalize H2 ; clear ; intros ; omega.
         rewrite <- H in DpthLength2 ; destruct t ; 
         inversion DpthLength2 ; auto.
 
@@ -3062,11 +3246,15 @@ Module TranslationProperties (R:Replacement)
 
           (* Case not svalue *)
           exists x0.
-          destruct H0 ; destruct H2 ; subst ; auto.
+          destruct H0 ; destruct H2 ; destruct H3 ; 
+          destruct H4 ; subst ; auto.
           repeat(split ; auto).
           rewrite trans_memory_depth_0 with (bs2:=bs) ; auto.
           destruct DpthStep.
           rewrite trans_memory_depth_0 with (bs1:=n::bs) (bs2:=bs) ; auto.
+          intros.
+          destruct m ; auto.
+          rewrite H4 ; simpl ; auto ; generalize H ; clear ; intros ; omega.
 
       (* Case EUnbox Box e -> e *)
       rewrite <- H in DpthLength1.
@@ -3140,7 +3328,10 @@ Module TranslationProperties (R:Replacement)
 
         (* Case not svalue *)
         exists x0.
-        destruct H0 ; destruct H2 ; subst ; auto.
+        destruct H0 ; destruct H2 ; destruct H3 ;
+        destruct H4 ; subst ; auto.
+        repeat(split) ; intros ; auto.
+        rewrite H4 ; auto.
 
       (* SubCase ERun, n=0, svalue 0 e *)
       simpl in *|-*.
@@ -3208,7 +3399,10 @@ Module TranslationProperties (R:Replacement)
 
         (* Case not svalue *)
         exists x0.
-        destruct H0 ; destruct H2 ; subst ; auto.
+        destruct H0 ; destruct H2 ; destruct H3 ; 
+        destruct H4 ; subst ; auto.
+        repeat(split) ; intros ; auto.
+        rewrite H4 ; auto.
 
       (* SubCase ELift, n=0, svalue 0 e *)
       specialize (svalue_phi e1 bs H1) ; intros SValuePhi.

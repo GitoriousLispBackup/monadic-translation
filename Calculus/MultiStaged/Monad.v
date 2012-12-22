@@ -290,9 +290,13 @@ Module Translation (R:Replacement)
     | Admin_bind : forall (e1 e2:T.expr) (f1 f2:T.expr -> T.expr),
         admin e1 e2 -> (forall e3:T.expr, admin (f1 e3) (f2 e3)) ->
         admin (M.bind e1 f1) (M.bind e2 f2)
-   | Admin_reduc : forall (e:expr) (bs:list nat), svalue 1 e ->
+   | Admin_unbox_box : forall (e:expr) (bs:list nat), svalue 1 e ->
         admin (M.cast_eunbox (M.cast_ebox (trans_expr e bs))) 
-          (trans_expr e bs).
+          (trans_expr e bs)
+   | Admin_bind_phi : forall (v:expr) (e:T.expr) (bs:list nat), 
+       svalue 0 v ->
+       let f := fun v0 => M.bind e (fun v1 => M.cast_eapp v0 v1) in
+       admin (M.bind (M.ret (phi v bs)) f) (f (phi v bs)).
 
   Definition admin_context :  relation Context.t := 
     Context.congr_context admin.
@@ -306,6 +310,8 @@ Module Translation (R:Replacement)
 
 End Translation.
 
+
+(* TODO: Create a UniformMonadProperties type *)
 Module Type MonadProperties (R:Replacement) 
   (T:StagedCalculus) (M:Monad R T).
 
@@ -322,8 +328,8 @@ Module Type MonadProperties (R:Replacement)
 
   Parameter ssubst_bind :
     forall (n:nat) (ss:StageSet.t) (x:S.var) (e1 v:expr) (f1 f2: expr -> expr),
-     ((fun v2 => ssubst n ss (cast_var x) (f1 v2) v) = 
-       fun v2 => f2 (ssubst n ss (cast_var x) v2 v)) ->
+     (forall v2, ssubst n ss (cast_var x) (f1 v2) v = 
+       f2 (ssubst n ss (cast_var x) v2 v)) ->
      ssubst n ss (cast_var x) (bind e1 f1) v = 
        bind (ssubst n ss (cast_var x) e1 v) f2.
 
@@ -1300,8 +1306,6 @@ Module ContextProperties (R:Replacement) (T:StagedCalculus)
      (cast_eabs (cast_var (hole_var v0))
         (ssubst n ss (cast_var (hole_var x)) (fill c e) (phi v bs))) v1)).
     reflexivity.
-
-    apply functional_extensionality.
     intros.
     rewrite MP.ssubst_eapp.
     rewrite MP.ssubst_eabs.
@@ -1349,7 +1353,6 @@ Module TranslationProperties (R:Replacement)
     rewrite H0.
     simpl.
     apply MP.ssubst_bind.
-    apply functional_extensionality.
     intros.
     rewrite MP.ssubst_eapp.
     rewrite MP.ssubst_eabs.
@@ -1375,7 +1378,6 @@ Module TranslationProperties (R:Replacement)
     destruct a.
     specialize (IHc ss n).
     apply MP.ssubst_bind.
-    apply functional_extensionality.
     intros.
     rewrite MP.ssubst_eapp.
     rewrite MP.ssubst_eabs.
@@ -1530,18 +1532,18 @@ Module TranslationProperties (R:Replacement)
          (phi v nil)) v2).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_eapp ; auto.
     rewrite MP.ssubst_bind with (f2:= fun v1 => bind 
       (ssubst n ss (cast_var (source_var x)) e0 (phi v nil))
       (fun v2 => cast_eapp v1 v2)).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
-    rewrite MP.ssubst_bind with (f2:=(fun v2 : T.expr =>
-    cast_eapp (ssubst n ss (cast_var (source_var x)) x0 (phi v nil)) v2)).
+    intros.
+    rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+    cast_eapp (ssubst n ss (cast_var (source_var x)) v2 (phi v nil)) v0)).
     reflexivity.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_eapp.
     reflexivity.
 
@@ -1557,7 +1559,7 @@ Module TranslationProperties (R:Replacement)
     rewrite MP.ssubst_bind with (f2:=fun v0 => cast_eref v0).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_eref.
     reflexivity.
     
@@ -1570,7 +1572,7 @@ Module TranslationProperties (R:Replacement)
     rewrite MP.ssubst_bind with (f2:=fun v0 => cast_ederef v0).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_ederef.
     reflexivity.
 
@@ -1612,18 +1614,18 @@ Module TranslationProperties (R:Replacement)
          (phi v nil)) v2).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_eassign ; auto.
     rewrite MP.ssubst_bind with (f2:= fun v1 => bind 
       (ssubst n ss (cast_var (source_var x)) e0 (phi v nil))
       (fun v2 => cast_eassign v1 v2)).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
-    rewrite MP.ssubst_bind with (f2:=(fun v2 : T.expr =>
-    cast_eassign (ssubst n ss (cast_var (source_var x)) x0 (phi v nil)) v2)).
+    intros.
+    rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+    cast_eassign (ssubst n ss (cast_var (source_var x)) v2 (phi v nil)) v0)).
     reflexivity.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_eassign.
     reflexivity.
 
@@ -1687,7 +1689,7 @@ Module TranslationProperties (R:Replacement)
     rewrite MP.ssubst_bind with (f2:=fun v0 => cast_erun v0).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_erun.
     reflexivity.
 
@@ -1700,7 +1702,7 @@ Module TranslationProperties (R:Replacement)
     rewrite MP.ssubst_bind with (f2:=fun v0 => cast_elift v0).
     split ; intros ; auto.
     rewrite MP.ssubst_econst ; auto.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_elift.
     reflexivity.
   Qed.
@@ -2044,7 +2046,7 @@ Module TranslationProperties (R:Replacement)
     constructor ; [| constructor].
     constructor.
     apply IHt ; auto ; intros.
-    apply functional_extensionality ; intros.
+    intros.
     rewrite MP.ssubst_eapp, MP.ssubst_eabs, BeqFalse1 ; auto.
   Qed.
 
@@ -2111,7 +2113,7 @@ Module TranslationProperties (R:Replacement)
       assert(ltb (length t) (length t) = false).
       clear ; unfold ltb ; apply leb_iff_conv ; omega.
       rewrite H4 ; clear H4 ; auto.
-      apply functional_extensionality ; intros.
+      intros.
       rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
       rewrite <- beq_nat_refl ; auto.
 
@@ -2130,7 +2132,7 @@ Module TranslationProperties (R:Replacement)
       constructor ; auto ; intros.
       repeat(constructor).
       apply IHt ; auto.
-      apply functional_extensionality ; intros.
+      intros.
       rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
       assert(beq_var (hole_var v) (hole_var (length t)) = false).
       generalize E ; clear ; intros ; unfold hole_var ; 
@@ -2268,7 +2270,7 @@ Module TranslationProperties (R:Replacement)
       clear ; unfold ltb ; apply leb_iff_conv ; omega.
       rewrite H4 ; clear H4 ; auto.
       rewrite <- Eq1 in H3 ; auto.
-      apply functional_extensionality ; intros.
+      intros.
       rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
       rewrite <- beq_nat_refl ; auto.
       destruct (ltb (length t) (n + length t0)) ;
@@ -2291,7 +2293,7 @@ Module TranslationProperties (R:Replacement)
       constructor ; auto ; intros.
       repeat(constructor).
       apply IHt ; auto.
-      apply functional_extensionality ; intros.
+      intros.
       rewrite MP.ssubst_eapp, MP.ssubst_eabs ; auto.
       assert(beq_var (hole_var v) (hole_var (length t)) = false).
       generalize E ; clear ; intros ; unfold hole_var ; 
@@ -2424,7 +2426,9 @@ Module TranslationProperties (R:Replacement)
             | _ =>   admin_stack_ssubst (pred n) h (phi eh (0::nil))
                        (List.tl bs) (List.hd 0 bs) (Context.unshift cs1' c1') cs2
             end /\
-            admin_ssubst n h (booker e1 0) (phi eh (0::nil)) (nth 0 bs 0) e1' e2'
+            admin_ssubst n h (booker e1 0) (phi eh (0::nil)) (nth 0 bs 0) e1' e2' /\
+            (svalue 0 e1 -> admin_ssubst n h (booker e1 0) (phi eh (0::nil)) (nth 0 bs 0) 
+              (phi e1 bs) (phi e2 bs))
           \/ 
             exists eh', let t_eh' := trans_expr eh' (0::nil) in
             rstep (M1', t_eh) (M2', t_eh') /\
@@ -2478,6 +2482,24 @@ Module TranslationProperties (R:Replacement)
       rewrite H7 ;
       apply H6 ; auto.
 
+      (* patch *)
+      unfold admin_ssubst ; intros.
+      assert(beq_var (hole_var v0) (source_var v) = false).
+      clear ; unfold hole_var, source_var ; apply beq_nat_false_iff ; omega.
+      destruct t0 ; simpl in *|-*.
+      rewrite MP.ssubst_eabs.
+      repeat(constructor).
+      apply H6.
+      rewrite H8 ; assumption.
+      rewrite H8 ; assumption.
+      unfold admin_ssubst in H6.
+      destruct (ltb v0 (nth 0 bs 0 + booker e1 0)) ;
+      rewrite MP.ssubst_eabs ;
+      repeat(constructor) ;
+      rewrite H8 ;
+      apply H6 ; auto.
+      
+
       (* Case not svalue *)
       exists x0.
       destruct H3 ; destruct H4 ; destruct H5 ; 
@@ -2522,6 +2544,25 @@ Module TranslationProperties (R:Replacement)
       rewrite H7 ;
       apply H6 ; auto.
 
+      (* patch *)
+      unfold admin_ssubst ; intros.
+      assert(beq_var (hole_var v1) (source_var v)
+               || beq_var (hole_var v1) (source_var v0) = false).
+      clear ; unfold hole_var, source_var ;
+      apply orb_false_iff ; split ; apply beq_nat_false_iff ; omega.
+      destruct t0 ; simpl in *|-*.
+      rewrite MP.ssubst_efix.
+      repeat(constructor).
+      apply H6.
+      rewrite H8 ; assumption.
+      rewrite H8 ; assumption.
+      unfold admin_ssubst in H6.
+      destruct (ltb v0 (nth 0 bs 0 + booker e1 0)) ;
+      rewrite MP.ssubst_efix ;
+      repeat(constructor) ;
+      rewrite H8 ;
+      apply H6 ; auto.
+
       (* Case not svalue *)
       exists x0.
       destruct H3 ; destruct H4 ; destruct H5 ; 
@@ -2534,6 +2575,8 @@ Module TranslationProperties (R:Replacement)
     inversion Step ; subst ; simpl in *|-*.
     
       (* Case EApp e1 e2,  e1 -> e1' *)
+      specialize (length_h_match e1_1 (map_iter_booker e1_2 bs 0)) ; intros LengthHMatch.
+      specialize (booker_length e1_2 bs) ; intros BookerLength2.
       specialize (max_spec (depth e1_1) (depth e1_2)) ; intros MaxLeft.
       destruct MaxLeft ; destruct H.
       rewrite H0 in H1.
@@ -2621,7 +2664,63 @@ Module TranslationProperties (R:Replacement)
           destruct H4 ; [left|right] ; destruct H4.
 
             (* Case svalue *)
-            admit.
+            destruct H5 ; destruct H6.
+            repeat(split) ; auto.
+            admit. (* Todo: prove it *)
+            
+            remember (S.CRaw.svalueb 0 e1_1).
+            destruct b ; symmetry in Heqb.
+
+              (* Case svalue 0 e1_1 *)
+              apply CalculusProperties.svalueb_iff in Heqb.
+              assert(svalue 0 e3) as SValueE3.
+                inversion Heqb ; subst ; 
+                try(inversion H1 ; constructor ; fail).
+                inversion H1 ; subst ; simpl in *|-*.
+                apply CalculusProperties.depth_svalue in H8.
+                exfalso ; omega.
+              apply CalculusProperties.svalueb_iff in SValueE3.
+              rewrite SValueE3.
+              unfold admin_ssubst ; intros.
+              rewrite MP.ssubst_bind with (f2:=
+                fun v2 => cast_eapp (
+                ssubst (depth e1_2)
+                 match depth e1_2 with
+                 | 0 => ss
+                 | 1 => ss
+                 | S (S n) =>
+                 if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                 then StageSet.add (S n) ss
+                 else ss
+                 end (cast_var (hole_var v))
+                 (phi e1_1 (map_iter_booker e1_2 bs 0)) (phi x (0 :: nil)))
+               v2) ; auto.
+               constructor ; auto.
+               simpl in *|-*.
+               unfold map_iter_booker in LengthHMatch.
+               assert(S (length t1) <= length
+                 (List2.map_iter (fun b n => (b + booker e1_2 n)%nat) bs 0)) as Tmp1.
+               rewrite List2Properties.length_map_iter ; auto.
+               omega.
+               specialize (LengthHMatch Tmp1) ; clear Tmp1.
+               unfold map_iter_booker in LengthHMatch.
+               specialize (List2Properties.map_iter_nth_indep 
+                 (fun b n : nat => (b + booker e1_2 n)%nat)
+                 bs (length t1) 0 0 0) ; intros MapIter1.
+                 rewrite MapIter1 in LengthHMatch ; auto.
+               clear MapIter1 ; subst.
+               admit. (* todo: prove it *)
+               omega.
+               admit.
+
+               intros.
+               rewrite MP.ssubst_eapp ; auto.
+
+              (* Case not svalue 0 e1_1 *)
+              admit.
+
+            (* patch *)
+            intros ; inversion H8.
 
             (* Case not svalue *)
             exists x0.
@@ -2793,14 +2892,17 @@ Module TranslationProperties (R:Replacement)
       destruct H0 ; [left | right] ; destruct H0.
 
         (* Case svalue *)
-        destruct H2 ; destruct H3 ; subst.
+        destruct H2 ; destruct H3 ; destruct H4 ; subst.
         repeat(split ; auto).
         unfold admin_ssubst ; intros.
         rewrite MP.ssubst_bind with (f2:=fun v0 => cast_eref v0).
         constructor ; auto.
         intros ; constructor.
-        apply functional_extensionality ; intros.
+        intros.
         rewrite MP.ssubst_eref ; auto.
+        
+        (* patch *)
+        intros SV ; inversion SV. 
 
         (* Case not svalue *)
         exists x0.
@@ -2848,14 +2950,17 @@ Module TranslationProperties (R:Replacement)
       destruct H0 ; [left | right] ; destruct H0.
 
         (* Case svalue *)
-        destruct H2 ; destruct H3 ; subst.
+        destruct H2 ; destruct H3 ; destruct H4 ; subst.
         repeat(split ; auto).
         unfold admin_ssubst ; intros.
         rewrite MP.ssubst_bind with (f2:=fun v0 => cast_ederef v0).
         constructor ; auto.
         intros ; constructor.
-        apply functional_extensionality ; intros.
+        intros.
         rewrite MP.ssubst_ederef ; auto.
+
+        (* patch *)
+        intros SV ; inversion SV.
 
         (* Case not svalue *)
         exists x0.
@@ -2921,7 +3026,7 @@ Module TranslationProperties (R:Replacement)
 
             (* Case svalue *)
             destruct H0 ; destruct H2 ; 
-            destruct H3 ; subst.
+            destruct H3 ; destruct H4 ; subst.
             destruct t.
 
             inversion H3 ; subst.
@@ -2936,7 +3041,7 @@ Module TranslationProperties (R:Replacement)
             apply H4 ; auto.
 
             inversion H3 ; subst.
-            inversion H6 ; subst.
+            inversion H7 ; subst.
             simpl in *|-*.
             rewrite svalue_phi ; auto.
             apply Rel_step with (e1:=
@@ -2950,7 +3055,7 @@ Module TranslationProperties (R:Replacement)
             assert(1 <= S (S (length bs0))) as Tmp1.
             clear ; omega.
             specialize (FillSubst Tmp1 
-              (phi x (0 :: nil)) e2 ((u2,(length t)%nat)::c0) H6 H4).
+              (phi x (0 :: nil)) e2 ((u2,(length t)%nat)::c0) H7 H4).
             apply FillSubst ; auto.
 
             (* Case not svalue *)
@@ -2998,7 +3103,7 @@ Module TranslationProperties (R:Replacement)
           (* Case svalue *)
           destruct H3 ; subst.
           destruct H3 ; destruct H3 ; subst.
-          destruct H4.
+          destruct H4 ; destruct H4.
           destruct t2 ; simpl in *|-*.
 
           inversion H3 ; subst.
@@ -3009,6 +3114,12 @@ Module TranslationProperties (R:Replacement)
           inversion Shift1 ; subst.
           rewrite DpthLength in *|-* ; simpl in *|-*.
           apply FillSubst ; simpl ; auto.
+
+          (* patch *)
+          intros VL.
+          inversion VL ; subst.
+          apply LthSvalue in H8.
+          exfalso ; generalize H8 ; clear ; intros ; omega.
          
           exists x ; split ; auto ; left.
           repeat(split; auto) ; simpl.
@@ -3016,18 +3127,30 @@ Module TranslationProperties (R:Replacement)
           inversion Shift1 ; subst.
 
           apply FillSubst ; auto.
+
+          (* patch *)
+          intros VL.
+          inversion VL ; subst.
+          apply LthSvalue in H8.
+          exfalso ; generalize H8 ; clear ; intros ; omega.
           
           inversion H3 ; subst.
-          destruct t3 ; simpl in H9 ; inversion H9.
+          destruct t3 ; simpl in H10 ; inversion H10.
 
           exists x ; split ; auto ; left.
           repeat(split; auto) ; simpl.
           destruct t1 ; [ inversion Shift1 ; subst ;
-          simpl in H6 ; inversion H6|] ; subst.
+          simpl in H7 ; inversion H7|] ; subst.
           apply FillSubst ; simpl ; auto.
           destruct (Context.shift (t1 :: t4)) ; inversion Shift1 ; subst.
-          simpl in H6 ; inversion H6 ; subst ; auto.
+          simpl in H7 ; inversion H7 ; subst ; auto.
           simpl in *|-*.
+
+          (* patch *)
+          intros VL.
+          inversion VL ; subst.
+          apply LthSvalue in H9.
+          exfalso ; generalize H9 ; clear ; intros ; omega.
 
           (* Case not svalue *)
           destruct H3 ; destruct H2 ; destruct H3 ; 
@@ -3105,7 +3228,7 @@ Module TranslationProperties (R:Replacement)
         destruct H0 ; [left | right] ; destruct H0.
 
           (* Case svalue *)
-          destruct H2 ; destruct H3.
+          destruct H2 ; destruct H3 ; destruct H4.
           repeat(split ; auto).
           destruct bs.
           rewrite DpthLength1 in BSLength ; inversion BSLength.
@@ -3234,15 +3357,18 @@ Module TranslationProperties (R:Replacement)
           assert(ltb n (n+1) = true).
           clear ; unfold ltb ;
           apply leb_iff ; omega.
-          rewrite H7, andb_true_l.
+          rewrite H8, andb_true_l.
           rewrite BindingSetProperties.rho_false_mem ; auto.
           constructor.
           rewrite StageSetProperties.remove_mem_1 ; auto.
           apply StageSetProperties.add_mem_3.
           assert(beq_nat (hole_var v) (hole_var n) = false).
           apply beq_nat_false_iff ; unfold hole_var ; omega.
-          rewrite H7, andb_false_l.
+          rewrite H8, andb_false_l.
           constructor.
+
+          (* patch *)
+          intros VL ; inversion VL.
 
           (* Case not svalue *)
           exists x0.
@@ -3291,6 +3417,9 @@ Module TranslationProperties (R:Replacement)
       specialize (StageSetProperties.ub_pred ss 1) ; intros.
       simpl in H5 ; rewrite H4 in H5 ; symmetry in H5 ; auto.
 
+      (* patch *)
+      intros VL ; inversion VL.
+
     (* Case ERun *)
     specialize (depth_length e1 bs) ; intros DpthLength.
     inversion Step ; subst.
@@ -3317,14 +3446,17 @@ Module TranslationProperties (R:Replacement)
       destruct H0 ; [left | right] ; destruct H0.
 
         (* Case svalue *)
-        destruct H2 ; destruct H3 ; subst.
+        destruct H2 ; destruct H3 ; destruct H4 ; subst.
         repeat(split ; auto).
         unfold admin_ssubst ; intros.
         rewrite MP.ssubst_bind with (f2:=fun v0 => cast_erun v0).
         constructor ; auto.
         intros ; constructor.
-        apply functional_extensionality ; intros.
+        intros.
         rewrite MP.ssubst_erun ; auto.
+
+        (* patch *)
+        intros VL ; inversion VL.
 
         (* Case not svalue *)
         exists x0.
@@ -3388,14 +3520,17 @@ Module TranslationProperties (R:Replacement)
       destruct H0 ; [left | right] ; destruct H0.
 
         (* Case svalue *)
-        destruct H2 ; destruct H3 ; subst.
+        destruct H2 ; destruct H3 ; destruct H4 ; subst.
         repeat(split ; auto).
         unfold admin_ssubst ; intros.
         rewrite MP.ssubst_bind with (f2:=fun v0 => cast_elift v0).
         constructor ; auto.
         intros ; constructor.
-        apply functional_extensionality ; intros.
+        intros.
         rewrite MP.ssubst_elift ; auto.
+
+        (* patch *)
+        intros VL ; inversion VL.
 
         (* Case not svalue *)
         exists x0.

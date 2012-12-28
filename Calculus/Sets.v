@@ -38,6 +38,28 @@ Module StageSetProperties.
 
   Include NatSetProperties.
 
+  Lemma ub_mem_1:
+    forall (lst:t) (n m:nat),
+    m < n -> ub m lst = true -> mem n lst = false.
+  Proof.
+    intros.
+    assert(forall n, Proper (Logic.eq ==> Logic.eq) 
+      (fun x : elt => leb x n)).
+    intros x s1 s2 H1 ; subst ; reflexivity.
+    remember (mem n lst) ; destruct b ; symmetry in Heqb ; auto ; exfalso.
+    apply MSetEqProps.for_all_mem_2 with (x:=n) in H0 ; auto.
+    apply leb_iff in H0 ; omega.
+  Qed.
+
+  Lemma ub_remove_equal:
+    forall (lst:t) (n m:nat),
+    m < n -> ub m lst = true -> remove n lst = lst.
+  Proof.
+    intros.
+    apply remove_equal.
+    apply ub_mem_1 with (m:=m) ; auto.
+  Qed.
+
   Lemma ub_le_1:
     forall (lst:t) (n m:nat),
     m <= n -> ub n lst = ub n (add m lst).

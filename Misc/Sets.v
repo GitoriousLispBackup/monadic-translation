@@ -125,10 +125,13 @@ Module NatSetProperties.
 
   Lemma remove_equal:
     forall (lst:t) (n:nat),
-    mem n lst = false -> remove n lst = lst.
+    mem n lst = false ->
+    remove n lst = lst.
   Proof.
     intros ; apply eq_leibniz, MSetProps.remove_equal.
-    apply MSetEqProps.mem_4 ; assumption.
+    red ; intros.
+    apply mem_spec in H0.
+    rewrite H in H0 ; inversion H0.
   Qed.
 
   Lemma remove_empty:

@@ -37,6 +37,19 @@ Module StageSetProperties.
   Export NatSet.
 
   Include NatSetProperties.
+ 
+  Lemma ub_empty:
+    forall (n:nat),
+    ub n empty = true.
+  Proof.
+    intros.
+    assert(forall n, Proper (Logic.eq ==> Logic.eq) 
+      (fun x : elt => leb x n)).
+    intros x s1 s2 H1 ; subst ; reflexivity.
+    apply MSetEqProps.for_all_mem_1 ; auto ; intros.
+    rewrite MSetEqProps.empty_mem in H0.
+    inversion H0.
+  Qed.
 
   Lemma ub_mem_1:
     forall (lst:t) (n m:nat),

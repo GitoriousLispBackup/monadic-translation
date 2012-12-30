@@ -3421,6 +3421,86 @@ Module TranslationProperties (R:Replacement)
     inversion H0.
   Qed.
 
+  Lemma eq_ssubst_fill_eq_1:
+    forall (e:S.expr) (bs:list nat) (h:S.var) (v:T.expr),
+    let (e0, cs) := trans e (0::bs) in
+    match cs with
+    | c1 :: nil => 
+      match c1 with
+      | nil => False
+      | _ => forall (ss:StageSet.t), 
+        0 < length bs ->
+        h < length c1 ->
+        let b := hd 0 bs in
+        eq_ssubst_ss (StageSet.add 0 ss) 1 h (length c1) v 0 e0 e0 ->
+        eq_context_ssubst_ss (StageSet.remove 1 (StageSet.add 0 ss)) 0 h 0 v b 0 c1 c1 ->
+        eq_ssubst_ss ss 0 h 0 v b
+        (Context.fill c1 (ret (cast_ebox e0))) (Context.fill c1 (ret (cast_ebox e0)))
+      end
+    | _ => True
+    end.
+  Proof.
+    admit. (* todo *)
+  Qed.
+
+  Lemma eq_ssubst_fill_eq_2:
+    forall (e:S.expr) (bs:list nat) (h:S.var) (v:T.expr),
+    let (e0, cs) := trans e (0::bs) in
+    match cs with
+    | c1 :: nil => 
+      match c1 with
+      | nil => False
+      | _ => forall (ss:StageSet.t), 
+        0 < length bs ->
+        length c1 <= h ->
+        let b := hd 0 bs in
+        eq_ssubst_ss ss 1 h (length c1) v 0 e0 e0 ->
+        eq_context_ssubst_ss (StageSet.remove 1 ss) 0 h 0 v b 0 c1 c1 ->
+        eq_ssubst_ss ss 0 h 0 v b
+        (Context.fill c1 (ret (cast_ebox e0))) (Context.fill c1 (ret (cast_ebox e0)))
+      end
+    | _ => True
+    end.
+  Proof.
+    admit. (* todo *)
+  Qed.
+
+  Lemma eq_ssubst_fill_eq_3:
+    forall (e:S.expr) (bs:list nat) (h:S.var) (v:T.expr),
+    let (e0, cs) := trans e (0::bs) in
+    match cs with
+    | c1 :: c2 :: cs => 
+      match c1 with
+      | nil => False
+      | _ => forall (ss:StageSet.t), 
+        S (length cs) < length bs ->
+        let b := hd 0 bs in
+        eq_ssubst_ss ss (S (S (length cs))) h (length c1) v 0 e0 e0 ->
+        eq_context_ssubst_ss (StageSet.remove (S (S (length cs))) ss) (S (length cs)) h (length c2) v b 0 c1 c1 ->
+        eq_ssubst_ss ss (S (length cs)) h (length c2) v b
+        (Context.fill c1 (ret (cast_ebox e0))) (Context.fill c1 (ret (cast_ebox e0)))
+      end
+    | _ => True
+    end.
+  Proof.
+    admit. (* todo *)
+  Qed.
+
+  Lemma eq_ssubst_eq_merge:
+    forall (e1 e2:S.expr) (bs:list nat) (h:S.var) (v:T.expr),
+    let (e1', cs1) := trans e1 (map_iter_booker e2 bs 0) in
+    let (e2', cs2) := trans e2 bs in
+    let n := max (depth e1) (depth e2) in
+    n < length bs ->
+    eq_stack_ssubst (pred n) h v (tl (map_iter_booker e2 bs 0))
+       (hd 0 (map_iter_booker e2 bs 0)) cs1 cs1 ->
+    eq_stack_ssubst (pred n) h v (tl bs) (hd 0 bs) cs2 cs2 ->
+    eq_stack_ssubst (pred n) h v (tl bs) (hd 0 bs) (Context.merge cs1 cs2)
+      (Context.merge cs1 cs2).
+  Proof.
+    admit.
+  Qed.
+
   Lemma eq_ssubst_eq_strong:
     forall (e:S.expr) (bs:list nat) (h:S.var) (v:T.expr),
     let n := depth e in
@@ -3818,8 +3898,9 @@ Module TranslationProperties (R:Replacement)
     specialize (booker_length e (0::bs)) ; intros BKLength.
     specialize (depth_length e (0::bs)) ; intros DpthLength1.
     specialize (eq_ssubst_gt e (0::bs)) ; intros EqGt.
-    (*specialize (eq_ssubst_fill_gt_1 e bs) ; intros EqFill1.
-    specialize (eq_ssubst_fill_gt_2 e bs) ; intros EqFill2.*)
+    specialize (eq_ssubst_fill_eq_1 e bs) ; intros EqFill1.
+    specialize (eq_ssubst_fill_eq_2 e bs) ; intros EqFill2.
+    specialize (eq_ssubst_fill_eq_3 e bs) ; intros EqFill3.
     destruct (trans e) ; intros.
     destruct t ; simpl in *|-* ; intros ;
     rewrite BKLength in *|-* ; rewrite DpthLength1 in *|-* ; simpl in *|-*.
@@ -3837,7 +3918,7 @@ Module TranslationProperties (R:Replacement)
       rewrite StageSetProperties.ub_le_2 with (m:=0) ; auto.
 
       (* depth e = 1 *)
-      destruct (length t0) ; intros ; simpl in *|-*.
+      destruct t0 ; intros ; simpl in *|-*.
       remember (ltb h ((length t))%nat).
       symmetry in Heqb ; destruct b.
       destruct IHe with (ss:=(StageSet.add 0 ss)) ; auto ; try(omega).
@@ -3845,19 +3926,14 @@ Module TranslationProperties (R:Replacement)
       rewrite StageSetProperties.ub_le_2 with (m:=0) ; auto.
       intros ; right ; apply StageSetProperties.add_mem_3 ; auto.
       repeat(split) ; intros ; simpl in *|-*.
+      apply leb_iff in Heqb.
 
-      admit. (* todo: prove it later, in a separate lemma *)
-
-      destruct H3 ; inversion H3 ;
-      subst bs b2 c1 c2 t0.
+      specialize (EqFill1 h v).
+      destruct t ; [contradiction|].
+      specialize (EqFill1 ss) ; destruct H3 ; 
+      apply EqFill1 ; auto.
+      inversion H3 ; subst ; auto.
       constructor.
-      simpl in *|-* ; auto.
-      assert((StageSet.remove 0 (StageSet.remove 1 (StageSet.add 0 ss))) =
-      (StageSet.remove 0 ss)) as Eq1.
-      rewrite StageSetProperties.remove_add_remove_2 ; auto.
-      rewrite StageSetProperties.remove_add_remove ; auto.
-      rewrite StageSetProperties.ub_remove_equal with (n:=1) (m:=0) ; auto.
-      rewrite <- Eq1 ; auto.
 
       inversion H4.
       apply CalculusProperties.depth_svalue in H7 ; exfalso ; omega.
@@ -3866,32 +3942,39 @@ Module TranslationProperties (R:Replacement)
       rewrite StageSetProperties.ub_le_2 with (m:=0) ; auto.
       intros ; left ; apply leb_iff_conv in Heqb ; omega.
       repeat(split) ; intros ; simpl in *|-*.
+      apply leb_iff_conv in Heqb.
+      rewrite BKLength in H2, H3.
 
-      admit. (* todo: prove it later, in a separate lemma *)
-
-      destruct H3 ; inversion H3.
-      subst bs b2 c1 c2 t0.
+      specialize (EqFill2 h v).
+      destruct t ; [contradiction|].
+      specialize (EqFill2 ss) ; destruct H3 ; 
+      apply EqFill2 ; auto.
+      omega.
+      inversion H3 ; subst ; auto.
       constructor.
-      simpl in *|-* ; auto.
-      rewrite StageSetProperties.ub_remove_equal with (n:=1) (m:=0) in H13 ; auto.
 
       inversion H4.
       apply CalculusProperties.depth_svalue in H7 ; exfalso ; omega.
       
       (* depth e > 1 *)
       destruct IHe with (ss:=ss) ; auto ; try(omega).
-      rewrite StageSetProperties.ub_le_2 with (m:=(S n)) ; auto.
+      rewrite StageSetProperties.ub_le_2 with (m:=(S (length t1))) ; auto.
       intros ; apply H1 ; omega.
       repeat(split) ; intros ; simpl in *|-*.
 
-      admit. (* todo: prove it later, in a separate lemma *)
+      specialize (EqFill3 h v).
+      destruct bs ; [exfalso ; simpl in *|-* ; omega|].
+      simpl in *|-*.
+      destruct t ; [contradiction|].
+      rewrite BKLength in H2, H3.
+      
+      specialize (EqFill3 ss) ; destruct H3 ; 
+      apply EqFill3 ; auto.
+      inversion H3 ; subst ; simpl in *|-* ; auto.
 
-      destruct H3 ; inversion H3.
-      subst bs b2 c1 c2 t0.
-      constructor.
-      simpl in *|-* ; auto.
-      rewrite StageSetProperties.ub_remove_equal with (n:=(S (S n))) (m:=(S n)) in H13 ; auto.
-
+      destruct H3 ; inversion H3 ; subst ; simpl in *|-*.
+      rewrite StageSetProperties.ub_remove_equal with 
+        (n:=(S (S (length t1)))) (m:=(S (length t1))) in H14 ; auto.
       inversion H4.
       apply CalculusProperties.depth_svalue in H7 ; exfalso ; omega.
     

@@ -4371,28 +4371,67 @@ Module TranslationProperties (R:Replacement)
                        (List.tl bs) (List.hd 0 bs) cs cs /\
     (svalue 0 e -> eq_ssubst n h (booker e 0) v (nth 0 bs 0) (phi e bs) (phi e bs)).
   Proof.
-    intros.
+    intros ; subst n.
+    specialize (booker_length e bs) ; intros BKLength.
     specialize (depth_length e bs) ; intros DpthLength.
-    specialize (eq_ssubst_eq_strong e bs) ; intros Strong.
+    specialize (eq_ssubst_2_ge e bs) ; intros Strong.
     destruct (trans e) ; intros.
+    specialize (Strong h v (depth e)) ; simpl in Strong.
+    destruct Strong ; auto ; try(omega).
+    destruct H2.
+    rewrite BKLength in *|-*.
 
-    subst n ; simpl in *|-* ; specialize (Strong h v) ; repeat(split).
+    repeat(split ; intros).
 
-    apply eq_ssubst_ss_forall ; intros.
-    destruct Strong with (ss:=ss) ; auto ; omega.
+    (* Part 1 *)
+    unfold eq_ssubst ; unfold eq_ssubst_2 in H1 ; intros.
+    destruct (depth e) ; [exfalso ; omega|].
+    destruct n ; auto ; simpl in *|-*.
+    assert(ltb h (nth 0 bs 0 + length (nth 0 t nil)) = false) as False1.
+    apply leb_iff_conv ; omega.
+    rewrite False1 in H1 ; auto.
 
-    rewrite DpthLength in *|-* ; auto.
-    destruct t ; simpl in *|-* ; [exfalso ; omega|].
-    apply eq_stack_ssubst_ss_forall ; intros ; simpl ; auto.
-    destruct Strong with (ss:=ss) ; auto ; try(omega).
-    apply StageSetProperties.ub_le_2 with (m:=(length t0)) ; auto ; omega.
-    destruct H3 ; auto.
-    rewrite StageSetProperties.remove_equal in H3 ; auto.
-    rewrite StageSetProperties.ub_mem_1 with (m:=length t0) ; auto.
+    (* Part 2 *)
+    rewrite DpthLength in *|-*.
+    clear BKLength DpthLength H1 H3.
+    generalize dependent bs.
+    induction t ; simpl in *|-* ; intros.
+    constructor.
+    destruct bs ; simpl in *|-* ; [exfalso; omega|].
+    inversion H2 ; subst ;
+    constructor ; simpl in *|-* ; auto.
 
-    intros ; apply eq_ssubst_ss_forall ; intros.
-    destruct Strong with (ss:=ss) ; auto ; try(omega).
-    destruct H4 ; auto.
+    clear IHt H2.
+    induction a.
+    constructor.
+    inversion H5 ; subst ; simpl in *|-* ; auto.
+    constructor ; auto.
+    apply IHa ; auto ; omega.
+    
+
+    clear IHt H2 H10.
+    induction a.
+    constructor.
+    inversion H7 ; subst ; simpl in *|-* ; auto.
+    constructor ; auto.
+    unfold eq_ssubst ; unfold eq_ssubst_2 in H4 ; intros.
+    destruct (length cs1) ; auto.
+    assert(ltb h (b1 + length c1') = false) as False1.
+    apply leb_iff_conv ; omega.
+    rewrite False1 in H4 ; auto.
+
+    specialize (IHt (b1::bs0)).
+    simpl in IHt ; apply IHt ; auto.
+    omega.
+
+    (* Part 3 *)
+    unfold eq_ssubst ; unfold eq_ssubst_2 in H3 ; intros.
+    specialize (H3 H4).
+    destruct (depth e) ; [exfalso ; omega|].
+    destruct n ; auto ; simpl in *|-*.
+    assert(ltb h (nth 0 bs 0 + length (nth 0 t nil)) = false) as False1.
+    apply leb_iff_conv ; omega.
+    rewrite False1 in H3 ; auto.
   Qed.
 
   Lemma sstep_rstep:

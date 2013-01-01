@@ -4439,7 +4439,7 @@ Module TranslationProperties (R:Replacement)
     S.memory_svalue 0 M1 ->
     S.memory_depth M1 = 0 ->
     let n := depth e1 in
-    n <= length bs ->
+    n < length bs ->
     S.sstep n (M1, e1) (M2, e2) -> 
     let (e1', cs1) := trans e1 bs in
     match cs1 with
@@ -4630,6 +4630,7 @@ Module TranslationProperties (R:Replacement)
       unfold trans_expr ; simpl.
       specialize (CalculusProperties.depth_sstep_eq 
           M1 e1_1 M2 e3 MemDepth0 H1) ; intros Dpth1.
+      specialize (eq_ssubst_eq e1_2 bs) ; intros EqSsubstEq1.
       destruct (trans e1_1).
       destruct (trans e1_2).
       destruct t.
@@ -4744,7 +4745,24 @@ Module TranslationProperties (R:Replacement)
                  bs (length t1) 0 0 0) ; intros MapIter1.
                  rewrite MapIter1 in LengthHMatch ; auto.
                subst.
-               admit. (* todo: prove it. Create a separated lemma *)
+               destruct EqSsubstEq1 with (h:=(nth (length t1) bs 0 + booker e1_2 (length t1 + 0) + length t4)%nat) (v:=(phi x (0 :: nil))) ; auto.
+               rewrite H3 ; split ; auto ; rewrite DpthLength3 ; omega.
+               rewrite H3, DpthLength3, plus_0_r ; simpl ; omega.
+               unfold eq_ssubst in H2.
+               remember (ltb
+                (nth (length t1) bs 0 + booker e1_2 (length t1 + 0) +
+                 length t4) (nth 0 bs 0 + booker e1_2 0)).
+               destruct b ; symmetry in Heqb0.
+               assert(ltb (nth (length t1) bs 0 + booker e1_2 (length t1 + 0) + length t4)
+               (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+                 apply leb_iff ; apply leb_iff in Heqb0 ; rewrite plus_0_r in *|-* ; omega.
+               rewrite True1, H2 ; auto ; try(omega) ; constructor.
+               destruct (depth e1_2) ; try(rewrite H2 ; auto ; try(omega) ; constructor).
+               destruct n ; try(rewrite H2 ; auto ; try(omega) ; constructor).
+               rewrite H2 ; auto ; try(omega) ; [constructor |].
+               destruct (ltb (nth (length t1) bs 0 + booker e1_2 (length t1 + 0) + length t4)
+                 (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+               rewrite <- StageSetProperties.ub_le_1 ; auto.
                omega.
                intros.
                constructor ; [|constructor].
@@ -4758,8 +4776,7 @@ Module TranslationProperties (R:Replacement)
                    bs 0 0 0 0) ; intros MapIter1.
                  unfold map_iter_booker ; rewrite MapIter1.
                  simpl ; clear ; omega.
-                 apply le_trans with (m:=depth e1_1) ; auto.
-                 rewrite DpthLength3 ; simpl ; omega.
+                 destruct (depth e1_1) ; omega.
                rewrite Nth1 in H10 ; clear Nth1.
                rewrite H3 in *|-* ; auto.
                intros.
@@ -5163,6 +5180,7 @@ Module TranslationProperties (R:Replacement)
           inversion Shift1 ; subst.
           rewrite DpthLength in *|-* ; simpl in *|-*.
           apply FillSubst ; simpl ; auto.
+          clear ; omega.
 
           (* patch *)
           intros VL.
@@ -5176,6 +5194,7 @@ Module TranslationProperties (R:Replacement)
           inversion Shift1 ; subst.
 
           apply FillSubst ; auto.
+          generalize BSLength ; clear ; intros ; omega.
 
           (* patch *)
           intros VL.
@@ -5191,9 +5210,11 @@ Module TranslationProperties (R:Replacement)
           destruct t1 ; [ inversion Shift1 ; subst ;
           simpl in H7 ; inversion H7|] ; subst.
           apply FillSubst ; simpl ; auto.
+          generalize BSLength ; clear ; simpl ; intros ; omega.
           destruct (Context.shift (t1 :: t4)) ; inversion Shift1 ; subst.
           simpl in H7 ; inversion H7 ; subst ; auto.
-          simpl in *|-*.
+          apply FillSubst ; simpl ; auto.
+          generalize BSLength ; simpl in *|-* ; clear ; intros ; omega.
 
           (* patch *)
           intros VL.
@@ -5289,7 +5310,7 @@ Module TranslationProperties (R:Replacement)
           simpl tl in Tmp1.
           rewrite Tmp1.
           rewrite Tmp1.
-          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+          apply CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
             (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
             (b1:=n0) (b2:=n) ; auto.
           unfold admin_ssubst ; intros ; simpl.
@@ -5315,7 +5336,7 @@ Module TranslationProperties (R:Replacement)
           simpl tl in Tmp1.
           rewrite Tmp1.
           rewrite Tmp1.
-          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+          apply CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
             (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
             (b1:=n0) (b2:=n) ; auto.
           constructor ; assumption.
@@ -5329,7 +5350,7 @@ Module TranslationProperties (R:Replacement)
           simpl tl in Tmp1.
           rewrite Tmp1.
           rewrite Tmp1.
-          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+          apply CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
             (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
             (b1:=n0) (b2:=n) ; auto.
           destruct t0 ; [inversion Shift1 |].
@@ -5350,7 +5371,7 @@ Module TranslationProperties (R:Replacement)
           rewrite Tmp1.
           rewrite Tmp1.
           
-          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+          apply CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
             (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
             (b1:=n0) (b2:=n) ; auto.
           rewrite BKLength1 in H4.
@@ -5379,7 +5400,7 @@ Module TranslationProperties (R:Replacement)
           rewrite Tmp1.
           rewrite Tmp1.
           
-          apply ACSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
+          apply CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
             (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
             (b1:=n0) (b2:=n) ; auto.
           rewrite BKLength1 in H4.

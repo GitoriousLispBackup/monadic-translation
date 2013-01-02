@@ -261,7 +261,7 @@ Module Translation (R:Replacement)
   (** ** Administrative Reduction Step *)
   Inductive admin : relation T.expr :=
     | Admin_refl : forall (e:T.expr), admin e e
-    | Admin_trans : forall (e1 e2 e3:T.expr) (acc:nat -> nat), 
+    | Admin_trans : forall (e1 e2 e3:T.expr), 
         admin e1 e2 -> admin e2 e3 -> admin e1 e3
     | Admin_abs : forall (x:T.var) (e1 e2:T.expr),
         admin e1 e2 -> admin (M.cast_eabs x e1) (M.cast_eabs x e2)
@@ -2002,29 +2002,6 @@ Module TranslationProperties (R:Replacement)
   Definition admin_context_ssubst := congr_context_ssubst admin_ssubst.
   Definition admin_stack_ssubst := congr_stack_ssubst admin_ssubst.
 
-(*
-  Inductive admin_context_ssubst (n:nat) (h:CRaw.var)
-    (m:nat) (v:T.expr) (b1 b2:nat) : Context.t -> Context.t -> Prop :=
-  | ACSubst_nil : admin_context_ssubst n h m v b1 b2 nil nil
-  | ACSubst_cons : forall (u1 u2:T.expr) (c1 c2:Context.t),
-      admin_ssubst n h m v b1 u1 u2 ->
-      admin_context_ssubst n h m v b1 b2 c1 c2 ->
-      admin_context_ssubst n h m v b1 b2
-        (cons (u1,(b2+(length c1))%nat) c1) 
-        (cons (u2,(b2+(length c1))%nat) c2).
-
-  Inductive admin_stack_ssubst (n:nat) (h:CRaw.var) (v:T.expr) : 
-    list nat -> nat -> Context.t_stack -> Context.t_stack -> Prop :=
-  | ASSubst_nil : forall (bs:list nat) (b:nat), admin_stack_ssubst n h v bs b nil nil
-  | ASSubst_cons_nil: forall (c1 c2:Context.t) (bs:list nat) (b1 b2:nat),
-      admin_context_ssubst n h 0 v b1 b2 c1 c2 ->
-      admin_stack_ssubst n h v (b1::bs) b2 (c1::nil) (c2::nil)
-  | ASSubst_cons : forall (bs:list nat) (b1 b2:nat) (c1 c2 c1' c2':Context.t) (cs1 cs2:Context.t_stack),
-      admin_context_ssubst n h (length c1') v b1 b2 c1 c2 ->
-      admin_stack_ssubst (pred n) h v bs b1 (c1'::cs1) (c2'::cs2) ->
-      admin_stack_ssubst n h v (b1::bs) b2 (c1::c1'::cs1) (c2::c2'::cs2).
-*)
-
   Lemma admin_fill_ssubst_1:
     forall (e:S.expr) (bs:list nat),
     depth e <= length (0 :: bs) ->
@@ -2469,181 +2446,6 @@ Module TranslationProperties (R:Replacement)
 
   Definition eq_context_ssubst_2 := congr_context_ssubst eq_ssubst_2.
   Definition eq_stack_ssubst_2 := congr_stack_ssubst eq_ssubst_2.
-
-(*
-  Definition eq_ssubst_ss (ss:StageSet.t) (n:nat) (h:CRaw.var) 
-      (m:nat) (v:T.expr) (b:nat) (u1 u2:T.expr) : Prop :=
-      (M.ssubst n (match n with
-	  | S (S n) => if ltb h (b + m) 
-       		then StageSet.add (S n) ss else ss
-	  | _ => ss
-          end) (M.cast_var (hole_var h)) u1 v) = u2.
-
-  Inductive eq_context_ssubst_ss (ss:StageSet.t) (n:nat) (h:CRaw.var)
-    (m:nat) (v:T.expr) (b1 b2:nat) : Context.t -> Context.t -> Prop :=
-  | ECSubstSS_nil : eq_context_ssubst_ss ss n h m v b1 b2 nil nil
-  | ECSubstSS_cons : forall (u1 u2:T.expr) (c1 c2:Context.t),
-      eq_ssubst_ss ss n h m v b1 u1 u2 ->
-      eq_context_ssubst_ss ss n h m v b1 b2 c1 c2 ->
-      eq_context_ssubst_ss ss n h m v b1 b2
-        (cons (u1,(b2+(length c1))%nat) c1) 
-        (cons (u2,(b2+(length c1))%nat) c2).
-
-  Inductive eq_stack_ssubst_ss (ss:StageSet.t) (n:nat) (h:CRaw.var) (v:T.expr) : 
-    list nat -> nat -> Context.t_stack -> Context.t_stack -> Prop :=
-  | ESSubstSS_nil : forall (bs:list nat) (b:nat), eq_stack_ssubst_ss ss n h v bs b nil nil
-  | ESSubstSS_cons_nil: forall (c1 c2:Context.t) (bs:list nat) (b1 b2:nat),
-      eq_context_ssubst_ss ss n h 0 v b1 b2 c1 c2 ->
-      eq_stack_ssubst_ss ss n h v (b1::bs) b2 (c1::nil) (c2::nil)
-  | ESSubstSS_cons : forall (bs:list nat) (b1 b2:nat) (c1 c2 c1' c2':Context.t) (cs1 cs2:Context.t_stack),
-      eq_context_ssubst_ss ss n h (length c1') v b1 b2 c1 c2 ->
-      eq_stack_ssubst_ss (StageSet.remove n ss) (pred n) h v bs b1 (c1'::cs1) (c2'::cs2) ->
-      eq_stack_ssubst_ss ss n h v (b1::bs) b2 (c1::c1'::cs1) (c2::c2'::cs2).
-
-  Lemma eq_ssubst_ss_forall:
-    forall (e:T.expr) (b:nat) (h:S.var) (v:T.expr) (n m:nat),
-    (forall (ss:StageSet.t),
-    StageSet.ub n ss = true ->
-    eq_ssubst_ss ss n h m v b e e) -> eq_ssubst n h m v b e e.
-  Proof.
-    intros ; unfold eq_ssubst ; intros.
-    apply H ; auto.
-  Qed.
-
-  Lemma eq_ssubst_forall:
-    forall (e:T.expr) (b:nat) (h:S.var) (v:T.expr) (n m:nat),
-    eq_ssubst n h m v b e e ->
-    (forall (ss:StageSet.t),
-    StageSet.ub n ss = true ->
-    eq_ssubst_ss ss n h m v b e e).
-  Proof.
-    intros ; unfold eq_ssubst ; intros.
-    apply H ; auto.
-  Qed.
-
-  Lemma eq_context_ssubst_ss_forall:
-    forall (c:Context.t) (b1 b2:nat) (h:S.var) (v:T.expr) (n m:nat),
-    (forall (ss:StageSet.t),
-    StageSet.ub n ss = true ->
-    eq_context_ssubst_ss ss n h m v b1 b2 c c) -> eq_context_ssubst n h m v b1 b2 c c.
-  Proof.
-    induction c ; intros ; auto.
-    constructor.
-    destruct a.
-    case_beq_nat v0 (b2+(length c))%nat.
-
-    (* If good hypothesis, make induction *)
-    constructor ; auto.
-    apply eq_ssubst_ss_forall ; intros.
-    specialize (H ss H0).
-    inversion H ; subst ; auto.
-    apply IHc ; auto ; intros.
-    specialize (H ss H0).
-    inversion H ; subst ; auto.
-
-    (* If wrong hypothesis, prove contradiction *)
-    specialize (H StageSet.empty).
-    assert(StageSet.ub n StageSet.empty = true) as UbEmpty.
-    apply StageSetProperties.ub_empty.
-    specialize (H UbEmpty).
-    exfalso ; inversion H ; subst ; omega.
-  Qed.
-
-  Lemma eq_context_ssubst_forall:
-    forall (c:Context.t) (b1 b2:nat) (h:S.var) (v:T.expr) (n m:nat),
-    eq_context_ssubst n h m v b1 b2 c c ->
-    (forall (ss:StageSet.t),
-    StageSet.ub n ss = true ->
-    eq_context_ssubst_ss ss n h m v b1 b2 c c).
-  Proof.
-    induction c ; intros ; auto.
-    constructor.
-    inversion H ; subst.
-    constructor ; auto.
-    apply eq_ssubst_forall ; auto.
-  Qed.
-
-  Lemma eq_stack_ssubst_ss_forall:
-    forall (cs:Context.t_stack) (bs:list nat) (h:S.var) (v:T.expr) (n m:nat),
-    length cs <= S n ->
-    (forall (ss:StageSet.t),
-    StageSet.ub n ss = true ->
-    eq_stack_ssubst_ss ss n h v bs m cs cs) -> eq_stack_ssubst n h v bs m cs cs.
-  Proof.
-    induction cs ; intros ; auto.
-    constructor.
-    
-    destruct bs.
-    
-    (* If wrong hypothesis, prove contradiction *)
-    specialize (H0 StageSet.empty).
-    assert(StageSet.ub n StageSet.empty = true) as UbEmpty.
-    apply StageSetProperties.ub_empty.
-    specialize (H0 UbEmpty).
-    exfalso ; inversion H0 ; subst ; omega.
-
-    (* If good hypothesis, make induction *)
-    destruct cs ; constructor ; auto.
-    apply eq_context_ssubst_ss_forall ; intros ; auto.
-    specialize (H0 ss H1).
-    inversion H0 ; subst ; auto.
-    apply eq_context_ssubst_ss_forall ; intros ; auto.
-    specialize (H0 ss H1).
-    inversion H0 ; subst ; auto.
-    apply IHcs ; auto ; intros.
-    simpl in *|-* ; omega.
-    assert(StageSet.ub n ss = true) as UbSS.
-    apply StageSetProperties.ub_le_2 with (m:=pred n) ; auto ; 
-    destruct n ; simpl ; omega.
-    specialize (H0 ss UbSS).
-    inversion H0 ; subst ; auto.
-    destruct n ; simpl in *|-* ; [exfalso ; omega|].
-    rewrite StageSetProperties.remove_equal in H12 ; auto.
-    simpl in *|-* ; apply StageSetProperties.ub_mem_1 with (m:=n) ; auto.
-  Qed.
-
-  Lemma eq_stack_ssubst_forall:
-    forall (cs:Context.t_stack) (bs:list nat) (h:S.var) (v:T.expr) (n m:nat),
-    length cs <= S n ->
-    eq_stack_ssubst n h v bs m cs cs ->
-    (forall (ss:StageSet.t),
-    StageSet.ub n ss = true ->
-    eq_stack_ssubst_ss ss n h v bs m cs cs).
-  Proof.
-    induction cs ; intros ; auto.
-    constructor.
-
-    inversion H0 ; subst ; auto.
-    constructor ; auto.
-    apply eq_context_ssubst_forall ; auto.
-    constructor ; auto.
-    apply eq_context_ssubst_forall ; auto.
-    simpl in *|-* ; 
-    destruct n ; [exfalso ; omega |].
-    apply IHcs ; auto ; try(omega).
-    rewrite <- StageSetProperties.ub_pred ; auto.
-  Qed.
-
-  Lemma eq_ssubst_ss_m_ge:
-    forall (e:T.expr) (b:nat) (h:S.var) (v:T.expr) (n m p:nat) (ss:StageSet.t),
-    eq_ssubst_ss (match n with
-     | 0 => ss | 1 => ss 
-     | S (S n) => if ltb h (b+p)
-       then StageSet.add (S n) ss else ss
-       end) n h m v b e e -> 
-    m <= p -> eq_ssubst_ss ss n h p v b e e.
-  Proof.
-    unfold eq_ssubst_ss ; intros.
-    destruct n ; auto.
-    destruct n ; auto.
-    remember (ltb h (b + p)) ; destruct b0 ; symmetry in Heqb0.
-    destruct (ltb h (b + m)) ; auto.
-    rewrite StageSetProperties.add_mem_1 in H ; auto.
-    apply StageSetProperties.add_mem_3 ; auto.
-    assert(ltb h (b + m) = false).
-    apply leb_iff_conv ; apply leb_iff_conv in Heqb0 ; omega.
-    rewrite H1 in H ; auto.
-  Qed.*)
 
   Lemma eq_ssubst_m_Sm:
     forall (e:T.expr) (b:nat) (h:S.var) (v:T.expr) (n m:nat),
@@ -4693,6 +4495,8 @@ Module TranslationProperties (R:Replacement)
           destruct (Context.shift t0).
           destruct t4 ; [exfalso |] ; auto ; simpl.
           destruct p.
+          specialize (svalue_phi e3 (map_iter_booker e1_2 bs 0)) ; 
+          intros SValuePhi3 ; unfold trans_expr in SValuePhi3.
           destruct (trans e3).
           destruct IHe1_1.
           exists x.
@@ -4783,6 +4587,65 @@ Module TranslationProperties (R:Replacement)
                rewrite MP.ssubst_eapp ; auto.
 
               (* Case not svalue 0 e1_1 *)
+              remember (S.CRaw.svalueb 0 e3).
+              destruct b ; symmetry in Heqb0.
+              
+              (* Case svalue 0 e3 *)
+              apply CalculusProperties.svalueb_iff in Heqb0.
+              unfold admin_ssubst ; intros.
+              apply Admin_trans with (e2:=
+              (bind (ret (phi e3 (map_iter_booker e1_2 bs 0)))
+              (fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eapp v1 v2)))).
+              rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eapp v1 v2))).
+              destruct H7.
+              unfold admin_ssubst in H7.
+              assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0) = 
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)))%nat as Eq1.
+              destruct bs ; [exfalso |] ; simpl in *|-* ; omega.
+              rewrite Eq1, SValuePhi3 in H7 ; auto ; rewrite <- H3 in H7.
+              constructor ; intros ; auto ; constructor.
+              
+              intros.
+              rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+                cast_eapp (ssubst (depth e1_2)
+                match depth e1_2 with
+                | 0 => ss | 1 => ss
+                | S (S n) => if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                then StageSet.add (S n) ss else ss  end (cast_var (hole_var v)) v2 (phi x (0 :: nil))) v0)).
+              assert(nth (length t1) (map_iter_booker e1_2 bs 0) 0 = 
+                nth (length t1) bs 0 + booker e1_2 (pred (depth e1_2)))%nat as Nth1.
+              rewrite H3, DpthLength3 ; simpl.
+              specialize (List2Properties.map_iter_nth_indep 
+                   (fun b n : nat => (b + booker e1_2 n)%nat)
+                   bs (length t1) 0 0 0) ; intros MapIter1.
+                 unfold map_iter_booker ; rewrite MapIter1.
+                 rewrite plus_0_r ; simpl ; omega.
+                 rewrite DpthLength3 in BSLength ; simpl in *|-* ; omega.
+              rewrite LengthHMatch in *|-* ; auto ; simpl ; 
+              try(rewrite Eq2 ; rewrite DpthLength3 in BSLength ; simpl in *|-* ; omega).
+              destruct EqSsubstEq1 with (h:=(nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)%nat) 
+                (v:=(phi x (0 :: nil))) ; auto.
+              rewrite H3 ; simpl in *|-* ; omega.
+              rewrite Nth1, H3, DpthLength3 ; simpl ; omega.
+              
+              unfold eq_ssubst in H10.
+              destruct (depth e1_2) ; try(rewrite H10 ; auto).
+              destruct n ; try(rewrite H10 ; auto).
+              remember (ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + booker e1_2 0)).
+              destruct b ; symmetry in Heqb1.
+              assert(ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+              apply leb_iff ; apply leb_iff in Heqb1 ; omega.
+              rewrite True1, H10 ; auto.
+              rewrite H10 ; auto.
+              destruct (ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+              rewrite <- StageSetProperties.ub_le_1 ; auto.
+              intros ; rewrite MP.ssubst_eapp ; auto.
+              apply Admin_bind_phi ; auto.
+
+              (* Case not svalue 0 e3 *)
               admit.
 
             (* patch *)

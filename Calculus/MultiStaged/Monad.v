@@ -4369,6 +4369,22 @@ Module TranslationProperties (R:Replacement)
     rewrite Eq1 ; constructor ; auto.
   Qed.*)
 
+  Lemma merge_unshift_1:
+    forall (cs1 cs2:Context.t_stack) (c:Context.t),
+    length cs2 <= length cs1 ->
+    Context.unshift (Context.merge cs1 cs2) c = 
+    Context.merge (Context.unshift cs1 c) cs2.
+  Proof.
+    induction cs1 ; intros.
+    destruct cs2 ; [|exfalso ; simpl in *|-* ; omega].
+    simpl ; auto.
+    destruct cs2.
+    simpl ; auto.
+    simpl.
+    rewrite IHcs1 ; auto.
+    simpl in *|-* ; omega.
+  Qed.
+
   Lemma admin_stack_ssubst_merge_2:
     forall (bs:list nat) (e1 e2 e3:S.expr), 
     let (e1', cs1) := trans e1 (map_iter_booker e2 bs 0) in
@@ -4401,7 +4417,7 @@ Module TranslationProperties (R:Replacement)
         | _ =>
           admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil)) (tl bs)
           (hd 0 bs)
-          (Context.merge (Context.unshift cs1' c1') cs2)
+          (Context.unshift (Context.merge cs1' cs2) c1')
           (Context.merge cs3 cs2)
         end
       end
@@ -4416,6 +4432,8 @@ Module TranslationProperties (R:Replacement)
     destruct (trans e2).
     destruct (trans e3).
     destruct t ; auto.
+    assert(Context.shift (t :: t2) = Context.shift ((fun x => x) (t :: t2))) as Shift1.
+    reflexivity.
     destruct (Context.shift (t :: t2)).
     destruct t3 ; auto.
     destruct p ; intros.
@@ -4431,6 +4449,7 @@ Module TranslationProperties (R:Replacement)
     destruct t3.
 
     (* c1' nil *)
+    clear Shift1.
     generalize dependent n ;
     generalize dependent t2 ; generalize dependent t1 ; 
     generalize dependent bs ; generalize dependent t0.
@@ -4507,6 +4526,8 @@ Module TranslationProperties (R:Replacement)
     simpl in Heqt8 ; inversion Heqt8 ; rewrite app_length ; omega.
 
     (* c1' not nil *)
+    rewrite merge_unshift_1 ; auto.
+    clear Shift1.
     rewrite ContextStaticProperties.unshift_spec in *|-*.
     generalize dependent n ;
     generalize dependent t2 ; generalize dependent t1 ; 
@@ -4521,6 +4542,7 @@ Module TranslationProperties (R:Replacement)
     simpl in *|-*.
     rewrite map_iter_stack_cons in *|-*.
     inversion H2 ; subst.
+    simpl.
     constructor ; auto.
     rewrite map_iter_stack_nil in *|-* ; subst ; auto.
     inversion H ; subst ; auto.
@@ -4578,6 +4600,19 @@ Module TranslationProperties (R:Replacement)
     simpl in *|-*.
     rewrite app_length ; omega.
     rewrite Heqt6, Heqt8, H7 in *|-* ; auto.
+
+    (* length t0 <= length t4 *)
+    specialize (ContextStaticProperties.shift_spec (t :: t2)) ; intros Spec1.
+    simpl in Spec1.
+    destruct (Context.shift t2).
+    destruct t2.
+    admit.
+    inversion Shift1 ; subst.
+    assert(length (t :: t2 :: t7) = length ((t :: t6) ++ ((e5, v) :: p :: t3) :: nil)) as Eq1.
+    rewrite Spec1 ; simpl ; auto ; omega.
+    simpl in Eq1.
+    rewrite app_length in Eq1.
+    simpl in *|-* ; omega.
   Qed.
 
   Lemma sstep_rstep:
@@ -5107,7 +5142,6 @@ Module TranslationProperties (R:Replacement)
             destruct H5 ; destruct H6.
             repeat(split) ; auto.
             apply AdminSsubst2 ; auto.
-            (* Seems to be ok *)
             
             remember (S.CRaw.svalueb 0 e1_1).
             destruct b ; symmetry in Heqb.
@@ -5253,28 +5287,15 @@ Module TranslationProperties (R:Replacement)
             rewrite H6 ; rewrite H7 ; auto.
             omega.
             intros ; rewrite H7 ; auto.
-            rewrite <- H3 ; auto.
             unfold trans_expr ; destruct (trans x0).
             simpl.
-            specialize (ContextStaticProperties.unshift_spec t5 ((e, v) :: t4)) ; intros Spec1.
-            rewrite Spec1 ; clear Spec1.
-            specialize (ContextStaticProperties.unshift_spec (Context.merge t5 t7) ((e, v) :: t4 ++ t6)) ; intros Spec2.
-            rewrite Spec2 ; clear Spec2.
-            specialize (ContextStaticProperties.shift_spec t0) ; intros Spec3.
-            rewrite <- Merge3 in Spec3.
-            destruct t0 ; simpl.
-            simpl in Merge3 ; inversion Merge3.
-            rewrite ContextStaticProperties.merge_nil_r.
-            rewrite ContextStaticProperties.merge_nil_r.
-            rewrite app_nil_r ; auto.
-            rewrite Spec3 ; simpl ; auto ; [|omega].
-            rewrite ContextStaticProperties.merge_app ; auto.
-            rewrite DpthLength4, DpthLength3 in H3.
-            specialize (ContextStaticProperties.shift_length (t0 :: t9)) ; intros L1.
-            specialize (ContextStaticProperties.shift_length (t :: t1)) ; intros L2.
-            rewrite <- Merge3 in L1.
-            rewrite <- Merge2 in L2.
-            rewrite L1, L2, H3 ; auto.
+            rewrite merge_unshift_1 ; auto.
+            specialize (ContextStaticProperties.shift_length (t :: t1)) ; intros L1.
+            rewrite <- Merge2 in L1.
+            rewrite L1 ; simpl in *|-*.
+            rewrite DpthLength3, DpthLength4 in *|-*.
+            generalize D1 ; clear ; intros.
+            apply le_S_n in D1 ; auto.
 
       (* Case EApp e1 e2,  e2 -> e2' *)
       specialize (max_spec (depth e1_2) (depth e1_1)) ; intros MaxRight.

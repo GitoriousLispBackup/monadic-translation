@@ -4401,7 +4401,7 @@ Module TranslationProperties (R:Replacement)
         | _ =>
           admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil)) (tl bs)
           (hd 0 bs)
-          (Context.unshift (Context.merge cs1' cs2) c1')
+          (Context.merge (Context.unshift cs1' c1') cs2)
           (Context.merge cs3 cs2)
         end
       end
@@ -4446,6 +4446,7 @@ Module TranslationProperties (R:Replacement)
     rewrite map_iter_stack_nil in *|-* ; auto.
     simpl in *|-* ; rewrite plus_0_r in *|-* ; auto.
 
+    (* induction case *)
     destruct t2 ; simpl in *|-* ; [exfalso ; omega|].
     assert(admin_stack_ssubst (length t6) v (phi eh (0 :: nil)) bs n0
          (Context.merge t4 t5) (Context.merge t3 t5)).
@@ -4519,84 +4520,64 @@ Module TranslationProperties (R:Replacement)
 
     simpl in *|-*.
     rewrite map_iter_stack_cons in *|-*.
-    simpl.
-    inversion H5 ; subst.
-    inversion H2; subst.
-    simpl.
-    constructor.
-    simpl.
-    inversion H2; subst.
-    simpl.
+    inversion H2 ; subst.
     constructor ; auto.
-
+    rewrite map_iter_stack_nil in *|-* ; subst ; auto.
+    inversion H ; subst ; auto.
+    rewrite app_comm_cons.
+    apply congr_ssubst_context_app ; auto.
+    apply eq_context_ssubst_admin ; auto.
+    constructor ; auto.
+    rewrite map_iter_stack_nth, map_iter_stack_cons in *|-*.
+    inversion H ; subst ; auto.
+    rewrite app_comm_cons.
+    apply congr_ssubst_context_app ; auto.
+    apply admin_context_ssubst_sum with (m1:=0) (b1:=(b0 + length c1')%nat) ;
+    auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
     apply eq_stack_ssubst_admin ; auto.
-    destruct t1.
-    inversion H0 ; subst.
-    simpl.
-    destruct bs ; [exfalso ; simpl in *|-* ; omega |].
 
+    destruct bs ; [exfalso ; simpl in *|-* ; omega |].
     destruct t0 ; auto.
     rewrite map_iter_stack_nil in *|-* ; auto.
     simpl in *|-* ; rewrite plus_0_r in *|-* ; auto.
+    rewrite ContextStaticProperties.merge_nil_r ; auto.
+    rewrite map_iter_stack_nth, map_iter_stack_cons in *|-*.
+    inversion H0 ; subst.
+    apply app_cons_not_nil in H7 ; contradiction.
 
-    destruct t2 ; simpl in *|-* ; [exfalso ; omega|].
-    assert(admin_stack_ssubst (length t6) v (phi eh (0 :: nil)) bs n0
-         (Context.merge t4 t5) (Context.merge t3 t5)).
-    apply IHt4 ; auto ; clear IHt4.
+    (* induction case *)
+    destruct t2 ; [simpl in *|-* ; exfalso ; omega|].
+    assert(admin_stack_ssubst (length t2) v (phi eh (0 :: nil)) bs n0
+         (Context.merge (t4 ++ (p :: t3) :: nil) t5) (Context.merge (c2' :: cs2) t5)).
+    apply IHt4 ; auto ; clear IHt4 ; simpl in *|-*.
     omega.
     inversion H2 ; subst ; auto.
     constructor.
+    rewrite <- H7 ; auto.
 
-    rewrite map_iter_stack_nth, map_iter_stack_cons in H0 ; auto.
-    inversion H0 ; subst ; auto.
-    constructor.
-
-    destruct t4.
-    inversion H0 ; subst ; simpl in *|-* ; auto.
-    destruct t5.
-    constructor ; auto.
-    apply congr_ssubst_context_app ; auto.
-    rewrite plus_0_r in H6 ; auto.
-    apply eq_context_ssubst_admin ; auto.
-    inversion H2 ; subst ; auto.
-    
-    constructor ; auto.
-    apply congr_ssubst_context_app ; auto.
-    apply admin_context_ssubst_sum with (m1:=0) (b1:=(n0 + length t3)%nat) ;
-    simpl in *|-* ; auto ; omega.
-    apply eq_context_ssubst_admin ; auto.
-    inversion H2 ; subst ; auto.
-    
-    remember (Context.merge (t4 :: t7) t5).
+    remember (Context.merge (c1' :: cs1) t5).
+    destruct t6.
+    simpl in Heqt6 ; destruct t5 ; inversion Heqt6.
+    remember (Context.merge (c2' :: cs2) t5).
     destruct t8.
     simpl in Heqt8 ; destruct t5 ; inversion Heqt8.
-    remember (Context.merge t3 t5).
-    destruct t10.
-    inversion H0 ; subst.
-    simpl in Heqt10 ; destruct t5 ; inversion Heqt10.
-    destruct t5 ; auto.
-
-    rewrite ContextStaticProperties.merge_nil_r in *|-*.
-    simpl in *|-* ; inversion Heqt8 ; inversion Heqt10 ; subst ; simpl in *|-*.
+    remember (c2' :: cs2) ; simpl ; subst.
+    rewrite <- Heqt8.
     constructor ; auto.
     apply congr_ssubst_context_app ; auto.
-    inversion H0 ; subst.
-    rewrite plus_0_r in H8 ; auto.
-    apply admin_context_ssubst_m_ge with (m:=0) ; auto ; try(omega).
-    apply eq_context_ssubst_admin ; auto.
-    inversion H2 ; subst ; auto.
-    
-    constructor ; auto.
-    apply congr_ssubst_context_app ; auto.
-    inversion H0 ; subst.
-    clear H12 H0.
-    apply admin_context_ssubst_sum with (m1:=length t4) (b1:=(n0 + (length t5))%nat) ;
+    simpl in *|-* ; auto.
+    apply admin_context_ssubst_sum with (m1:=length c1') (b1:=(n0 + (length (nth 0 t5 nil)))%nat) ;
     auto.
-    simpl in Heqt8 ; inversion Heqt8 ; rewrite app_length ; omega.
-    apply admin_context_ssubst_m_ge with (m:=length t5) ; auto ; try(omega).
+    destruct t5 ; inversion Heqt6 ; subst ; 
+    try(rewrite app_length) ; simpl ; omega.
+    apply admin_context_ssubst_m_ge with (m:=(length (nth 0 t5 nil))) ; auto ; try(omega).
     apply eq_context_ssubst_admin ; auto.
     inversion H2 ; subst ; auto.
-    simpl in Heqt8 ; inversion Heqt8 ; rewrite app_length ; omega.
+    destruct t5 ; simpl in *|-* ; [omega|] ; inversion Heqt6 ; subst ; 
+    simpl in *|-*.
+    rewrite app_length ; omega.
+    rewrite Heqt6, Heqt8, H7 in *|-* ; auto.
   Qed.
 
   Lemma sstep_rstep:

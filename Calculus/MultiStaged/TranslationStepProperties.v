@@ -3082,26 +3082,6 @@ Module TranslationStepProperties (R:Replacement)
     apply IHc1 with (m1:=m1) (b1:=b1) ; auto.
   Qed.
 
-(*
-  Lemma admin_stack_ssubst_app:
-    forall (cs1 cs2 cs3 cs4:Context.t_stack) (bs:list nat) (m n b:nat) (h:S.var) (v:T.expr),
-    admin_stack_ssubst n h v bs b cs1 cs3 ->
-    admin_stack_ssubst n h v bs b cs2 cs4 ->
-    admin_stack_ssubst n h v bs b (cs1 ++ cs2) (cs3 ++ cs4).
-  Proof.
-    induction cs1 ; simpl ; intros ;
-    inversion H ; subst ; simpl ; auto.
-    inversion H0 ; subst.
-    constructor ; auto.
-    constructor ; auto.
-    apply admin_context_ssubst_m_ge with (m:=0) ; auto ; omega.
-
-    simpl ; auto.
-    assert((b2 + length c2 + length c1) = b2 + (length (c1++c2)))%nat as Eq1.
-    rewrite app_length ; simpl ; omega.
-    rewrite Eq1 ; constructor ; auto.
-  Qed.*)
-
   Lemma merge_unshift_1:
     forall (cs1 cs2:Context.t_stack) (c:Context.t),
     length cs2 <= length cs1 ->
@@ -3116,6 +3096,51 @@ Module TranslationStepProperties (R:Replacement)
     simpl.
     rewrite IHcs1 ; auto.
     simpl in *|-* ; omega.
+  Qed.
+
+
+  Lemma admin_stack_ssubst_merge_1:
+    forall (bs:list nat) (e1 e2 e3:S.expr), 
+    let (e1', cs1) := trans e1 (map_iter_booker e2 bs 0) in
+    let (e2', cs2) := trans e2 bs in
+    let (e3', cs3) := trans e3 (map_iter_booker e2 bs 0) in
+    match Context.merge cs1 cs2 with
+    | nil => True
+    | _ => 
+      let (c1, cs1') := Context.shift cs1 in
+      let (c4, cs4') := Context.shift (Context.merge cs1 cs2) in
+      match c1 with
+      | nil => True
+      | cons (t_eh, h) c1' => 
+        forall (eh:S.expr),
+        t_eh = trans_expr eh (0::nil) ->
+        match c1' with
+        | nil =>
+            admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil))
+            (tl (map_iter_booker e2 bs 0))
+            (hd 0 (map_iter_booker e2 bs 0)) cs1' cs3
+        | _ :: _ =>
+            admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil))
+            (tl (map_iter_booker e2 bs 0))
+            (hd 0 (map_iter_booker e2 bs 0)) (Context.unshift cs1' c1') cs3
+        end ->
+        depth e1 = depth e2 ->
+        depth e1 < length bs ->
+        match c4 with
+        | nil => True
+        | _ :: nil =>
+          admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil)) (tl bs)
+          (hd 0 bs) cs4'
+          (Context.merge cs3 cs2)
+        | _ :: c4' =>
+          admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil)) (tl bs)
+          (hd 0 bs)
+          (Context.unshift cs4' c4')
+          (Context.merge cs3 cs2)
+        end
+      end
+    end.
+    admit.
   Qed.
 
   Lemma admin_stack_ssubst_merge_2:
@@ -3546,6 +3571,7 @@ Module TranslationStepProperties (R:Replacement)
           M1 e1_1 M2 e3 MemDepth0 H1) ; intros Dpth1.
       specialize (eq_ssubst_eq e1_2 bs) ; intros EqSsubstEq1.
       specialize (eq_ssubst_gt e1_2 bs) ; intros EqSsubstEq2.
+      specialize (admin_stack_ssubst_merge_1 bs e1_1 e1_2) ; intros AdminSsubst1.
       specialize (admin_stack_ssubst_merge_2 bs e1_1 e1_2) ; intros AdminSsubst2.
       destruct (trans e1_1).
       destruct (trans e1_2).
@@ -3611,6 +3637,7 @@ Module TranslationStepProperties (R:Replacement)
           destruct p.
           specialize (svalue_phi e3 (map_iter_booker e1_2 bs 0)) ; 
           intros SValuePhi3 ; unfold trans_expr in SValuePhi3.
+          specialize (AdminSsubst1 e3) ; clear AdminSsubst2.
           destruct (trans e3).
           destruct IHe1_1.
           exists x.
@@ -3620,7 +3647,14 @@ Module TranslationStepProperties (R:Replacement)
             (* Case svalue *)
             destruct H5 ; destruct H6.
             repeat(split) ; auto.
-            admit. (* Todo: prove it. Create a separated lemma *)
+            rewrite Merge1 in AdminSsubst1.
+            rewrite ContextStaticProperties.shift_merge_3 in AdminSsubst1.
+            rewrite <- Merge2, <- Merge3 in AdminSsubst1.
+            specialize (AdminSsubst1 x H2 H6).
+            rewrite <- app_comm_cons in AdminSsubst1.
+            rewrite H3 in *|-*.
+            apply AdminSsubst1 ; auto.
+            rewrite DpthLength3, DpthLength4 in H3 ; auto.
             
             remember (S.CRaw.svalueb 0 e1_1).
             destruct b ; symmetry in Heqb.
@@ -3864,7 +3898,7 @@ Module TranslationStepProperties (R:Replacement)
           destruct p.
           specialize (svalue_phi e3 (map_iter_booker e1_2 bs 0)) ; 
           intros SValuePhi3 ; unfold trans_expr in SValuePhi3.
-          specialize (AdminSsubst2 e3).
+          specialize (AdminSsubst2 e3) ; clear AdminSsubst1.
           destruct (trans e3).
           destruct IHe1_1.
           exists x.

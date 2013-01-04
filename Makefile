@@ -101,7 +101,6 @@ VFILES:= Misc/Tactics.v\
   Misc/Sets.v\
   Misc/Relation.v\
   Misc/Library.v\
-  Misc/Injection.v\
   Calculus/Sets.v\
   Calculus/Definitions.v\
   Calculus/Terminology.v\
@@ -109,12 +108,15 @@ VFILES:= Misc/Tactics.v\
   Calculus/MultiStaged/Definitions.v\
   Calculus/MultiStaged/Properties.v\
   Calculus/MultiStaged/Monad.v\
+  Calculus/MultiStaged/Translation.v\
+  Calculus/MultiStaged/MonadStepProperties.v\
+  Calculus/MultiStaged/TranslationStaticProperties.v\
+  Calculus/MultiStaged/TranslationStepProperties.v\
   Calculus/MultiStaged/Monad/Identity.v
 ORDEREDVFILES:= Misc/Tactics.v\
   Misc/Sets.v\
   Misc/Relation.v\
   Misc/Library.v\
-  Misc/Injection.v\
   Calculus/Sets.v\
   Calculus/Definitions.v\
   Calculus/Terminology.v\
@@ -122,6 +124,10 @@ ORDEREDVFILES:= Misc/Tactics.v\
   Calculus/MultiStaged/Definitions.v\
   Calculus/MultiStaged/Properties.v\
   Calculus/MultiStaged/Monad.v\
+  Calculus/MultiStaged/Translation.v\
+  Calculus/MultiStaged/MonadStepProperties.v\
+  Calculus/MultiStaged/TranslationStaticProperties.v\
+  Calculus/MultiStaged/TranslationStepProperties.v\
   Calculus/MultiStaged/Monad/Identity.v
 VOFILES:=$(VFILES:.v=.vo)
 VOFILES1:=$(patsubst $(PROJDIR)/%,%,$(filter $(PROJDIR)/%,$(VOFILES)))

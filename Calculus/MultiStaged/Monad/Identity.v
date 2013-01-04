@@ -51,8 +51,8 @@ Module Type IdentityMonad (R:Replacement) (T:ReplacementCalculus R) <: (Monad R 
 
 End IdentityMonad.
 
-Module Type IdentityMonadProperties (R:Replacement) 
-  (T:ReplacementCalculus R) (M:IdentityMonad R T) <: MonadProperties R T M.
+Module Type IdentityMonadStepProperties (R:Replacement) 
+  (T:ReplacementCalculus R) (M:IdentityMonad R T) <: MonadStepProperties R T M.
 
   Module Translation := Translation R T M.
   Module TSP := TranslationStaticProperties R T M.

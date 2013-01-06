@@ -37,6 +37,15 @@ Module ContextStaticProperties (R:Replacement)
     reflexivity.
   Qed.
 
+  Lemma merge_nil:
+    forall (cs1 cs2:t_stack),
+    nil = merge cs1 cs2 -> (cs1 = nil /\ cs2 = nil).
+  Proof.
+    intros ; destruct cs1 ; destruct cs2 ; simpl in *|-* ; 
+    split ; auto ; try(omega) ;
+    inversion H.
+  Qed.
+
   Lemma congr_context_app:
     forall (rel:relation T.expr) (c1 c2 c3 c4:t),
     congr_context rel c1 c3 ->

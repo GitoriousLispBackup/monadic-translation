@@ -591,7 +591,7 @@ Module TranslationStaticProperties (R:Replacement)
     rewrite IHbs ; auto.
   Qed.
 
-    Lemma booker_le:
+  Lemma booker_le:
     forall (e:S.expr) (m n:nat),
     m <= n -> booker e m = 0 -> booker e n = 0.
   Proof.
@@ -657,6 +657,59 @@ Module TranslationStaticProperties (R:Replacement)
     destruct (trans e) ; induction bs ; intros ;
     unfold map_iter_booker, map_iter_stack in *|-* ; simpl ; auto.
     rewrite BookerLength, IHbs ; auto.
+  Qed.
+
+  Lemma map_iter_stack_nil:
+    forall (bs:list nat) (n:nat),
+    map_iter_stack nil bs n = bs.
+  Proof.
+    induction bs ; simpl ; intros ; auto.
+    unfold map_iter_stack in *|-* ; simpl ;
+    rewrite IHbs ; destruct n ; rewrite plus_0_r ; reflexivity.
+  Qed.
+
+  Lemma map_iter_stack_cs:
+    forall (bs:list nat) (c:Context.t) (cs:Context.t_stack) (n:nat),
+    map_iter_stack (c::cs) bs (S n) = map_iter_stack cs bs n.
+  Proof.
+    induction bs ; simpl ; intros ; auto.
+    unfold map_iter_stack in *|-* ; simpl in *|-*.
+    rewrite IHbs ; destruct n ; reflexivity.
+  Qed.
+
+  Lemma map_iter_stack_bs:
+    forall (bs:list nat) (cs:Context.t_stack)  (b:nat) (n:nat),
+    map_iter_stack cs (b :: bs) n = 
+    (b + length (nth n cs nil))%nat :: map_iter_stack cs bs (S n).
+  Proof.
+    induction bs ; simpl ; intros ; auto.
+  Qed.
+
+  Lemma map_iter_stack_nth:
+    forall (bs:list nat) (cs:Context.t_stack)  (m n:nat),
+    nth m (map_iter_stack cs bs n) (length (nth (m + n) cs nil)) = 
+    (nth m bs 0 + length (nth (n+m) cs nil))%nat.
+  Proof.
+    intros.
+    unfold map_iter_stack.
+    specialize (List2Properties.map_iter_nth 
+      (fun b n0 : nat => (b + length (nth n0 cs nil))%nat) bs m n 0) ; intros P.
+    simpl in P ; rewrite P.
+    rewrite plus_comm with (m:=m) ; auto.
+  Qed.
+
+  Lemma map_iter_stack_nth_indep:
+    forall (bs:list nat) (cs:Context.t_stack)  (m n:nat),
+    m < length bs ->
+    nth m (map_iter_stack cs bs n) 0 = 
+    (nth m bs 0 + length (nth (n+m) cs nil))%nat.
+  Proof.
+    intros.
+    unfold map_iter_stack.
+    specialize (List2Properties.map_iter_nth_indep 
+      (fun b n0 : nat => (b + length (nth n0 cs nil))%nat) bs m n 0) ; intros P.
+    simpl in P ; rewrite P ; auto.
+    rewrite plus_comm with (m:=m) ; auto.
   Qed.
 
   Lemma length_h:
@@ -793,5 +846,244 @@ Module TranslationStaticProperties (R:Replacement)
     omega.
   Qed.
 
+  
+  Lemma context_mem_length_booker:
+    forall (e:S.expr) (bs:list nat),
+    let (_, cs) := trans e bs in
+    forall (n:nat),
+    length (nth n cs nil) = booker e n.
+  Proof.
+    induction e ; simpl ; intros ; 
+    try(destruct n ; auto ; fail) ;
+
+    try(specialize(IHe bs) ;
+    destruct (trans e) ; intros ;
+    apply IHe ; fail) ;
+
+    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
+    specialize (IHe2 bs) ;
+    destruct (trans e1) ; destruct (trans e2) ; intros ;
+    rewrite ContextStaticProperties.merge_nth ;
+    rewrite app_length ;
+    rewrite IHe1, IHe2 ; reflexivity).
+
+    specialize (IHe (0::bs)).
+    destruct (trans e).
+    destruct t ; intros ; simpl in *|-*.
+    specialize (IHe (S n)) ; destruct n ; auto.
+    specialize (IHe (S n)) ; simpl in *|-*.
+    assumption.
+    
+    destruct (List2.hd_cons bs 0).
+    specialize (IHe l).
+    destruct (trans e) ; intros.
+    simpl in *|-*.
+    destruct n0 ; auto.
+  Qed.
+
+  Lemma context_mem_booker:
+    forall (e:S.expr) (bs:list nat),
+    let (_, cs) := trans e bs in
+    forall (n:nat) (v:var),
+    n < length bs ->
+    VarSet.mem v (Context.context_hole_set (nth n cs nil)) = true ->
+    nth n bs 0 <= v < (nth n bs 0) + (booker e n).
+  Proof.
+    induction e ; simpl ; intros ;
+    
+    try(destruct n ; inversion H0 ; fail) ;
+
+    try(specialize (IHe bs) ;
+    destruct (trans e) ; intros ;
+    apply IHe ; auto ; fail) ;
+
+    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
+    specialize (IHe2 bs) ; unfold map_iter_booker in *|-* ;
+    destruct (trans e1) ; destruct (trans e2) ; intros ;
+    rewrite ContextStaticProperties.merge_nth in H0 ;
+    rewrite ContextStaticProperties.context_hole_set_app in H0 ;
+    rewrite VarSetProperties.union_mem in H0 ;
+    apply orb_true_iff in H0 ; destruct H0 ; [
+    rewrite List2Properties.length_map_iter in IHe1 ;
+    specialize (IHe1 n v H H0) ; clear IHe2 ;
+    specialize(List2Properties.map_iter_nth_indep
+    (fun b n => (b + booker e2 n)%nat) bs n 0 0 0 H) ; intros ;
+    rewrite H1 in IHe1 ;
+    destruct IHe1 ; split ; rewrite plus_0_r in H3 ; omega|
+    clear IHe1 ; specialize (IHe2 n v H H0) ; omega]).
+
+    specialize (IHe (0::bs)).
+    destruct (trans e).
+    destruct t ; simpl in *|-* ; intros.
+    destruct n ; simpl in H0 ; inversion H0.
+    apply lt_n_S in H.
+    specialize (IHe (S n) v H H0) ; clear H H0 ; simpl in *|-*.
+    assumption.
+    
+    destruct bs ; simpl in *|-*.
+    specialize (IHe nil).
+    destruct (trans e) ; intros.
+    destruct n ; simpl in *|-*.
+    rewrite <- VarSetProperties.singleton_equal_add in H0.
+    rewrite VarSetProperties.singleton_mem in H0.
+    subst ; omega.
+    apply lt_S in H ; apply lt_S_n in H.
+    specialize (IHe n v H H0) ; clear H H0.
+    destruct n ; omega.
+
+    specialize (IHe bs).
+    destruct (trans e) ; intros ; simpl in *|-*.
+    destruct n0 ; simpl in *|-*.
+    rewrite <- VarSetProperties.singleton_equal_add in H0.
+    rewrite VarSetProperties.singleton_mem in H0.
+    subst ; omega.
+    apply IHe ; auto.
+    apply lt_S_n in H ; auto.
+  Qed.
+
+  Lemma context_mem:
+    forall (e:S.expr) (bs:list nat),
+    let (_, cs) := trans e bs in
+    forall (n:nat),
+    n < length bs ->
+    match nth n cs nil with
+    | nil => True
+    | (e, v) :: c => VarSet.mem v (Context.context_hole_set c) = false
+    end.
+  Proof.
+    induction e ; intros ; simpl in *|-* ; intros ;
+    try(destruct n ; auto ; fail) ;
+
+    try(specialize (IHe bs) ;
+    destruct (trans e bs) ; intros ;
+    specialize (IHe n H) ;
+    assumption).
+
+    (* EApp *)
+    specialize (IHe1 (map_iter_booker e2 bs 0)) ;
+    specialize (IHe2 bs) ;
+    specialize (context_mem_booker e1 (map_iter_booker e2 bs 0)) ; 
+    intros CMB1 ;
+    specialize (context_mem_booker e2 bs) ; intros CMB2 ;
+    destruct (trans e1) ; destruct (trans e2) ;
+    intros ; specialize (IHe1 n) ; specialize (IHe2 n) ;
+    rewrite ContextStaticProperties.merge_nth ;
+    specialize (CMB1 n) ; specialize (CMB2 n) ;
+    destruct (nth n t nil) ; simpl ; [
+    apply IHe2 ; auto |].
+    destruct p ;
+    rewrite ContextStaticProperties.context_hole_set_app ;
+    rewrite VarSetProperties.union_mem ;
+    apply orb_false_iff ; 
+    unfold map_iter_booker in *|-* ; split.
+    rewrite List2Properties.length_map_iter in IHe1.
+    apply IHe1 ; auto.
+    rewrite List2Properties.length_map_iter in CMB1.
+    remember (VarSet.mem v (Context.context_hole_set (nth n t0 nil))).
+    symmetry in Heqb ; destruct b ; auto ; exfalso.
+    apply CMB2 in Heqb ; auto ; clear CMB2.
+    assert(VarSet.mem v (Context.context_hole_set ((e3, v) :: t1)) = true).
+    simpl ; apply VarSetProperties.add_mem_3.
+    specialize (CMB1 v H H0) ; clear H0 IHe2 IHe1 ;
+    specialize(List2Properties.map_iter_nth_indep 
+      (fun b n => (b + booker e2 n)%nat) bs n 0 0 0 H) ; intros ;
+    rewrite plus_0_r in H0 ; rewrite H0 in CMB1 ; clear H0 ;
+    omega.
+
+    (* EAssign (same as EApp. Should deduplicate) *)
+    specialize (IHe1 (map_iter_booker e2 bs 0)) ;
+    specialize (IHe2 bs) ;
+    specialize (context_mem_booker e1 (map_iter_booker e2 bs 0)) ; 
+    intros CMB1 ;
+    specialize (context_mem_booker e2 bs) ; intros CMB2 ;
+    destruct (trans e1) ; destruct (trans e2) ;
+    intros ; specialize (IHe1 n) ; specialize (IHe2 n) ;
+    rewrite ContextStaticProperties.merge_nth ;
+    specialize (CMB1 n) ; specialize (CMB2 n) ;
+    destruct (nth n t nil) ; simpl ; [
+    apply IHe2 ; auto |].
+    destruct p ;
+    rewrite ContextStaticProperties.context_hole_set_app ;
+    rewrite VarSetProperties.union_mem ;
+    apply orb_false_iff ; unfold map_iter_booker in *|-* ; split.
+    rewrite List2Properties.length_map_iter in IHe1.
+    apply IHe1 ; auto.
+    rewrite List2Properties.length_map_iter in CMB1.
+    remember (VarSet.mem v (Context.context_hole_set (nth n t0 nil))).
+    symmetry in Heqb ; destruct b ; auto ; exfalso.
+    apply CMB2 in Heqb ; auto ; clear CMB2.
+    assert(VarSet.mem v (Context.context_hole_set ((e3, v) :: t1)) = true).
+    simpl ; apply VarSetProperties.add_mem_3.
+    specialize (CMB1 v H H0) ; clear H0 IHe2 IHe1 ;
+    specialize(List2Properties.map_iter_nth_indep 
+      (fun b n => (b + booker e2 n)%nat) bs n 0 0 0 H) ; intros ;
+    rewrite plus_0_r in H0 ; rewrite H0 in CMB1 ; clear H0 ;
+    omega.
+    
+    specialize (IHe (0 :: bs)).
+    destruct (trans e) ; intros.
+    destruct t ; simpl in *|-* ; intros.
+    destruct n ; auto.
+    specialize (IHe (S n)).
+    apply IHe ; auto.
+    apply lt_n_S ; auto.
+
+    destruct bs ; simpl in *|-*.
+    specialize (IHe nil).
+    destruct (trans e nil) ; intros.
+    simpl in *|-*.
+    destruct n ; auto.
+    apply IHe ; auto ; omega.
+
+    specialize (IHe bs).
+    destruct (trans e) ; intros.
+    simpl in *|-*.
+    destruct n0 ; auto.
+    apply IHe ; auto.
+    omega.
+  Qed.
+
+  Lemma trans_mem_length:
+    forall (M:Memory.t) (bs:list nat), 
+    length (trans_mem M bs) = length M.
+  Proof.
+    induction M ; simpl ; intros ; auto.
+  Qed.
+
+  Lemma trans_mem_fresh:
+    forall (M:Memory.t) (bs:list nat), 
+    T.Memory.fresh (trans_mem M bs) = Memory.fresh M.
+  Proof.
+    induction M ; simpl ; intros ; auto.
+  Qed.
+
+  Lemma trans_mem_set:
+    forall (M:Memory.t) (l:CRaw.location) (bs:list nat) (v:S.expr),
+    l <= length M ->
+    trans_mem (CRaw.Memory.set l v M) bs =
+    T.Memory.set l (phi v bs) (trans_mem M bs).
+  Proof.
+    induction M ; simpl ; intros.
+    apply le_n_0_eq in H ; subst ; auto.
+    destruct l ; simpl ; auto.
+    apply le_S_n in H.
+    rewrite IHM ; auto.
+  Qed.
+
+  Lemma trans_mem_get:
+    forall (M:Memory.t) (l:CRaw.location) (bs:list nat),
+    l < length M ->
+    phi (CRaw.Memory.get l M) bs =
+    T.Memory.get l (trans_mem M bs).
+  Proof.
+    induction M ; simpl ; intros.
+    apply lt_n_O in H ; contradiction.
+    destruct l ; simpl ; auto.
+    apply lt_S_n in H.
+    unfold CRaw.Memory.get, T.Memory.get ; simpl.
+    specialize (IHM l bs H).
+    unfold CRaw.Memory.get, T.Memory.get in IHM ; simpl in IHM.
+    rewrite IHM ; auto.
+  Qed.
 
 End TranslationStaticProperties.

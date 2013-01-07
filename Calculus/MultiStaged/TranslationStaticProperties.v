@@ -656,6 +656,14 @@ Module TranslationStaticProperties (R:Replacement)
     apply IHe.
   Qed.
 
+  Lemma map_iter_booker_length:
+    forall (e:S.expr) (bs:list nat) (n:nat),
+    length (map_iter_booker e bs n) = length bs.
+  Proof.
+    induction bs ; simpl ; intros ; auto.
+    unfold map_iter_booker in *|-* ; rewrite IHbs ; auto.
+  Qed.
+
   Lemma map_iter_booker_stack:
     forall (e:S.expr) (bs:list nat),
     let (_, cs) := trans e bs in
@@ -1099,7 +1107,7 @@ Module TranslationStaticProperties (R:Replacement)
     forall (e1 e2:S.expr) (M1 M2:Memory.t),
     memory_depth M1 = 0 ->
     sstep (depth e1) (M1,e1) (M2,e2) ->
-    forall (m:nat), (depth e1) < m ->
+    forall (m:nat), S m < (depth e1) ->
     booker e1 m = booker e2 m.
   Proof.
     induction e1 ; simpl ; intros e2 M1 M2 MDepth0 ; intros ;
@@ -1114,7 +1122,6 @@ Module TranslationStaticProperties (R:Replacement)
 
     (* EApp *)
     inversion H ; subst.
-
     specialize (max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
     destruct Spec1 ; destruct H1 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H3 ; [contradiction|omega] |
@@ -1184,9 +1191,14 @@ Module TranslationStaticProperties (R:Replacement)
     destruct (depth e1) ; auto.
     apply H1 in H3 ; try(omega) ; contradiction.
     rewrite H1 in H3 ;  simpl ; apply IHe1 with (m:=S m) in H3 ; auto ; omega.
-    destruct m ; [exfalso ; omega|].
-    inversion H ; subst ; auto.
+
+    (* EUnbox *)
+    inversion H ; subst.
+    simpl ; destruct m ; auto.
     apply IHe1 with (m:=m) in H3 ; auto ; omega.
+    simpl in *|-*.
+    destruct m ; [|exfalso ; omega].
+    exfalso ; omega.
 
     (* ERun *)
     inversion H ; subst.
@@ -1205,6 +1217,164 @@ Module TranslationStaticProperties (R:Replacement)
     repeat(rewrite booker_depth) ; auto ; try(omega).
   Qed.
 
-  Lemma sstep_booker:
+  Lemma map_iter_booker_comm:
+    forall (e1 e2:S.expr) (bs:list nat) (m n:nat),
+    (map_iter_booker e1 (map_iter_booker e2 bs m) n)
+    = (map_iter_booker e2 (map_iter_booker e1 bs n) m).
+  Proof.
+    induction bs ; simpl ; intros ; auto.
+    unfold map_iter_booker in *|-* ; simpl.
+    rewrite IHbs ; auto.
+    assert(a + booker e2 m + booker e1 n = a + booker e1 n + booker e2 m)%nat.
+    omega.
+    rewrite H ; auto.
+  Qed.
+
+  Lemma map_iter_booker_app:
+    forall (e:S.expr) (bs1 bs2:list nat) (n:nat),
+    map_iter_booker e (bs1++bs2) n
+    = (map_iter_booker e bs1 n) ++ (map_iter_booker e bs2 (length bs1 + n)).
+  Proof.
+    induction bs1 ; simpl ; intros ; auto.
+    unfold map_iter_booker in *|-* ; simpl.
+    rewrite IHbs1 ; auto.
+    rewrite <- plus_Snm_nSm ; auto.
+  Qed.
+
+  Lemma map_iter_booker_hd_cons:
+    forall (e:S.expr) (bs:list nat) (b:nat) (n:nat),
+    List2.hd_cons (map_iter_booker e (b :: bs) n) 0 =
+    ((b + booker e n), map_iter_booker e bs (S n))%nat.
+  Proof.
+    intros ; reflexivity.
+  Qed.
+
+  Lemma sstep_booker_trans:
+    forall (e1 e2:S.expr) (M1 M2:Memory.t),
+    memory_depth M1 = 0 ->
+    sstep (depth e1) (M1,e1) (M2,e2) ->
+    forall (e3:S.expr) (bs bs1:list nat) (n:nat),
+    depth e3 + n < depth e1 + length bs1 ->
+    trans e3 (bs1 ++ (map_iter_booker e1 bs n)) = 
+      trans e3 (bs1 ++ (map_iter_booker e2 bs n)) /\
+    (svalue 0 e3 -> phi e3 (bs1++(map_iter_booker e1 bs n)) = 
+      phi e3 (bs1++(map_iter_booker e2 bs n))).
+  Proof.
+    intros e1 e2 M1 M2 MDepth0 Step.
+    induction e3 ; intros ; simpl ; auto ;
+
+    (* Case EAbs, EFix, ERef, EDEref, ERun, ELift *)
+    try(specialize (IHe3 bs bs1 n H) ;
+    destruct IHe3 ; rewrite H0 in *|-* ;
+    split ; intros ; auto ; fail).
+
+    (* Case EApp *)
+    repeat(rewrite map_iter_booker_app) ; auto.
+    specialize(IHe3_1 (map_iter_booker e3_2 bs (length bs1 + 0)) 
+      (map_iter_booker e3_2 bs1 0) n).
+    specialize(IHe3_2 bs bs1 n).
+    rewrite map_iter_booker_length in *|-*.
+    rewrite map_iter_booker_comm with (e1:=e1) in *|-*.
+    rewrite map_iter_booker_comm with (e1:=e2) in *|-*.
+    simpl in *|-*.
+    assert(depth e3_1 + n < depth e1 + length bs1).
+    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    destruct Spec ; omega.
+    specialize (IHe3_1 H0) ; clear H0.
+    assert(depth e3_2 + n < depth e1 + length bs1).
+    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    destruct Spec ; omega.
+    specialize (IHe3_2 H0) ; clear H0.
+    destruct IHe3_1 ; destruct IHe3_2.
+    rewrite H0, H2 in *|-*.
+    split ; intros ; auto.
+    remember (S.CRaw.svalueb 0 e3_1).
+    destruct b ; symmetry in Heqb ; auto.
+    apply CalculusProperties.svalueb_iff in Heqb.
+    specialize (H1  Heqb).
+    rewrite H1 ; auto.
+
+    
+    (* Case EAssign *)
+    repeat(rewrite map_iter_booker_app) ; auto.
+    specialize(IHe3_1 (map_iter_booker e3_2 bs (length bs1 + 0)) 
+      (map_iter_booker e3_2 bs1 0) n).
+    specialize(IHe3_2 bs bs1 n).
+    rewrite map_iter_booker_length in *|-*.
+    rewrite map_iter_booker_comm with (e1:=e1) in *|-*.
+    rewrite map_iter_booker_comm with (e1:=e2) in *|-*.
+    simpl in *|-*.
+    assert(depth e3_1 + n < depth e1 + length bs1).
+    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    destruct Spec ; omega.
+    specialize (IHe3_1 H0) ; clear H0.
+    assert(depth e3_2 + n < depth e1 + length bs1).
+    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    destruct Spec ; omega.
+    specialize (IHe3_2 H0) ; clear H0.
+    destruct IHe3_1 ; destruct IHe3_2.
+    rewrite H0, H2 in *|-*.
+    split ; intros ; auto.
+    remember (S.CRaw.svalueb 0 e3_1).
+    destruct b ; symmetry in Heqb ; auto.
+    apply CalculusProperties.svalueb_iff in Heqb.
+    specialize (H1  Heqb).
+    rewrite H1 ; auto.
+
+
+    (* Case EBox *)
+    repeat(rewrite app_comm_cons).
+    specialize (IHe3 bs (0 :: bs1) n).
+    simpl in H.
+    remember (depth e3).
+    destruct n0.
+    rewrite trans_depth_0 with (bs2:=((0 :: bs1) ++ map_iter_booker e2 bs n)) ; auto.
+    simpl in *|-*.
+    assert(S (n0 + n) < depth e1 + S (length bs1)).
+    omega.
+    specialize (IHe3 H0) ; clear H0.
+    destruct IHe3 ; rewrite H0 in *|-*.
+    split ; intros ; auto.
+
+    (* Case EUnbox *)
+    destruct bs1 ; simpl in *|-*.
+    destruct bs.
+    unfold map_iter_booker ; simpl ; split ; intros ; auto.
+    repeat(rewrite map_iter_booker_hd_cons).
+    simpl in *|-*.
+    specialize (IHe3 bs nil (S n)).
+    simpl in *|-* ; rewrite plus_0_r in *|-*.
+    assert(depth e3 + S n < depth e1).
+    omega.
+    specialize (IHe3 H0) ; clear H0.
+    destruct IHe3 ; rewrite H0 in *|-*.
+    specialize (sstep_booker e1 e2 M1 M2 MDepth0 Step n) ; intros SBooker.
+    rewrite SBooker ; auto ; try(omega).
+   
+    specialize (IHe3 bs bs1 n).
+    assert(depth e3 + n < depth e1 + length bs1).
+    omega.
+    specialize (IHe3 H0) ; clear H0.
+    destruct IHe3 ; rewrite H0 in *|-*.
+    split ; intros ; auto.
+  Qed.
+
+
+  Lemma sstep_booker_trans_0:
+    forall (e1 e2:S.expr) (M1 M2:Memory.t),
+    memory_depth M1 = 0 ->
+    sstep (depth e1) (M1,e1) (M2,e2) ->
+    forall (e3:S.expr) (bs:list nat) (n:nat),
+    depth e3 + n < depth e1 ->
+    trans e3 (map_iter_booker e1 bs n) = 
+      trans e3 (map_iter_booker e2 bs n) /\
+    (svalue 0 e3 -> phi e3 (map_iter_booker e1 bs n) = 
+      phi e3 (map_iter_booker e2 bs n)).
+  Proof.
+    intros.
+    specialize (sstep_booker_trans e1 e2 M1 M2 H H0 e3 bs nil n).
+    simpl in *|-* ; rewrite plus_0_r in *|-*.
+    tauto.
+  Qed.
 
 End TranslationStaticProperties.

@@ -4225,6 +4225,37 @@ Module TranslationStepProperties (R:Replacement)
         constructor.
 
         (* Case EApp e1 e2, n > 0, e2 -> e2' *)
+        destruct (trans e1_1).
+        
+        assert (Context.merge t1 (t::t0) = 
+          Context.merge t1 ((fun x => x) (t::t0))) as Merge1.
+          reflexivity.
+
+        rewrite ContextStaticProperties.shift_merge_2 ;
+        [| simpl in DpthLength4 ; rewrite DpthLength4 in H2 ;
+        apply CalculusProperties.depth_svalue in H2 ;
+        rewrite DpthLength3 in H2 ; auto ; fail].
+        destruct (Context.merge t1 (t::t0)).
+        simpl in Merge1 ; destruct t1 ; inversion Merge1.
+        assert (Context.shift (t::t0) =  Context.shift ((fun x => x) (t::t0))) as Merge2.
+        reflexivity.
+        destruct (Context.shift (t :: t0)).
+        (*assert (Context.shift t1 =  Context.shift ((fun x => x) t1)) as Merge3.
+        reflexivity.
+        destruct (Context.shift t1).*)
+        destruct t4 ; [exfalso |] ; auto ; simpl.
+        destruct p.
+        fail. (* prove a lemma trans e1_1 (map_iter_booker e0) = trans e1_1 (map_iter_booker e1_2) *)
+        specialize (svalue_phi e3 (map_iter_booker e1_2 bs 0)) ; 
+        intros SValuePhi3 ; unfold trans_expr in SValuePhi3.
+        specialize (AdminSsubst2 e3) ; clear AdminSsubst1.
+        destruct (trans e0).
+        destruct IHe1_2.
+        exists x.
+        destruct H2 ; split ; auto.
+        destruct H4 ; [left|right] ; destruct H4.
+
+
         admit.
 
       (* Case EApp (EAbs), n = 0 *)

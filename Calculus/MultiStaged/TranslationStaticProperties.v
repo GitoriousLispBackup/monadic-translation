@@ -1095,4 +1095,116 @@ Module TranslationStaticProperties (R:Replacement)
     rewrite IHM ; auto.
   Qed.
 
+  Lemma sstep_booker:
+    forall (e1 e2:S.expr) (M1 M2:Memory.t),
+    memory_depth M1 = 0 ->
+    sstep (depth e1) (M1,e1) (M2,e2) ->
+    forall (m:nat), (depth e1) < m ->
+    booker e1 m = booker e2 m.
+  Proof.
+    induction e1 ; simpl ; intros e2 M1 M2 MDepth0 ; intros ;
+
+    (* EConst, EVar, ELoc *)
+    try(inversion H ; ssubst ; auto ; fail) ;
+
+    (* EAbs, EFix *)
+    try(inversion H ; subst ; simpl ;
+    apply IHe1 with (e2:=e3) (M1:=M1) (M2:=M2) ; rewrite H1 in H3 ; auto ; fail).
+
+
+    (* EApp *)
+    inversion H ; subst.
+
+    specialize (max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
+    destruct Spec1 ; destruct H1 ; rewrite H2 in *|-* ; [
+    apply CalculusProperties.depth_sstep_lt in H3 ; [contradiction|omega] |
+    simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto].
+
+    specialize (max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
+    destruct Spec1 ; destruct H1 ; rewrite max_comm in H2 ; rewrite H2 in *|-* ; [
+    apply CalculusProperties.depth_sstep_lt in H8 ; [contradiction|omega] |
+    simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto].
+    
+    simpl in *|-*.
+    assert(depth e = 0).
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    assert(depth e1_2 = 0).
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    assert(depth (CRaw.ssubst 0 StageSet.empty x e e1_2) = 0).
+    specialize (CalculusProperties.depth_ssubst e e1_2 StageSet.empty x 0) ; intros.
+    rewrite H2, H4 in H5 ; simpl in H5 ; apply le_n_0_eq in H5 ; auto.
+    repeat(rewrite booker_depth) ; auto ; try(omega).
+
+    simpl in *|-*.
+    assert(depth e = 0).
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    assert(depth e1_2 = 0).
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    assert(depth (CRaw.ssubst 0 StageSet.empty f (CRaw.ssubst 0 StageSet.empty x e e1_2)
+     (CRaw.EFix f x e)) = 0).
+    specialize (CalculusProperties.depth_ssubst (CRaw.ssubst 0 StageSet.empty x e e1_2) (CRaw.EFix f x e) StageSet.empty f 0) ; intros.
+    assert(depth (CRaw.ssubst 0 StageSet.empty x e e1_2) = 0).
+    specialize (CalculusProperties.depth_ssubst e e1_2 StageSet.empty x 0) ; intros.
+    rewrite H2, H4 in H6 ; simpl in H6 ; apply le_n_0_eq in H6 ; auto.
+    simpl in H5 ; rewrite H2, H6 in H5 ; simpl in H5 ; apply le_n_0_eq in H5 ; auto.
+    repeat(rewrite booker_depth) ; auto ; try(omega).
+
+    (* ERef *)
+    inversion H ; subst.
+    apply IHe1 with (m:=m) in H3 ; auto.
+    simpl ; rewrite booker_depth ; omega.
+
+    (* Deref *)
+    inversion H ; subst.
+    apply IHe1 with (m:=m) in H3 ; auto.
+    assert(depth (CRaw.Memory.get l M2) = 0).
+    specialize (CalculusProperties.memory_depth_get l M2) ; intros Dpth1.
+    rewrite MDepth0 in Dpth1 ; apply le_n_0_eq in Dpth1 ; auto.
+    simpl ; rewrite booker_depth ; auto ; omega.
+    
+    (* Assign *)
+    inversion H ; subst.
+
+    specialize (max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
+    destruct Spec1 ; destruct H1 ; rewrite H2 in *|-* ; [
+    apply CalculusProperties.depth_sstep_lt in H3 ; [contradiction|omega] |
+    simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto].
+
+    specialize (max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
+    destruct Spec1 ; destruct H1 ; rewrite max_comm in H2 ; rewrite H2 in *|-* ; [
+    apply CalculusProperties.depth_sstep_lt in H8 ; [contradiction|omega] |
+    simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto].
+    
+    simpl ; auto.
+    
+    (* EBox *)
+    inversion H ; subst.
+    assert(S (pred (depth e1)) = depth e1).
+    specialize (CalculusProperties.depth_sstep_lt M1 e1 M2 e3 (S (pred (depth e1)))) ; intros.
+    destruct (depth e1) ; auto.
+    apply H1 in H3 ; try(omega) ; contradiction.
+    rewrite H1 in H3 ;  simpl ; apply IHe1 with (m:=S m) in H3 ; auto ; omega.
+    destruct m ; [exfalso ; omega|].
+    inversion H ; subst ; auto.
+    apply IHe1 with (m:=m) in H3 ; auto ; omega.
+
+    (* ERun *)
+    inversion H ; subst.
+    apply IHe1 with (m:=m) in H3 ; auto.
+    simpl in *|-*.
+    specialize (booker_depth e2) ; intros.
+    destruct (depth e2).
+    repeat(rewrite H2) ; auto ; omega.
+    destruct n ; simpl in *|-* ; [|inversion H1].
+    repeat(rewrite H2) ; auto ; try(omega).
+    
+    (* ELift *)
+    inversion H ; subst.
+    apply IHe1 with (m:=m) in H3 ; auto.
+    simpl in *|-*.
+    repeat(rewrite booker_depth) ; auto ; try(omega).
+  Qed.
+
+  Lemma sstep_booker:
+
 End TranslationStaticProperties.

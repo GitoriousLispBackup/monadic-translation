@@ -257,6 +257,39 @@ Module ContextStaticProperties (R:Replacement)
     inversion H1 ; subst.
   Qed.
 
+  Lemma merge_unshift_1:
+    forall (cs1 cs2:Context.t_stack) (c:Context.t),
+    length cs2 <= length cs1 ->
+    Context.unshift (Context.merge cs1 cs2) c = 
+    Context.merge (Context.unshift cs1 c) cs2.
+  Proof.
+    induction cs1 ; intros.
+    destruct cs2 ; [|exfalso ; simpl in *|-* ; omega].
+    simpl ; auto.
+    destruct cs2.
+    simpl ; auto.
+    simpl.
+    rewrite IHcs1 ; auto.
+    simpl in *|-* ; omega.
+  Qed.
+
+  Lemma merge_unshift_2:
+    forall (cs1 cs2:Context.t_stack) (c:Context.t),
+    length cs1 <= length cs2 ->
+    Context.unshift (Context.merge cs1 cs2) c = 
+    Context.merge cs1 (Context.unshift cs2 c).
+  Proof.
+    intros cs1 cs2 ; generalize dependent cs1.
+    induction cs2 ; intros.
+    destruct cs1 ; [|exfalso ; simpl in *|-* ; omega].
+    simpl ; auto.
+    destruct cs1.
+    simpl ; auto.
+    simpl.
+    rewrite IHcs2 ; auto.
+    simpl in *|-* ; omega.
+  Qed.
+
 End ContextStaticProperties.
 
 Module TranslationStaticProperties (R:Replacement) 
@@ -662,6 +695,31 @@ Module TranslationStaticProperties (R:Replacement)
   Proof.
     induction bs ; simpl ; intros ; auto.
     unfold map_iter_booker in *|-* ; rewrite IHbs ; auto.
+  Qed.
+
+  Lemma map_iter_booker_nth:
+    forall (e:S.expr) (bs:list nat) (m n:nat),
+    nth m (map_iter_booker e bs n) (booker e (m+n)) = 
+    (nth m bs 0 + booker e (m+n))%nat.
+  Proof.
+    intros.
+    unfold map_iter_booker.
+    specialize (List2Properties.map_iter_nth 
+      (fun b n0 : nat => (b + booker e n0)%nat) bs m n 0) ; intros P.
+    simpl in P ; rewrite P ; auto.
+  Qed.
+
+  Lemma map_iter_booker_nth_indep:
+    forall (e:S.expr) (bs:list nat) (m n:nat),
+    m < length bs ->
+    nth m (map_iter_booker e bs n) 0 = 
+    (nth m bs 0 + booker e (m+n))%nat.
+  Proof.
+    intros.
+    unfold map_iter_booker.
+    specialize (List2Properties.map_iter_nth_indep 
+      (fun b n0 : nat => (b + booker e n0)%nat) bs m n 0) ; intros P.
+    simpl in P ; rewrite P ; auto.
   Qed.
 
   Lemma map_iter_booker_stack:

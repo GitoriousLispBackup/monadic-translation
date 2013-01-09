@@ -2877,4 +2877,511 @@ Module AdminSubstProperties (R:Replacement)
     rewrite H1, P3, P4 in *|-* ; auto.
   Qed.
 
+  Lemma admin_stack_ssubst_merge_2:
+    forall (bs:list nat) (e1 e2 e3:S.expr), 
+    let (e1', cs1) := trans e1 (map_iter_booker e2 bs 0) in
+    let (e2', cs2) := trans e2 bs in
+    let (e3', cs3) := trans e3 (map_iter_booker e2 bs 0) in
+    match cs1 with
+    | nil => True
+    | _ => let (c1, cs1') := Context.shift cs1 in
+      match c1 with
+      | nil => True
+      | cons (t_eh, h) c1' => 
+        forall (eh:S.expr),
+        t_eh = trans_expr eh (0::nil) ->
+        match c1' with
+        | nil =>
+            admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil))
+            (tl (map_iter_booker e2 bs 0))
+            (hd 0 (map_iter_booker e2 bs 0)) cs1' cs3
+        | _ :: _ =>
+            admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil))
+            (tl (map_iter_booker e2 bs 0))
+            (hd 0 (map_iter_booker e2 bs 0)) (Context.unshift cs1' c1') cs3
+        end ->
+        depth e2 < depth e1 < length bs ->
+        match c1' with
+        | nil =>
+          admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil)) (tl bs)
+          (hd 0 bs) (Context.merge cs1' cs2)
+          (Context.merge cs3 cs2)
+        | _ =>
+          admin_stack_ssubst (pred (depth e1)) h (phi eh (0 :: nil)) (tl bs)
+          (hd 0 bs)
+          (Context.unshift (Context.merge cs1' cs2) c1')
+          (Context.merge cs3 cs2)
+        end
+      end
+    end.
+  Proof.
+    intros.
+    specialize (map_iter_booker_stack e2 bs) ; intros MapIterBooker.
+    specialize (depth_length e1 (map_iter_booker e2 bs 0)) ; intros DpthLength1.
+    specialize (depth_length e2 bs) ; intros DpthLength2.
+    specialize (eq_ssubst_gt e2 bs) ; intros EqSsubstEq.
+    destruct (trans e1).
+    destruct (trans e2).
+    destruct (trans e3).
+    destruct t ; auto.
+    cases (Context.shift (t :: t2)) as t eqn:Shift1.
+    destruct t3 ; rewrite_eq E2.Translation.phi phi ; auto.
+    destruct p ; intros.
+    specialize (EqSsubstEq v (phi eh (0 :: nil)) (depth e1) H1).
+    destruct EqSsubstEq ; clear H2 ; destruct H3 ; clear H3.
+    rewrite DpthLength1, DpthLength2, MapIterBooker in *|-*.
+    clear H DpthLength1 DpthLength2 MapIterBooker.
+    simpl_rem_all phi.
+    destruct bs ; [exfalso ; simpl_rem_all phi ; omega |].
+    rewrite map_iter_stack_bs in *|-*.
+    simpl_rem_all phi.
+
+    destruct t3.
+
+    (* c1' nil *)
+    clear Shift1.
+    generalize dependent n ;
+    generalize dependent t2 ; generalize dependent t1 ; 
+    generalize dependent bs ; generalize dependent t0.
+    induction t4 ; simpl_rem_all phi ; intros.
+    inversion H0 ; subst.
+    apply eq_stack_ssubst_admin ; auto.
+    destruct t1.
+    inversion H0 ; subst.
+    simpl_rem_all phi.
+    destruct bs ; [exfalso ; simpl_rem_all phi ; omega |].
+
+    destruct t0 ; auto.
+    rewrite map_iter_stack_nil in *|-* ; auto.
+    simpl_rem_all phi ; rewrite plus_0_r in *|-* ; auto.
+
+    (* induction case *)
+    destruct t2 ; simpl_rem_all phi ; [exfalso ; omega|].
+    assert(admin_stack_ssubst (length t6) v (phi eh (0 :: nil)) bs n0
+         (Context.merge t4 t5) (Context.merge t3 t5)).
+    apply IHt4 ; auto ; clear IHt4.
+    omega.
+    inversion H2 ; subst ; auto.
+    constructor.
+
+    rewrite map_iter_stack_bs, map_iter_stack_cs in H0 ; auto.
+    inversion H0 ; subst ; auto.
+    constructor.
+
+    destruct t4.
+    inversion H0 ; subst ; simpl_rem_all phi ; auto.
+    destruct t5.
+    constructor ; auto.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    rewrite plus_0_r in H6 ; auto.
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    
+    constructor ; auto.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    apply admin_context_ssubst_sum with (m1:=0) (b1:=(n0 + length t3)%nat) ;
+    simpl_rem_all phi ; auto ; omega.
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    
+    remember (Context.merge (t4 :: t7) t5).
+    destruct t8.
+    simpl in Heqt8 ; destruct t5 ; inversion Heqt8.
+    remember (Context.merge t3 t5).
+    destruct t10.
+    inversion H0 ; subst.
+    simpl in Heqt10 ; destruct t5 ; inversion Heqt10.
+    destruct t5 ; auto.
+
+    rewrite ContextStaticProperties.merge_nil_r in *|-*.
+    simpl_rem_all phi ; inversion Heqt8 ; subst ; simpl_rem_all phi.
+    constructor ; auto.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    inversion H0 ; subst.
+    rewrite plus_0_r in H7 ; auto.
+    apply admin_context_ssubst_m_ge with (m:=0) ; auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    
+    constructor ; auto.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    inversion H0 ; subst.
+    clear H12 H0.
+    apply admin_context_ssubst_sum with (m1:=length t4) (b1:=(n0 + (length t5))%nat) ;
+    auto.
+    simpl in Heqt8 ; inversion Heqt8 ; rewrite app_length ; omega.
+    apply admin_context_ssubst_m_ge with (m:=length t5) ; auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    simpl in Heqt8 ; inversion Heqt8 ; rewrite app_length ; omega.
+
+    (* c1' not nil *)
+    rewrite ContextStaticProperties.merge_unshift_1 ; auto.
+    clear Shift1.
+    rewrite ContextStaticProperties.unshift_spec in *|-*.
+    generalize dependent n ;
+    generalize dependent t2 ; generalize dependent t1 ; 
+    generalize dependent bs ; generalize dependent t0.
+    induction t4 ; simpl_rem_all phi ; intros.
+    inversion H0 ; subst.
+    destruct t0 ; auto.
+
+    rewrite map_iter_stack_nil in *|-* ; subst ; auto.
+    simpl_rem_all phi ; rewrite plus_0_r in *|-* ; auto.
+
+    simpl_rem_all phi.
+    rewrite map_iter_stack_cs in *|-*.
+    inversion H2 ; subst.
+    simpl_rem_all phi.
+    constructor ; auto.
+    rewrite map_iter_stack_nil in *|-* ; subst ; auto.
+    inversion H ; subst ; auto.
+    rewrite app_comm_cons.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    apply eq_context_ssubst_admin ; auto.
+    constructor ; auto.
+    rewrite map_iter_stack_bs, map_iter_stack_cs in *|-*.
+    inversion H ; subst ; auto.
+    rewrite app_comm_cons.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    apply admin_context_ssubst_sum with (m1:=0) (b1:=(b0 + length c1')%nat) ;
+    auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    apply eq_stack_ssubst_admin ; auto.
+
+    destruct bs ; [exfalso ; simpl_rem_all phi ; omega |].
+    destruct t0 ; auto.
+    rewrite map_iter_stack_nil in *|-* ; auto.
+    simpl_rem_all phi ; rewrite plus_0_r in *|-* ; auto.
+    rewrite ContextStaticProperties.merge_nil_r ; auto.
+    rewrite map_iter_stack_bs, map_iter_stack_cs in *|-*.
+    inversion H0 ; subst.
+    apply app_cons_not_nil in H7 ; contradiction.
+
+    (* induction case *)
+    destruct t2 ; [simpl_rem_all phi ; exfalso ; omega|].
+    assert(admin_stack_ssubst (length t2) v (phi eh (0 :: nil)) bs n0
+         (Context.merge (t4 ++ (p :: t3) :: nil) t5) (Context.merge (c2' :: cs2) t5)).
+    apply IHt4 ; auto ; clear IHt4 ; simpl_rem_all phi.
+    omega.
+    inversion H2 ; subst ; auto.
+    constructor.
+    rewrite <- H7 ; auto.
+
+    remember (Context.merge (c1' :: cs1) t5).
+    destruct t6.
+    simpl in Heqt6 ; destruct t5 ; inversion Heqt6.
+    remember (Context.merge (c2' :: cs2) t5).
+    destruct t8.
+    simpl in Heqt8 ; destruct t5 ; inversion Heqt8.
+    remember (c2' :: cs2) ; simpl_rem phi ; subst.
+    rewrite <- Heqt8.
+    constructor ; auto.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    simpl_rem phi; auto.
+    apply admin_context_ssubst_sum with (m1:=length c1') (b1:=(n0 + (length (nth 0 t5 nil)))%nat) ;
+    auto.
+    destruct t5 ; inversion Heqt6 ; subst ; 
+    try(rewrite app_length) ; simpl ; omega.
+    apply admin_context_ssubst_m_ge with (m:=(length (nth 0 t5 nil))) ; auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    destruct t5 ; [simpl_rem_all phi ; omega|] ; inversion Heqt6 ; subst ; 
+    simpl_rem_all phi.
+    rewrite app_length ; omega.
+    rewrite Heqt6, Heqt8, H7 in *|-* ; auto.
+
+    (* length t0 <= length t4 *)
+    specialize (ContextStaticProperties.shift_spec (t :: t2)) ; intros Spec1.
+    simpl in Spec1.
+    destruct (Context.shift t2).
+    destruct t2 ; simpl_rem_all phi ; inversion Shift1 ; subst.
+    destruct t0 ; [|exfalso] ; simpl_rem_all phi ; omega.
+    assert(length (t :: t2 :: t7) = length ((t :: t6) ++ ((e5, v) :: p :: t3) :: nil)) as Eq1.
+    rewrite Spec1 ; simpl ; auto ; omega.
+    simpl in Eq1.
+    rewrite app_length in Eq1.
+    simpl_rem_all phi ;
+    rewrite <- plus_Snm_nSm, plus_0_r in Eq1.
+    inversion Eq1 ; subst ; rewrite H3 in *|-*.
+    destruct H1 ; generalize H ; clear ; intros.
+    apply le_S_n in H ; auto.
+  Qed.
+
+  Lemma admin_stack_ssubst_merge_3:
+    forall (bs:list nat) (e1 e2 e3:S.expr), 
+    let (e1', cs1) := trans e1 (map_iter_booker e2 bs 0) in
+    let (e2', cs2) := trans e2 bs in
+    let (e3', cs3) := trans e3 bs in
+    match cs2 with
+    | nil => True
+    | _ => let (c2, cs2') := Context.shift cs2 in
+      match c2 with
+      | nil => True
+      | cons (t_eh, h) c2' => 
+        forall (eh:S.expr),
+        t_eh = trans_expr eh (0::nil) ->
+        match c2' with
+        | nil =>
+            admin_stack_ssubst (pred (depth e2)) h (phi eh (0 :: nil))
+            (tl bs)
+            (hd 0 bs) cs2' cs3
+        | _ :: _ =>
+            admin_stack_ssubst (pred (depth e2)) h (phi eh (0 :: nil))
+            (tl bs)
+            (hd 0 bs) (Context.unshift cs2' c2') cs3
+        end ->
+        depth e1 < depth e2 < length bs ->
+        match c2' with
+        | nil =>
+          admin_stack_ssubst (pred (depth e2)) h (phi eh (0 :: nil)) (tl bs)
+          (hd 0 bs) (Context.merge cs1 cs2')
+          (Context.merge cs1 cs3)
+        | _ =>
+          admin_stack_ssubst (pred (depth e2)) h (phi eh (0 :: nil)) (tl bs)
+          (hd 0 bs)
+          (Context.unshift (Context.merge cs1 cs2') c2')
+          (Context.merge cs1 cs3)
+        end
+      end
+    end.
+  Proof.
+    admit.
+(*
+    intros.
+    specialize (map_iter_booker_stack e2 bs) ; intros MapIterBooker.
+    specialize (depth_length e1 (map_iter_booker e2 bs 0)) ; intros DpthLength1.
+    specialize (depth_length e2 bs) ; intros DpthLength2.
+    specialize (eq_ssubst_gt e1 (map_iter_booker e2 bs 0)) ; intros EqSsubstEq.
+    destruct (trans e1).
+    destruct (trans e2).
+    destruct (trans e3).
+    destruct t0 ; auto.
+    assert(Context.shift (t0 :: t2) = Context.shift ((fun x => x) (t0 :: t2))) as Shift1.
+    reflexivity.
+    destruct (Context.shift (t0 :: t2)).
+    destruct t3 ; auto.
+    destruct p ; intros.
+    rewrite map_iter_booker_length in *|-*.
+    specialize (EqSsubstEq v (phi eh (0 :: nil)) (depth e2) H1).
+    destruct EqSsubstEq ; clear H2 ; destruct H3 ; clear H3.
+    rewrite DpthLength1, DpthLength2, MapIterBooker in *|-*.
+    clear H DpthLength1 DpthLength2 MapIterBooker.
+    simpl in *|-*.
+    destruct bs ; [exfalso ; simpl in *|-* ; omega |].
+    rewrite map_iter_stack_bs in *|-*.
+    simpl in *|-*.
+
+    destruct t3.
+    
+
+    (* c2' nil *)
+    
+    generalize dependent n ;
+    generalize dependent t ;
+    generalize dependent t2 ; generalize dependent t1 ; 
+    generalize dependent bs ; generalize dependent t0.
+    induction t4 ; simpl ; intros.
+    inversion H0 ; subst.
+    repeat(rewrite ContextStaticProperties.merge_nil_r).
+    apply eq_stack_ssubst_admin ; auto.
+    rewrite map_iter_stack_cs in H2.
+    destruct (Context.shift t2).
+    destruct t2 ; inversion Shift1 ; subst.
+    destruct t ; simpl in *|-* ; [|exfalso ; omega] ; constructor.
+
+    (* induction case *)
+    destruct t1 ; [inversion H0|].
+    destruct t ; auto.
+    rewrite map_iter_stack_cs in *|-*.
+    destruct bs ; [simpl in *|-* ; exfalso ; omega|].
+    destruct t2 ; [simpl in *|-* ; exfalso ; omega|].
+    assert(admin_stack_ssubst (length t6) v (phi eh (0 :: nil)) bs n0
+         (Context.merge t5 t4) (Context.merge t5 t3)).
+    simpl in Shift1.
+    apply IHt4 with (t0:=t2) ; auto ; try(simpl in *|-* ; omega).
+    destruct (Context.shift t6) ; destruct t6 ; inversion Shift1 ; subst ; auto.
+    simpl in *|-* ; inversion H2 ; subst ; auto ; constructor.
+    inversion H0 ; subst ; auto ; constructor.
+    clear IHt4.
+
+    simpl.
+    remember (Context.merge t5 t4).
+    destruct t7.
+    apply ContextStaticProperties.merge_nil in Heqt7 ; destruct Heqt7 ; subst.
+    simpl in *|-* ; inversion H ; subst ; simpl in *|-*.
+
+    (* Duplication part *)
+    constructor ; auto.
+    apply ContextStaticProperties.congr_ssubst_context_app ; auto.
+    inversion H2 ; subst ; auto.
+    destruct (Context.shift t6).
+    destruct t6 ; inversion Shift1 ; subst.
+    apply eq_context_ssubst_admin ; auto.
+    simpl in *|-*.
+    apply admin_context_ssubst_sum with (m1:=0) (b1:=(n0 + length t3)%nat) ;
+    simpl in *|-* ; auto ; omega.
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    
+auto.
+    
+    inversion H ; subst.
+    rewrite 
+    simpl in *|-*.
+    simpl.
+    destruct t1 ; simpl in *|-* ; [exfalso ; omega|].
+    assert(admin_stack_ssubst (length t6) v (phi eh (0 :: nil)) bs n0
+         (Context.merge t4 t5) (Context.merge t3 t5)).
+    apply IHt4 ; auto ; clear IHt4.
+    omega.
+    inversion H2 ; subst ; auto.
+    constructor.
+
+    rewrite map_iter_stack_bs, map_iter_stack_cs in H0 ; auto.
+    inversion H0 ; subst ; auto.
+    constructor.
+
+    destruct t4.
+    inversion H0 ; subst ; simpl in *|-* ; auto.
+    destruct t5.
+    constructor ; auto.
+    apply congr_ssubst_context_app ; auto.
+    rewrite plus_0_r in H6 ; auto.
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    
+    constructor ; auto.
+    apply congr_ssubst_context_app ; auto.
+    apply admin_context_ssubst_sum with (m1:=0) (b1:=(n0 + length t3)%nat) ;
+    simpl in *|-* ; auto ; omega.
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    
+    remember (Context.merge (t4 :: t7) t5).
+    destruct t8.
+    simpl in Heqt8 ; destruct t5 ; inversion Heqt8.
+    remember (Context.merge t3 t5).
+    destruct t10.
+    inversion H0 ; subst.
+    simpl in Heqt10 ; destruct t5 ; inversion Heqt10.
+    destruct t5 ; auto.
+
+    rewrite ContextStaticProperties.merge_nil_r in *|-*.
+    simpl in *|-* ; inversion Heqt8 ; inversion Heqt10 ; subst ; simpl in *|-*.
+    constructor ; auto.
+    apply congr_ssubst_context_app ; auto.
+    inversion H0 ; subst.
+    rewrite plus_0_r in H8 ; auto.
+    apply admin_context_ssubst_m_ge with (m:=0) ; auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    
+    constructor ; auto.
+    apply congr_ssubst_context_app ; auto.
+    inversion H0 ; subst.
+    clear H12 H0.
+    apply admin_context_ssubst_sum with (m1:=length t4) (b1:=(n0 + (length t5))%nat) ;
+    auto.
+    simpl in Heqt8 ; inversion Heqt8 ; rewrite app_length ; omega.
+    apply admin_context_ssubst_m_ge with (m:=length t5) ; auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    simpl in Heqt8 ; inversion Heqt8 ; rewrite app_length ; omega.
+
+    (* c2' not nil *)
+    rewrite ContextStaticProperties.merge_unshift_1 ; auto.
+    clear Shift1.
+    rewrite ContextStaticProperties.unshift_spec in *|-*.
+    generalize dependent n ;
+    generalize dependent t2 ; generalize dependent t1 ; 
+    generalize dependent bs ; generalize dependent t0.
+    induction t4 ; simpl ; intros.
+    inversion H0 ; subst.
+    destruct t0 ; auto.
+
+    rewrite map_iter_stack_nil in *|-* ; subst ; auto.
+    simpl in *|-* ; rewrite plus_0_r in *|-* ; auto.
+
+    simpl in *|-*.
+    rewrite map_iter_stack_cs in *|-*.
+    inversion H2 ; subst.
+    simpl.
+    constructor ; auto.
+    rewrite map_iter_stack_nil in *|-* ; subst ; auto.
+    inversion H ; subst ; auto.
+    rewrite app_comm_cons.
+    apply congr_ssubst_context_app ; auto.
+    apply eq_context_ssubst_admin ; auto.
+    constructor ; auto.
+    rewrite map_iter_stack_bs, map_iter_stack_cs in *|-*.
+    inversion H ; subst ; auto.
+    rewrite app_comm_cons.
+    apply congr_ssubst_context_app ; auto.
+    apply admin_context_ssubst_sum with (m1:=0) (b1:=(b0 + length c1')%nat) ;
+    auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    apply eq_stack_ssubst_admin ; auto.
+
+    destruct bs ; [exfalso ; simpl in *|-* ; omega |].
+    destruct t0 ; auto.
+    rewrite map_iter_stack_nil in *|-* ; auto.
+    simpl in *|-* ; rewrite plus_0_r in *|-* ; auto.
+    rewrite ContextStaticProperties.merge_nil_r ; auto.
+    rewrite map_iter_stack_bs, map_iter_stack_cs in *|-*.
+    inversion H0 ; subst.
+    apply app_cons_not_nil in H7 ; contradiction.
+
+    (* induction case *)
+    destruct t2 ; [simpl in *|-* ; exfalso ; omega|].
+    assert(admin_stack_ssubst (length t2) v (phi eh (0 :: nil)) bs n0
+         (Context.merge (t4 ++ (p :: t3) :: nil) t5) (Context.merge (c2' :: cs2) t5)).
+    apply IHt4 ; auto ; clear IHt4 ; simpl in *|-*.
+    omega.
+    inversion H2 ; subst ; auto.
+    constructor.
+    rewrite <- H7 ; auto.
+
+    remember (Context.merge (c1' :: cs1) t5).
+    destruct t6.
+    simpl in Heqt6 ; destruct t5 ; inversion Heqt6.
+    remember (Context.merge (c2' :: cs2) t5).
+    destruct t8.
+    simpl in Heqt8 ; destruct t5 ; inversion Heqt8.
+    remember (c2' :: cs2) ; simpl ; subst.
+    rewrite <- Heqt8.
+    constructor ; auto.
+    apply congr_ssubst_context_app ; auto.
+    simpl in *|-* ; auto.
+    apply admin_context_ssubst_sum with (m1:=length c1') (b1:=(n0 + (length (nth 0 t5 nil)))%nat) ;
+    auto.
+    destruct t5 ; inversion Heqt6 ; subst ; 
+    try(rewrite app_length) ; simpl ; omega.
+    apply admin_context_ssubst_m_ge with (m:=(length (nth 0 t5 nil))) ; auto ; try(omega).
+    apply eq_context_ssubst_admin ; auto.
+    inversion H2 ; subst ; auto.
+    destruct t5 ; simpl in *|-* ; [omega|] ; inversion Heqt6 ; subst ; 
+    simpl in *|-*.
+    rewrite app_length ; omega.
+    rewrite Heqt6, Heqt8, H7 in *|-* ; auto.
+
+    (* length t0 <= length t4 *)
+    specialize (ContextStaticProperties.shift_spec (t :: t2)) ; intros Spec1.
+    simpl in Spec1.
+    destruct (Context.shift t2).
+    destruct t2.
+    inversion Shift1 ; subst.
+    destruct t0 ; [|exfalso] ; simpl in *|-* ; omega.
+    inversion Shift1 ; subst.
+    assert(length (t :: t2 :: t7) = length ((t :: t6) ++ ((e5, v) :: p :: t3) :: nil)) as Eq1.
+    rewrite Spec1 ; simpl ; auto ; omega.
+    simpl in Eq1.
+    rewrite app_length in Eq1.
+    simpl in *|-*.
+    rewrite <- plus_Snm_nSm, plus_0_r in Eq1.
+    inversion Eq1 ; subst ; rewrite H3 in *|-*.
+    destruct H1 ; generalize H ; clear ; intros.
+    apply le_S_n in H ; auto. *)
+  Qed.
+
 End AdminSubstProperties.

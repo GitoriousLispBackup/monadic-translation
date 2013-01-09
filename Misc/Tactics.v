@@ -20,3 +20,11 @@ Tactic Notation "rewrite_eq" constr(E1) constr(E2) :=
   let Eqn := fresh "H" in
   set (X := E1) in *; 
   assert(X=E2) as Eqn ; [subst ; reflexivity| rewrite Eqn in *|-* ; clear Eqn X].
+
+Tactic Notation "simpl_rem" constr(E) :=
+  let v := fresh "v" in
+  remember E as v ; simpl ; subst v.
+
+Tactic Notation "simpl_rem_all" constr(E) :=
+  let v := fresh "v" in
+  remember E as v ; simpl in *|-* ; subst v.

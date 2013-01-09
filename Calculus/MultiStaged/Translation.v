@@ -18,7 +18,7 @@ Require Import "Calculus/MultiStaged/Monad".
 Definition hole_var (x:nat) : nat := (2*x+1)%nat.
 Definition source_var (x:nat) : nat := (2*x)%nat.
 
-Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
+Module Type Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
 
   Import T.
   Import M.
@@ -100,12 +100,16 @@ Module Context (R:Replacement) (T:StagedCalculus) (M:Monad R T).
 
 End Context.
 
+Module ContextImpl (R:Replacement) (T:StagedCalculus) (M:Monad R T) : Context R T M.
+  Include Context R T M.
+End ContextImpl.
+
 (* Translation R T <: StagedTranslation (Calculus R) T. *)
-Module Translation (R:Replacement) 
+Module Type Translation (R:Replacement) 
     (T:StagedCalculus) (M:Monad R T). 
 
   Module S := M.S.
-  Module Context := Context R T M.
+  Module Context := ContextImpl R T M.
   Import S.CRaw.
 
   Fixpoint booker (e:S.expr) (n:nat) : nat :=
@@ -266,3 +270,8 @@ Module Translation (R:Replacement)
         M.astep s (M,e1) -> admin e1 e2 -> rstep s (M,e2).
 
 End Translation.
+
+Module TranslationImpl (R:Replacement) 
+    (T:StagedCalculus) (M:Monad R T). 
+  Include Translation R T M.
+End TranslationImpl.

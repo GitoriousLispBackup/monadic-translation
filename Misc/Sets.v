@@ -1,8 +1,8 @@
 Require Import Coq.Lists.List.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Arith.Arith.
-Require Import Coq.Structures.OrderedType.
-Require Import Coq.Arith.NatOrderedType.
+Require Import Coq.Structures.Orders.
+Require Import Coq.Structures.OrdersEx.
 Require Import Coq.MSets.MSetList.
 Require Import Coq.MSets.MSetProperties.
 Require Import Coq.MSets.MSetEqProperties.
@@ -11,11 +11,14 @@ Require Import "Misc/Tactics".
 
 (** * Nat Set *)
 Module Nat_as_OWL <: OrderedTypeWithLeibniz.
+
   Include Nat_as_OT.
+
   Lemma eq_leibniz : forall x y, eq x y -> x = y.
   Proof.
     intros ; assumption.
   Qed.
+
 End Nat_as_OWL.
 
 (** ** Definitions *)

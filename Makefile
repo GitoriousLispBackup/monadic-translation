@@ -97,7 +97,8 @@ PP:=-pp "$(CAMLP4BIN)$(CAMLP4)o -I $(CAMLLIB) -I . $(COQSRCLIBS) $(CAMLP4EXTEND)
 #                                 #
 ###################################
 
-VFILES:= Misc/Tactics.v\
+VFILES:= Misc/LibTactics.v\
+  Misc/Tactics.v\
   Misc/Sets.v\
   Misc/Relation.v\
   Misc/Library.v\
@@ -111,9 +112,11 @@ VFILES:= Misc/Tactics.v\
   Calculus/MultiStaged/Translation.v\
   Calculus/MultiStaged/MonadStepProperties.v\
   Calculus/MultiStaged/TranslationStaticProperties.v\
+  Calculus/MultiStaged/TranslationHoleSubstProperties.v\
   Calculus/MultiStaged/TranslationStepProperties.v\
   Calculus/MultiStaged/Monad/Identity.v
-ORDEREDVFILES:= Misc/Tactics.v\
+ORDEREDVFILES:= Misc/LibTactics.v\
+  Misc/Tactics.v\
   Misc/Sets.v\
   Misc/Relation.v\
   Misc/Library.v\
@@ -127,6 +130,7 @@ ORDEREDVFILES:= Misc/Tactics.v\
   Calculus/MultiStaged/Translation.v\
   Calculus/MultiStaged/MonadStepProperties.v\
   Calculus/MultiStaged/TranslationStaticProperties.v\
+  Calculus/MultiStaged/TranslationHoleSubstProperties.v\
   Calculus/MultiStaged/TranslationStepProperties.v\
   Calculus/MultiStaged/Monad/Identity.v
 VOFILES:=$(VFILES:.v=.vo)

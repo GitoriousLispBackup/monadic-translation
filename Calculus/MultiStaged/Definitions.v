@@ -1,7 +1,7 @@
 Require Import Coq.Relations.Relations.
 Require Import Coq.Arith.Arith.
-Require Import Coq.Arith.MinMax.
-Require Import Coq.Arith.NatOrderedType.
+Require Import Coq.Arith.Max.
+Require Import Coq.Structures.OrdersEx.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Arith.Compare_dec.
 Require Import "Calculus/Sets".

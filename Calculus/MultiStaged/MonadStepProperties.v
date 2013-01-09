@@ -1,6 +1,6 @@
 Require Import Coq.Lists.List.
 Require Import Coq.Arith.Arith.
-Require Import Coq.Arith.MinMax.
+Require Import Coq.Numbers.Natural.Peano.NPeano.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Arith.Compare_dec.
 Require Import Coq.Relations.Relation_Definitions.
@@ -21,7 +21,7 @@ Require Import "Calculus/MultiStaged/Translation".
 Module Type MonadStepProperties (R:Replacement) 
   (T:StagedCalculus) (M:Monad R T).
 
-  Module Translation := Translation R T M.
+  Module Translation := TranslationImpl R T M.
   Import Translation.
   Import T.
   Import M.

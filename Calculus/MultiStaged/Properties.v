@@ -1,5 +1,6 @@
 Require Import Coq.Arith.Arith.
-Require Import Coq.Arith.MinMax.
+Require Import Coq.Numbers.Natural.Peano.NPeano.
+Require Import Coq.Arith.Max.
 Require Import Coq.Bool.Bool.
 Require Import Coq.omega.Omega.
 Require Import Coq.Lists.List.
@@ -9,7 +10,6 @@ Require Import "Misc/Library".
 Require Import "Calculus/Sets".
 Require Import "Calculus/Terminology".
 Require Import "Calculus/MultiStaged/Definitions".
-
 
 (** * Calculus Properties *)
 Module CalculusProperties (Repl:Replacement) 
@@ -282,12 +282,12 @@ Module CalculusProperties (Repl:Replacement)
     try(
       constructor ;
       [apply IHe1 | apply IHe2] ;
-      apply max_lub_lt_iff in H ; 
+      apply Nat.max_lub_lt_iff in H ; 
       destruct H ; assumption
     ) ;
     try(
       inversion H ; subst ;
-      apply max_lub_lt ; 
+      apply Nat.max_lub_lt ; 
       [apply IHe1 | apply IHe2] ; 
       assumption
    ).
@@ -426,12 +426,12 @@ Module CalculusProperties (Repl:Replacement)
     reflexivity.
     destruct l ; simpl ;
     rewrite H in *|-*.
-    apply max_le_compat_l.
+    apply Nat.max_le_compat_l.
     apply le_max_r.
     rewrite max_comm.
     rewrite max_comm with (n := (depth a)).
     rewrite max_assoc.
-    apply max_le_compat_r.
+    apply Nat.max_le_compat_r.
     apply IHM.
   Qed.
 
@@ -461,7 +461,7 @@ Module CalculusProperties (Repl:Replacement)
       apply IHe1 in H3 ; auto ; omega ; fail) ;
     try(destruct n ; [omega|] ;
       apply le_S_n in H ;
-      apply max_lub_iff in H ;
+      apply Nat.max_lub_iff in H ;
       destruct H ;
       inversion H0 ; subst ; [
       apply IHe1_1 in H4 | apply IHe1_2 in H9] ; 
@@ -610,7 +610,7 @@ Module CalculusProperties (Repl:Replacement)
       apply orb_prop in H ;
       specialize (IHe1 n) ;
       specialize (IHe2 n) ;
-      apply max_lt_iff ;
+      apply Nat.max_lt_iff ;
       tauto ; fail).
 
     (* Case EAbs *)
@@ -655,10 +655,10 @@ Module CalculusProperties (Repl:Replacement)
     subst ;
     destruct (fresh e) ; [auto |] ; 
     apply le_trans with (m:= S x) ; auto ;
-    [apply le_n_S ; apply le_max_r |
+    [apply le_n_S ; apply Nat.le_max_r |
     apply le_trans with (m:= S (max x v0)) ; auto ;
-    [apply le_n_S ; apply le_max_l |
-    apply le_n_S ; apply le_max_r ]] | inversion H].
+    [apply le_n_S ; apply Nat.le_max_l |
+    apply le_n_S ; apply Nat.le_max_r ]] | inversion H].
 
     apply IHe in H ;
     destruct (fresh e) ; [
@@ -891,7 +891,7 @@ Module LispLikeCalculusProperties.
     try(rewrite IHe with (n:=n) ; trivial ; fail) ;
     try(
       rewrite VarSetProperties.union_mem, orb_false_iff ;
-      rewrite max_lub_iff in H0 ; destruct H0 ; split ; 
+      rewrite Nat.max_lub_iff in H0 ; destruct H0 ; split ; 
       [rewrite IHe1 with (n:=n) | rewrite IHe2 with (n:=n)] ; 
       trivial ; fail) ;
     try(destruct x ; reflexivity ; fail).

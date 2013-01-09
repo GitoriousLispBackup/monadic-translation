@@ -1,6 +1,6 @@
 Require Import Coq.Lists.List.
 Require Import Coq.Arith.Arith.
-Require Import Coq.Arith.MinMax.
+Require Import Coq.Numbers.Natural.Peano.NPeano.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Arith.Compare_dec.
 Require Import Coq.Relations.Relation_Definitions.
@@ -18,12 +18,11 @@ Require Import "Calculus/MultiStaged/Monad".
 Require Import "Calculus/MultiStaged/Translation".
 Require Import "Calculus/MultiStaged/MonadStepProperties".
 
-Module ContextStaticProperties (R:Replacement)
-  (T:StagedCalculus) (M:Monad R T) (MP:MonadStepProperties R T M).
+Module Type ContextStaticProperties (R:Replacement)
+  (T:StagedCalculus) (M:Monad R T) (C:Context R T M).
 
-  Module Context := MP.Translation.Context.
   Import M.
-  Import Context.
+  Import C.
 
   Lemma merge_length:
     forall (cs1 cs2:t_stack),
@@ -80,7 +79,7 @@ Module ContextStaticProperties (R:Replacement)
     forall (rel:relation T.expr) (cs1 cs2 cs3 cs4:t_stack),
     congr_stack rel cs1 cs3 ->
     congr_stack rel cs2 cs4 ->
-    congr_stack rel (Context.merge cs1 cs2) (Context.merge cs3 cs4).
+    congr_stack rel (merge cs1 cs2) (merge cs3 cs4).
   Proof.
     induction cs1 ; simpl ; intros.
     inversion H ; subst.
@@ -98,7 +97,7 @@ Module ContextStaticProperties (R:Replacement)
   Lemma shift_spec:
     forall (cs:t_stack),
     length cs > 0 ->
-    let (c, cs') := Context.shift cs in
+    let (c, cs') := shift cs in
     cs = cs'++ (c::nil).
   Proof.
     induction cs ; intros ; simpl in *|-*.
@@ -113,7 +112,7 @@ Module ContextStaticProperties (R:Replacement)
 
   Lemma shift_spec_2:
     forall (cs:t_stack),
-    let (c, _) := Context.shift cs in
+    let (c, _) := shift cs in
     c = nth (pred (length cs)) cs nil.
   Proof.
     induction cs ; intros ; simpl in *|-*.
@@ -125,7 +124,7 @@ Module ContextStaticProperties (R:Replacement)
   
   Lemma unshift_spec:
     forall (cs:t_stack) (c:t),
-    Context.unshift cs c = cs ++ (c::nil).
+    unshift cs c = cs ++ (c::nil).
   Proof.
     induction cs ; intros ; simpl in *|-* ; auto.
     rewrite IHcs ; auto.
@@ -144,9 +143,9 @@ Module ContextStaticProperties (R:Replacement)
 
   Lemma context_hole_set_app:
     forall (c1 c2:t),
-    Context.context_hole_set (c1 ++ c2) =
-    VarSet.union (Context.context_hole_set c1)
-    (Context.context_hole_set c2).
+    context_hole_set (c1 ++ c2) =
+    VarSet.union (context_hole_set c1)
+    (context_hole_set c2).
   Proof.
     induction c1 ; simpl ; intros.
     rewrite VarSetProperties.empty_union_1.
@@ -258,10 +257,10 @@ Module ContextStaticProperties (R:Replacement)
   Qed.
 
   Lemma merge_unshift_1:
-    forall (cs1 cs2:Context.t_stack) (c:Context.t),
+    forall (cs1 cs2:t_stack) (c:t),
     length cs2 <= length cs1 ->
-    Context.unshift (Context.merge cs1 cs2) c = 
-    Context.merge (Context.unshift cs1 c) cs2.
+    unshift (merge cs1 cs2) c = 
+    merge (unshift cs1 c) cs2.
   Proof.
     induction cs1 ; intros.
     destruct cs2 ; [|exfalso ; simpl in *|-* ; omega].
@@ -274,10 +273,10 @@ Module ContextStaticProperties (R:Replacement)
   Qed.
 
   Lemma merge_unshift_2:
-    forall (cs1 cs2:Context.t_stack) (c:Context.t),
+    forall (cs1 cs2:t_stack) (c:t),
     length cs1 <= length cs2 ->
-    Context.unshift (Context.merge cs1 cs2) c = 
-    Context.merge cs1 (Context.unshift cs2 c).
+    unshift (merge cs1 cs2) c = 
+    merge cs1 (unshift cs2 c).
   Proof.
     intros cs1 cs2 ; generalize dependent cs1.
     induction cs2 ; intros.
@@ -290,15 +289,84 @@ Module ContextStaticProperties (R:Replacement)
     simpl in *|-* ; omega.
   Qed.
 
+  Inductive congr_context_ssubst 
+    (P:nat -> S.CRaw.var -> nat -> T.expr -> nat -> T.expr -> T.expr -> Prop) 
+    (n:nat) (h:S.CRaw.var)
+    (m:nat) (v:T.expr) (b1 b2:nat) : t -> t -> Prop :=
+  | CongrCSubst_nil : congr_context_ssubst P n h m v b1 b2 nil nil
+  | CongrCSubst_cons : forall (u1 u2:T.expr) (c1 c2:t),
+      P n h m v b1 u1 u2 ->
+      congr_context_ssubst P n h m v b1 b2 c1 c2 ->
+      congr_context_ssubst P n h m v b1 b2
+        (cons (u1,(b2+(length c1))%nat) c1) 
+        (cons (u2,(b2+(length c1))%nat) c2).
+
+  Inductive congr_stack_ssubst 
+    (P:nat -> S.CRaw.var -> nat -> T.expr -> nat -> T.expr -> T.expr -> Prop) 
+    (n:nat) (h:S.CRaw.var) (v:T.expr) : 
+    list nat -> nat -> t_stack -> t_stack -> Prop :=
+  | CongrSSubst_nil : forall (bs:list nat) (b:nat), congr_stack_ssubst P n h v bs b nil nil
+  | CongrSSubst_cons_nil: forall (c1 c2:t) (bs:list nat) (b1 b2:nat),
+      congr_context_ssubst P n h 0 v b1 b2 c1 c2 ->
+      congr_stack_ssubst P n h v (b1::bs) b2 (c1::nil) (c2::nil)
+  | CongrSSubst_cons : forall (bs:list nat) (b1 b2:nat) (c1 c2 c1' c2':t) (cs1 cs2:t_stack),
+      congr_context_ssubst P n h (length c1') v b1 b2 c1 c2 ->
+      congr_stack_ssubst P (pred n) h v bs b1 (c1'::cs1) (c2'::cs2) ->
+      congr_stack_ssubst P n h v (b1::bs) b2 (c1::c1'::cs1) (c2::c2'::cs2).
+
+  Lemma congr_context_ssubst_length:
+    forall (P:nat -> S.CRaw.var -> nat -> T.expr -> nat -> T.expr -> T.expr -> Prop)
+    (c1 c2:t) (n m b1 b2:nat) (h:S.var) (v:T.expr),
+    congr_context_ssubst P n h m v b1 b2 c1 c2 ->
+    length c1 = length c2.
+  Proof.
+    induction c1 ; simpl ; intros.
+    inversion H ; subst ; auto.
+    inversion H ; subst ; simpl.
+    specialize (IHc1 c3 n m b1 b2 h v H4).
+    auto.
+  Qed.
+
+  Lemma congr_stack_ssubst_length:
+    forall (P:nat -> S.CRaw.var -> nat -> T.expr -> nat -> T.expr -> T.expr -> Prop) 
+    (cs1 cs2:t_stack) (n:nat) (h:S.CRaw.var) (v:T.expr) (bs:list nat) (b:nat),
+    congr_stack_ssubst P n h v bs b cs1 cs2 ->
+    length cs1 = length cs2.
+  Proof.
+    induction cs1 ; simpl ; intros.
+    inversion H ; subst ; auto.
+    inversion H ; subst ; simpl ; auto.
+    specialize (IHcs1 (c2'::cs3) (pred n) h v bs0 b1 H6).
+    simpl in IHcs1 ; rewrite IHcs1 ; auto.
+  Qed.
+
+  Lemma congr_ssubst_context_app:
+    forall (P:nat -> S.CRaw.var -> nat -> T.expr -> nat -> T.expr -> T.expr -> Prop)
+    (c1 c2 c3 c4:t) (n m b1 b2:nat) (h:S.var) (v:T.expr),
+    congr_context_ssubst P n h m v b1 (b2 + length c2) c1 c3 ->
+    congr_context_ssubst P n h m v b1 b2 c2 c4 ->
+    congr_context_ssubst P n h m v b1 b2 (c1 ++ c2) (c3 ++ c4).
+  Proof.
+    induction c1 ; simpl ; intros ;
+    inversion H ; subst ; auto.
+    assert((b2 + length c2 + length c1) = b2 + (length (c1++c2)))%nat as Eq1.
+    rewrite app_length ; simpl ; omega.
+    rewrite Eq1 ; constructor ; auto.
+  Qed.
+
 End ContextStaticProperties.
 
-Module TranslationStaticProperties (R:Replacement) 
-    (T:StagedCalculus) (M:Monad R T) (MP:MonadStepProperties R T M).
+Module ContextStaticPropertiesImpl (R:Replacement)
+  (T:StagedCalculus) (M:Monad R T) (C:Context R T M).
+  Include ContextStaticProperties R T M C.
+End ContextStaticPropertiesImpl.
 
-  Module Translation := MP.Translation.
+Module Type TranslationStaticProperties (R:Replacement) 
+    (T:StagedCalculus) (M:Monad R T) (Tr:Translation R T M).
+
   Module CalculusProperties := CalculusProperties R M.S.
-  Module ContextStaticProperties := ContextStaticProperties R T M MP.
-  Import Translation.
+  Module ContextStaticProperties := ContextStaticPropertiesImpl R T M Tr.Context.
+  Import Tr.
   Import M.S.
   Import M.
 
@@ -525,7 +593,7 @@ Module TranslationStaticProperties (R:Replacement)
     specialize (IHe1 nil (map_iter_booker e2 bs1 0) 
       (map_iter_booker e2 bs2 0) Ole) ;
     specialize (IHe2 nil bs1 bs2 Ole) |
-    apply max_lub_iff in H ; destruct H ;
+    apply Nat.max_lub_iff in H ; destruct H ;
     specialize (IHe1 (map_iter_booker e2 (n::bs) 0) 
     (map_iter_booker e2 bs1 (0+(length (n::bs))))
     (map_iter_booker e2 bs2 (0+(length (n::bs))))) ;
@@ -534,7 +602,7 @@ Module TranslationStaticProperties (R:Replacement)
     rewrite List2Properties.length_map_iter in IHe1 ;
     rewrite <- List2Properties.map_iter_app in IHe1 ;
     rewrite <- List2Properties.map_iter_app in IHe1 ] ;
-    destruct (Translation.S.CRaw.svalueb) ;
+    destruct (Tr.S.CRaw.svalueb) ;
     simpl in *|-* ; 
     destruct IHe1, IHe2 ; auto ;
     [rewrite H1, H2, H3| rewrite H1, H3 | 
@@ -602,9 +670,9 @@ Module TranslationStaticProperties (R:Replacement)
     depth e <= n -> booker e n = 0.
   Proof.
     induction e ; simpl ; intros ; auto.
-    apply max_lub_iff in H.
+    apply Nat.max_lub_iff in H.
     destruct H ; rewrite IHe1, IHe2 ; auto.
-    apply max_lub_iff in H.
+    apply Nat.max_lub_iff in H.
     destruct H ; rewrite IHe1, IHe2 ; auto.
     apply IHe ; omega.
     destruct n ; [exfalso ; omega|auto].
@@ -813,7 +881,7 @@ Module TranslationStaticProperties (R:Replacement)
     specialize (booker_length e2 bs) ; intros BookerL ;
     destruct (trans e1) ; destruct (trans e2) ; intros ;
     rewrite ContextStaticProperties.merge_length in H ;
-    apply max_lub_iff in H ; destruct H ;
+    apply Nat.max_lub_iff in H ; destruct H ;
     specialize (IHe2 H0) ;
     unfold map_iter_booker in IHe1 ;
     rewrite List2Properties.length_map_iter in IHe1 ;
@@ -1171,7 +1239,7 @@ Module TranslationStaticProperties (R:Replacement)
     induction e1 ; simpl ; intros e2 M1 M2 MDepth0 ; intros ;
 
     (* EConst, EVar, ELoc *)
-    try(inversion H ; ssubst ; auto ; fail) ;
+    try(inversion H ; subst ; auto ; fail) ;
 
     (* EAbs, EFix *)
     try(inversion H ; subst ; simpl ;
@@ -1180,13 +1248,13 @@ Module TranslationStaticProperties (R:Replacement)
 
     (* EApp *)
     inversion H ; subst.
-    specialize (max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
+    specialize (Nat.max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
     destruct Spec1 ; destruct H1 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H3 ; [contradiction|omega] |
     simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto].
 
-    specialize (max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
-    destruct Spec1 ; destruct H1 ; rewrite max_comm in H2 ; rewrite H2 in *|-* ; [
+    specialize (Nat.max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
+    destruct Spec1 ; destruct H1 ; rewrite Nat.max_comm in H2 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H8 ; [contradiction|omega] |
     simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto].
     
@@ -1230,13 +1298,13 @@ Module TranslationStaticProperties (R:Replacement)
     (* Assign *)
     inversion H ; subst.
 
-    specialize (max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
+    specialize (Nat.max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
     destruct Spec1 ; destruct H1 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H3 ; [contradiction|omega] |
     simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto].
 
-    specialize (max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
-    destruct Spec1 ; destruct H1 ; rewrite max_comm in H2 ; rewrite H2 in *|-* ; [
+    specialize (Nat.max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
+    destruct Spec1 ; destruct H1 ; rewrite Nat.max_comm in H2 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H8 ; [contradiction|omega] |
     simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto].
     
@@ -1336,11 +1404,11 @@ Module TranslationStaticProperties (R:Replacement)
     rewrite map_iter_booker_comm with (e1:=e2) in *|-*.
     simpl in *|-*.
     assert(depth e3_1 + n < depth e1 + length bs1).
-    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    specialize (Nat.max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
     destruct Spec ; omega.
     specialize (IHe3_1 H0) ; clear H0.
     assert(depth e3_2 + n < depth e1 + length bs1).
-    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    specialize (Nat.max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
     destruct Spec ; omega.
     specialize (IHe3_2 H0) ; clear H0.
     destruct IHe3_1 ; destruct IHe3_2.
@@ -1363,11 +1431,11 @@ Module TranslationStaticProperties (R:Replacement)
     rewrite map_iter_booker_comm with (e1:=e2) in *|-*.
     simpl in *|-*.
     assert(depth e3_1 + n < depth e1 + length bs1).
-    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    specialize (Nat.max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
     destruct Spec ; omega.
     specialize (IHe3_1 H0) ; clear H0.
     assert(depth e3_2 + n < depth e1 + length bs1).
-    specialize (max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
+    specialize (Nat.max_spec (depth e3_1) (depth e3_2)) ; intros Spec.
     destruct Spec ; omega.
     specialize (IHe3_2 H0) ; clear H0.
     destruct IHe3_1 ; destruct IHe3_2.
@@ -1436,3 +1504,8 @@ Module TranslationStaticProperties (R:Replacement)
   Qed.
 
 End TranslationStaticProperties.
+
+Module TranslationStaticPropertiesImpl (R:Replacement) 
+    (T:StagedCalculus) (M:Monad R T) (Tr:Translation R T M).
+  Include TranslationStaticProperties R T M Tr.
+End TranslationStaticPropertiesImpl.

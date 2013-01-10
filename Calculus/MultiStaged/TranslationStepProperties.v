@@ -79,8 +79,8 @@ Module TranslationStepProperties (R:Replacement)
   Module StaticProperties := TrSP.
   Module CalculusProperties := CalculusProperties R M.S.
   Module BindingSetProperties := BindingSetProperties R.
-  Module EqSubstProperties3 := EqSubstProperties3 R T M MP TrSP.
   Module AdminSubstProperties := AdminSubstProperties R T M MP TrSP.
+  Module EqSubstProperties3 := AdminSubstProperties.E3.
   Module EqSubstProperties2 := AdminSubstProperties.E2.
   Module EqSubstProperties := AdminSubstProperties.E.
   

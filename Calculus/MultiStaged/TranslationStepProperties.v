@@ -837,7 +837,7 @@ Module TranslationStepProperties (R:Replacement)
               apply Admin_trans with (e2:=
               (bind (ret (phi e3 (map_iter_booker e1_2 bs 0)))
               (fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eapp v1 v2)))) ;
-              [|apply Admin_bind_phi ; auto] ;
+              [|apply Admin_bind_app_phi ; auto] ;
               rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eapp v1 v2))).
               destruct H7 ;
               unfold admin_ssubst in H7.
@@ -1035,7 +1035,6 @@ Module TranslationStepProperties (R:Replacement)
                  (phi e1_1 (map_iter_booker e1_2 bs 0)) (phi x (0 :: nil)))
                v2) ; auto.
                constructor ; auto.
-               (*simpl in *|-*.*)
                destruct EqSsubstEq2 with (m:=depth e1_1) (h:=v) (v:=(phi x (0 :: nil))) ; auto.
                unfold eq_ssubst in H10.
                remember (ltb v (nth 0 bs 0 + booker e1_2 0)).
@@ -1074,7 +1073,7 @@ Module TranslationStepProperties (R:Replacement)
               apply Admin_trans with (e2:=
               (bind (ret (phi e3 (map_iter_booker e1_2 bs 0)))
               (fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eapp v1 v2)))) ;
-              [|apply Admin_bind_phi ; auto] ;
+              [|apply Admin_bind_app_phi ; auto] ;
               rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eapp v1 v2))).
               destruct H7 ;
               unfold admin_ssubst in H7.
@@ -1253,7 +1252,6 @@ Module TranslationStepProperties (R:Replacement)
                  (phi e1_1 (map_iter_booker e1_2 bs 0)) (phi x (0 :: nil)))
                v2) ; auto.
           constructor ; auto.
-          (*simpl in *|-*.*)
           destruct H7 ; unfold admin_ssubst in H7.
           remember (ltb v (nth 0 bs 0 + booker e1_2 0)).
           destruct b ; symmetry in Heqb0.
@@ -1550,7 +1548,726 @@ Module TranslationStepProperties (R:Replacement)
       simpl ; constructor.
 
     (* Case EAssign *)
-    admit.
+    inversion Step ; subst ; simpl in *|-*.
+    
+      (* Case EAssign e1 e2,  e1 -> e1' *)
+      specialize (length_h_match e1_1 (map_iter_booker e1_2 bs 0)) ; intros LengthHMatch.
+      specialize (booker_length e1_2 bs) ; intros BookerLength2.
+      specialize (Nat.max_spec (depth e1_1) (depth e1_2)) ; intros MaxLeft.
+      destruct MaxLeft ; destruct H.
+      rewrite H0 in H1.
+      specialize (CalculusProperties.depth_sstep_lt 
+        M1 e1_1 M2 e3 (depth e1_2) H H1) ;
+      intros ; contradiction.
+      rewrite H0 in *|-* ; clear IHe1_2.
+      specialize (IHe1_1 (map_iter_booker e1_2 bs 0) 
+        e3 M1 M2 MemSvalue0 MemDepth0).
+      assert(length (map_iter_booker e1_2 bs 0) = length bs) as Eq2.
+      clear ; unfold map_iter_booker ; 
+      rewrite List2Properties.length_map_iter ; auto.
+      rewrite Eq2 in IHe1_1 ; specialize (IHe1_1 BSLength H1).
+      specialize (depth_length e1_1 (map_iter_booker e1_2 bs 0)) ; intros DpthLength3.
+      specialize (depth_length e1_2 bs) ; intros DpthLength4.
+      unfold trans_expr ; simpl.
+      specialize (CalculusProperties.depth_sstep_eq 
+          M1 e1_1 M2 e3 MemDepth0 H1) ; intros Dpth1.
+      specialize (eq_ssubst_eq e1_2 bs) ; intros EqSsubstEq1.
+      specialize (eq_ssubst_gt e1_2 bs) ; intros EqSsubstEq2.
+      specialize (admin_stack_ssubst_merge_1 bs e1_1 e1_2) ; intros AdminSsubst1.
+      specialize (admin_stack_ssubst_merge_2 bs e1_1 e1_2) ; intros AdminSsubst2.
+      destruct (trans e1_1).
+      destruct (trans e1_2).
+      destruct t.
+ 
+        (* Case EAssign e1 e2, n = 0, e1 -> e1' *)
+        destruct t0 ; [|exfalso ; generalize DpthLength3 DpthLength4 H ; clear ; intros ; simpl in *|-* ; omega] ; simpl.
+        unfold trans_expr in IHe1_1.
+        cases (trans e3 (map_iter_booker e1_2 bs 0)) as e eqn: Transe1.
+        inversion IHe1_1 ; subst.
+        remember (E.Translation.phi) ; remember (E.Translation.trans) ; simpl in *|-* ; destruct Dpth1 ; subst.
+        assert(S.CRaw.svalueb 0 e1_1 = false).
+        apply CalculusProperties.svalueb_iff_conv.
+        apply CalculusProperties.sprogresses_not_svalue with (M1:=M1).
+        exists (M2, e3) ; rewrite DpthLength3 in H1 ; auto.
+        rewrite H4.
+        remember (S.CRaw.svalueb 0 e3) ; destruct b ; symmetry in Heqb.
+        apply CalculusProperties.svalueb_iff in Heqb.
+        apply Rel_step with (e1:=bind e0
+        (fun v2 => cast_eassign (phi e3 (map_iter_booker e1_2 bs 0)) v2)).
+        specialize (MP.astep_bind_1 e3 e e2 bs (trans_mem M1 bs) (trans_mem M2 bs)
+          (fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eassign v1 v2))) ; intros.
+        rewrite phi_depth_0 with (bs2:=bs) ; auto.
+        apply H7 ; auto.
+        rewrite trans_memory_depth_0 with (bs2:=bs) in H5 ; auto.
+        rewrite trans_memory_depth_0 with (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H5 ; auto.
+        rewrite trans_depth_0 with (bs2:=bs) in Transe1 ; auto.
+        specialize (svalue_phi e3 bs Heqb) ; intros.
+        unfold trans_expr in H8 ; rewrite <- Transe1 in H8.
+        subst ; auto.
+        omega.
+        omega.
+        constructor.
+        
+        apply Rel_step with (e1:=bind e2 (fun v1 => bind e0 
+          (fun v2 => cast_eassign v1 v2))).
+        apply MP.astep_bind_assign ; auto.
+        rewrite trans_memory_depth_0 with (bs2:=bs) in H5 ; auto.
+        rewrite trans_memory_depth_0 with (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H5 ; auto.
+        constructor ; auto.
+        intros ; constructor.
+
+        inversion H.
+        
+          (* Case depth(e1) = depth(e2) *)
+          rewrite ContextStaticProperties.shift_merge_3 ;
+          [| rewrite DpthLength4 in H3 ; rewrite DpthLength3 in H3] ; auto.
+          cases (Context.merge (t::t1) t0) as t eqn:Merge1.
+          simpl in Merge1 ; destruct t0 ; inversion Merge1.
+          cases (Context.shift (t :: t1)) as t eqn:Merge2.
+          cases (Context.shift t0) as t eqn:Merge3.
+          destruct t4 ; [exfalso |] ; auto ; simpl.
+          destruct p.
+          specialize (svalue_phi e3 (map_iter_booker e1_2 bs 0)) ; 
+          intros SValuePhi3 ; unfold trans_expr in SValuePhi3.
+          specialize (AdminSsubst1 e3) ; clear AdminSsubst2.
+          destruct (trans e3).
+          destruct IHe1_1.
+          exists x.
+          destruct H2 ; split ; auto.
+          destruct H4 ; [left|right] ; destruct H4.
+
+            (* Case svalue *)
+            destruct H5 ; destruct H6.
+            repeat(split) ; auto.
+            rewrite Merge1 in AdminSsubst1.
+            rewrite ContextStaticProperties.shift_merge_3 in AdminSsubst1.
+            rewrite <- Merge2, <- Merge3 in AdminSsubst1.
+            specialize (AdminSsubst1 x H2 H6).
+            rewrite <- app_comm_cons in AdminSsubst1.
+            rewrite H3 in *|-*.
+            apply AdminSsubst1 ; auto.
+            rewrite DpthLength3, DpthLength4 in H3 ; auto.
+            
+            remember (S.CRaw.svalueb 0 e1_1).
+            destruct b ; symmetry in Heqb.
+
+              (* Case svalue 0 e1_1 *)
+              apply CalculusProperties.svalueb_iff in Heqb.
+              assert(svalue 0 e3) as SValueE3.
+                inversion Heqb ; subst ; 
+                try(inversion H1 ; constructor ; fail).
+                inversion H1 ; subst ; simpl in H8, H3, Dpth1.
+                apply CalculusProperties.depth_svalue in H8.
+                clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-*.
+                exfalso ; omega.
+              apply CalculusProperties.svalueb_iff in SValueE3.
+              rewrite SValueE3.
+              unfold admin_ssubst ; intros.
+              rewrite MP.ssubst_bind with (f2:=
+                fun v2 => cast_eassign (
+                ssubst (depth e1_2)
+                 match depth e1_2 with
+                 | 0 => ss
+                 | 1 => ss
+                 | S (S n) =>
+                 if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                 then StageSet.add (S n) ss
+                 else ss
+                 end (cast_var (hole_var v))
+                 (phi e1_1 (map_iter_booker e1_2 bs 0)) (phi x (0 :: nil)))
+               v2) ; auto.
+               constructor ; auto.
+               unfold map_iter_booker in LengthHMatch.
+               assert(S (length t1) <= length
+                 (List2.map_iter (fun b n => (b + booker e1_2 n)%nat) bs 0)) as Tmp1.
+               rewrite List2Properties.length_map_iter ; auto.
+               clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+               specialize (LengthHMatch Tmp1) ; clear Tmp1.
+               unfold map_iter_booker in LengthHMatch.
+               specialize (List2Properties.map_iter_nth_indep 
+                 (fun b n : nat => (b + booker e1_2 n)%nat)
+                 bs (length t1) 0 0 0) ; intros MapIter1.
+                 simpl in LengthHMatch ; rewrite MapIter1 in LengthHMatch ; auto.
+               subst.
+               destruct EqSsubstEq1 with (h:=(nth (length t1) bs 0 + booker e1_2 (length t1 + 0) + length t4)%nat) (v:=(phi x (0 :: nil))) ; auto.
+               rewrite H3 ; split ; auto ; rewrite DpthLength3 ; 
+               clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+               rewrite H3, DpthLength3, plus_0_r ; simpl ; omega.
+               unfold eq_ssubst in H2.
+               remember (ltb
+                (nth (length t1) bs 0 + booker e1_2 (length t1 + 0) +
+                 length t4) (nth 0 bs 0 + booker e1_2 0)).
+               destruct b ; symmetry in Heqb0.
+               assert(ltb (nth (length t1) bs 0 + booker e1_2 (length t1 + 0) + length t4)
+               (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+                 apply leb_iff ; apply leb_iff in Heqb0 ; rewrite plus_0_r in *|-* ; omega.
+               rewrite True1, H2 ; auto ; try(omega) ; constructor.
+               destruct (depth e1_2) ; try(rewrite H2 ; auto ; try(omega) ; constructor).
+               destruct n ; try(rewrite H2 ; auto ; try(omega) ; constructor).
+               rewrite H2 ; auto ; try(omega) ; [constructor |].
+               destruct (ltb (nth (length t1) bs 0 + booker e1_2 (length t1 + 0) + length t4)
+                 (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+               rewrite <- StageSetProperties.ub_le_1 ; auto.
+               clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-*.
+               omega.
+               intros.
+               constructor ; [|constructor].
+               destruct H7.
+               specialize (H10 Heqb).
+               unfold admin_ssubst in H10.
+               assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0)%nat
+               = (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))%nat) as Nth1.
+                 specialize (List2Properties.map_iter_nth_indep 
+                   (fun b n : nat => (b + booker e1_2 n)%nat)
+                   bs 0 0 0 0) ; intros MapIter1.
+                 unfold map_iter_booker ; rewrite MapIter1.
+                 simpl ; clear ; omega.
+                 destruct (depth e1_1) ; omega.
+               rewrite Nth1 in H10 ; clear Nth1.
+               rewrite H3 in *|-* ; auto.
+               intros.
+               rewrite MP.ssubst_eassign ; auto.
+
+              (* Case not svalue 0 e1_1 *)
+              remember (S.CRaw.svalueb 0 e3).
+              destruct b ; symmetry in Heqb0.
+              
+              (* Case svalue 0 e3 *)
+              apply CalculusProperties.svalueb_iff in Heqb0.
+              unfold admin_ssubst ; intros ;
+              apply Admin_trans with (e2:=
+              (bind (ret (phi e3 (map_iter_booker e1_2 bs 0)))
+              (fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eassign v1 v2)))) ;
+              [|apply Admin_bind_assign_phi ; auto] ;
+              rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eassign v1 v2))).
+              destruct H7 ;
+              unfold admin_ssubst in H7.
+              assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0) = 
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)))%nat as Eq1.
+              destruct bs ; [exfalso |] ; 
+              clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ;
+              omega.
+              rewrite Eq1, SValuePhi3 in H7 ; auto ; rewrite <- H3 in H7.
+              constructor ; intros ; auto ; constructor.
+              
+              intros.
+              rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+                cast_eassign (ssubst (depth e1_2)
+                match depth e1_2 with
+                | 0 => ss | 1 => ss
+                | S (S n) => if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                then StageSet.add (S n) ss else ss  end (cast_var (hole_var v)) v2 (phi x (0 :: nil))) v0)).
+              assert(nth (length t1) (map_iter_booker e1_2 bs 0) 0 = 
+                nth (length t1) bs 0 + booker e1_2 (pred (depth e1_2)))%nat as Nth1.
+              rewrite H3, DpthLength3 ; simpl.
+              specialize (List2Properties.map_iter_nth_indep 
+                   (fun b n : nat => (b + booker e1_2 n)%nat)
+                   bs (length t1) 0 0 0) ; intros MapIter1.
+                 unfold map_iter_booker ; rewrite MapIter1.
+                 rewrite plus_0_r ; simpl ; omega.
+                 rewrite DpthLength3 in BSLength ; 
+                 clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+              rewrite LengthHMatch in *|-* ; auto ; simpl ; 
+              try(rewrite Eq2 ; rewrite DpthLength3 in BSLength ; 
+              clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega).
+              destruct EqSsubstEq1 with (h:=(nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)%nat) 
+                (v:=(phi x (0 :: nil))) ; auto.
+              rewrite H3 ; clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+              rewrite Nth1, H3, DpthLength3 ; simpl ; omega.
+              
+              unfold eq_ssubst in H10.
+              destruct (depth e1_2) ; try(rewrite H10 ; auto).
+              destruct n ; try(rewrite H10 ; auto).
+              remember (ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + booker e1_2 0)).
+              destruct b ; symmetry in Heqb1.
+              assert(ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+              apply leb_iff ; apply leb_iff in Heqb1 ; omega.
+              rewrite True1, H10 ; auto.
+              rewrite H10 ; auto.
+              destruct (ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+              rewrite <- StageSetProperties.ub_le_1 ; auto.
+              intros ; rewrite MP.ssubst_eassign ; auto.
+              
+
+              (* Case not svalue 0 e3 *)
+              unfold admin_ssubst ; intros.
+              rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eassign v1 v2))).
+              destruct H7.
+              unfold admin_ssubst in H7.
+              assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0) = 
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)))%nat as Eq1.
+              destruct bs ; [exfalso |] ; clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+              rewrite Eq1 in H7 ; auto ; rewrite <- H3 in H7.
+              constructor ; intros ; auto ; constructor.
+              
+              intros.
+              rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+                cast_eassign (ssubst (depth e1_2)
+                match depth e1_2 with
+                | 0 => ss | 1 => ss
+                | S (S n) => if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                then StageSet.add (S n) ss else ss  end (cast_var (hole_var v)) v2 (phi x (0 :: nil))) v0)).
+              assert(nth (length t1) (map_iter_booker e1_2 bs 0) 0 = 
+                nth (length t1) bs 0 + booker e1_2 (pred (depth e1_2)))%nat as Nth1.
+              rewrite H3, DpthLength3 ; simpl.
+              specialize (List2Properties.map_iter_nth_indep 
+                   (fun b n : nat => (b + booker e1_2 n)%nat)
+                   bs (length t1) 0 0 0) ; intros MapIter1.
+                 unfold map_iter_booker ; rewrite MapIter1.
+                 rewrite plus_0_r ; simpl ; omega.
+                 rewrite DpthLength3 in BSLength ; 
+                 clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+              rewrite LengthHMatch in *|-* ; auto ; simpl ; 
+              try(rewrite Eq2 ; rewrite DpthLength3 in BSLength ; 
+              clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega).
+              destruct EqSsubstEq1 with (h:=(nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)%nat) 
+                (v:=(phi x (0 :: nil))) ; auto.
+              rewrite H3 ; clear SValuePhi3 AdminSsubst1 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+              rewrite Nth1, H3, DpthLength3 ; simpl ; omega.
+              unfold eq_ssubst in H10.
+              destruct (depth e1_2) ; try(rewrite H10 ; auto).
+              destruct n ; try(rewrite H10 ; auto).
+              remember (ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + booker e1_2 0)).
+              destruct b ; symmetry in Heqb1.
+              assert(ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+              apply leb_iff ; apply leb_iff in Heqb1 ; omega.
+              rewrite True1, H10 ; auto.
+              rewrite H10 ; auto.
+              destruct (ltb (nth (length t1) (map_iter_booker e1_2 bs 0) 0 + length t4)
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+              rewrite <- StageSetProperties.ub_le_1 ; auto.
+              intros ; rewrite MP.ssubst_eassign ; auto.
+
+            (* patch *)
+            intros ; inversion H8.
+
+            (* Case not svalue *)
+            exists x0.
+            destruct H4 ; destruct H5 ; destruct H6 ; 
+            destruct H7 ; subst ; repeat(split) ; auto.
+            rewrite trans_memory_depth_0 with (bs2:=bs) in H4 ; auto.
+            rewrite trans_memory_depth_0 with (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H4 ; auto.
+            tauto.
+            rewrite H6 ; rewrite H7 ; auto.
+            omega.
+            intros ; rewrite H7 ; auto.
+            rewrite <- H3 ; auto.
+            unfold trans_expr ; destruct (trans x0).
+            simpl.
+            specialize (ContextStaticProperties.unshift_spec t5 ((e, v) :: t4)) ; intros Spec1.
+            rewrite Spec1 ; clear Spec1.
+            specialize (ContextStaticProperties.unshift_spec (Context.merge t5 t7) ((e, v) :: t4 ++ t6)) ; intros Spec2.
+            rewrite Spec2 ; clear Spec2.
+            specialize (ContextStaticProperties.shift_spec t0) ; intros Spec3.
+            rewrite <- Merge3 in Spec3.
+            destruct t0 ; simpl.
+            simpl in Merge3 ; inversion Merge3.
+            rewrite ContextStaticProperties.merge_nil_r.
+            rewrite ContextStaticProperties.merge_nil_r.
+            rewrite app_nil_r ; auto.
+            rewrite Spec3 ; simpl ; auto ; [|omega].
+            rewrite ContextStaticProperties.merge_app ; auto.
+            rewrite DpthLength4, DpthLength3 in H3.
+            specialize (ContextStaticProperties.shift_length (t0 :: t9)) ; intros L1.
+            specialize (ContextStaticProperties.shift_length (t :: t1)) ; intros L2.
+            rewrite <- Merge3 in L1.
+            rewrite <- Merge2 in L2.
+            rewrite L1, L2, H3 ; auto.
+            
+          (* Case depth(e1) > depth(e2) *)
+          assert(depth e1_2 < depth e1_1) as D1.
+          omega.
+          rewrite H2 in *|-*.
+          clear H3 H2 m ; assert(H3:=D1).
+          rewrite ContextStaticProperties.shift_merge_1 ;
+          [| rewrite DpthLength4 in H3 ; rewrite DpthLength3 in H3] ; auto.
+          cases (Context.merge (t::t1) t0) as t eqn:Merge1.
+          simpl in Merge1 ; destruct t0 ; inversion Merge1.
+          cases (Context.shift (t::t1)) as t eqn:Merge2.
+          cases (Context.shift t0) as t eqn:Merge3.
+          rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi.
+          destruct t4 ; [exfalso |] ; auto ; simpl.
+          destruct p.
+          specialize (svalue_phi e3 (map_iter_booker e1_2 bs 0)) ; 
+          intros SValuePhi3 ; unfold trans_expr in SValuePhi3.
+          specialize (AdminSsubst2 e3) ; clear AdminSsubst1.
+          destruct (trans e3).
+          destruct IHe1_1.
+          exists x.
+          destruct H2 ; split ; auto.
+          destruct H4 ; [left|right] ; destruct H4.
+
+            (* Case svalue *)
+            destruct H5 ; destruct H6.
+            repeat(split) ; auto.
+            apply AdminSsubst2 ; auto.
+            
+            remember (S.CRaw.svalueb 0 e1_1).
+            destruct b ; symmetry in Heqb.
+
+              (* Case svalue 0 e1_1 *)
+              apply CalculusProperties.svalueb_iff in Heqb.
+              assert(svalue 0 e3) as SValueE3.
+                inversion Heqb ; subst ; 
+                try(inversion H1 ; constructor ; fail).
+                inversion H1 ; subst ; 
+                clear SValuePhi3 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-*.
+                apply CalculusProperties.depth_svalue in H8.
+                exfalso ; omega.
+              apply CalculusProperties.svalueb_iff in SValueE3.
+              rewrite SValueE3.
+              unfold admin_ssubst ; intros.
+              rewrite MP.ssubst_bind with (f2:=
+                fun v2 => cast_eassign (
+                ssubst (depth e1_1)
+                 match depth e1_1 with
+                 | 0 => ss
+                 | 1 => ss
+                 | S (S n) =>
+                 if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                 then StageSet.add (S n) ss
+                 else ss
+                 end (cast_var (hole_var v))
+                 (phi e1_1 (map_iter_booker e1_2 bs 0)) (phi x (0 :: nil)))
+               v2) ; auto.
+               constructor ; auto.
+               destruct EqSsubstEq2 with (m:=depth e1_1) (h:=v) (v:=(phi x (0 :: nil))) ; auto.
+               unfold eq_ssubst in H10.
+               remember (ltb v (nth 0 bs 0 + booker e1_2 0)).
+               destruct b ; symmetry in Heqb0.
+               assert(ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+                 apply leb_iff ; apply leb_iff in Heqb0 ; omega.
+               rewrite True1, H10 ; auto ; try(omega) ; constructor.
+               destruct (depth e1_1) ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+               destruct n ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+               rewrite H10 ; auto ; try(omega) ; [constructor |].
+               destruct (ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+               rewrite <- StageSetProperties.ub_le_1 ; auto.
+               intros.
+               constructor ; [|constructor].
+               destruct H7.
+               specialize (H10 Heqb).
+               unfold admin_ssubst in H10.
+               assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0)%nat
+               = (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))%nat) as Nth1.
+                 specialize (List2Properties.map_iter_nth_indep 
+                   (fun b n : nat => (b + booker e1_2 n)%nat)
+                   bs 0 0 0 0) ; intros MapIter1.
+                 unfold map_iter_booker ; rewrite MapIter1.
+                 simpl ; clear ; omega.
+                 destruct (depth e1_1) ; omega.
+               rewrite Nth1 in H10 ; clear Nth1 ; auto.
+               intros ; rewrite MP.ssubst_eassign ; auto.
+
+              (* Case not svalue 0 e1_1 *)
+              remember (S.CRaw.svalueb 0 e3).
+              destruct b ; symmetry in Heqb0.
+              
+              (* Case svalue 0 e3 *)
+              apply CalculusProperties.svalueb_iff in Heqb0.
+              unfold admin_ssubst ; intros ;
+              apply Admin_trans with (e2:=
+              (bind (ret (phi e3 (map_iter_booker e1_2 bs 0)))
+              (fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eassign v1 v2)))) ;
+              [|apply Admin_bind_assign_phi ; auto] ;
+              rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eassign v1 v2))).
+              destruct H7 ;
+              unfold admin_ssubst in H7.
+              assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0) = 
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)))%nat as Eq1.
+              destruct bs ; [exfalso |] ; clear SValuePhi3 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+              rewrite Eq1, SValuePhi3 in H7 ; auto ;
+              constructor ; intros ; auto ; constructor.
+              
+              intros.
+              rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+                cast_eassign (ssubst (depth e1_1)
+                match depth e1_1 with
+                | 0 => ss | 1 => ss
+                | S (S n) => if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                then StageSet.add (S n) ss else ss  end (cast_var (hole_var v)) v2 (phi x (0 :: nil))) v0)).
+              destruct EqSsubstEq2 with (m:=depth e1_1) (h:=v) (v:=(phi x (0 :: nil))) ; auto.
+               unfold eq_ssubst in H10.
+               remember (ltb v (nth 0 bs 0 + booker e1_2 0)).
+               destruct b ; symmetry in Heqb1.
+               assert(ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+                 apply leb_iff ; apply leb_iff in Heqb1 ; omega.
+               rewrite True1, H10 ; auto ; try(omega) ; constructor.
+               destruct (depth e1_1) ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+               destruct n ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+               rewrite H10 ; auto ; try(omega).
+               destruct (ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+               rewrite <- StageSetProperties.ub_le_1 ; auto.
+              intros ; rewrite MP.ssubst_eassign ; auto.
+              
+
+              (* Case not svalue 0 e3 *)
+              unfold admin_ssubst ; intros.
+              rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind e0 (fun v2 : T.expr => cast_eassign v1 v2))).
+              destruct H7.
+              unfold admin_ssubst in H7.
+              assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0) = 
+              (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)))%nat as Eq1.
+              destruct bs ; [exfalso |] ; clear SValuePhi3 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-* ; omega.
+              rewrite Eq1 in H7 ; auto.
+              constructor ; intros ; auto ; constructor.
+
+              intros.
+              rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+                cast_eassign (ssubst (depth e1_1)
+                match depth e1_1 with
+                | 0 => ss | 1 => ss
+                | S (S n) => if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                then StageSet.add (S n) ss else ss  end (cast_var (hole_var v)) v2 (phi x (0 :: nil))) v0)).
+              destruct EqSsubstEq2 with (m:=depth e1_1) (h:=v) (v:=(phi x (0 :: nil))) ; auto.
+               unfold eq_ssubst in H10.
+               remember (ltb v (nth 0 bs 0 + booker e1_2 0)).
+               destruct b ; symmetry in Heqb1.
+               assert(ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+                 apply leb_iff ; apply leb_iff in Heqb1 ; omega.
+               rewrite True1, H10 ; auto ; try(omega) ; constructor.
+               destruct (depth e1_1) ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+               destruct n ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+               rewrite H10 ; auto ; try(omega).
+               destruct (ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+               rewrite <- StageSetProperties.ub_le_1 ; auto.
+              intros ; rewrite MP.ssubst_eassign ; auto.
+
+            (* patch *)
+            intros ; inversion H8.
+
+            (* Case not svalue *)
+            exists x0.
+            destruct H4 ; destruct H5 ; destruct H6 ; 
+            destruct H7 ; subst ; repeat(split) ; auto.
+            rewrite trans_memory_depth_0 with (bs2:=bs) in H4 ; auto.
+            rewrite trans_memory_depth_0 with (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H4 ; auto.
+            tauto.
+            rewrite H6 ; rewrite H7 ; auto.
+            omega.
+            intros ; rewrite H7 ; auto.
+            unfold trans_expr ; destruct (trans x0).
+            simpl.
+            rewrite ContextStaticProperties.merge_unshift_1 ; auto.
+            specialize (ContextStaticProperties.shift_length (t :: t1)) ; intros L1.
+            rewrite <- Merge2 in L1.
+            rewrite L1 ; clear SValuePhi3 EqSsubstEq1 EqSsubstEq2 ; simpl in *|-*.
+            rewrite DpthLength3, DpthLength4 in *|-*.
+            generalize D1 ; clear ; intros.
+            apply le_S_n in D1 ; auto.
+
+      (* Case EAssign e1 e2,  e2 -> e2' *)
+      specialize (Nat.max_spec (depth e1_2) (depth e1_1)) ; intros MaxRight.
+      destruct MaxRight ; destruct H ; rewrite Nat.max_comm in H0.
+      rewrite H0 in H6.
+      specialize (CalculusProperties.depth_sstep_lt 
+        M1 e1_2 M2 e0 (depth e1_1) H H6) ;
+      intros ; contradiction.
+      rewrite H0 in *|-* ; clear IHe1_1.
+      specialize (IHe1_2 bs e0 M1 M2 MemSvalue0 MemDepth0 BSLength H6).
+      specialize (depth_length e1_1 (map_iter_booker e1_2 bs 0)) ; intros DpthLength3.
+      specialize (depth_length e1_2 bs) ; intros DpthLength4.
+      specialize (admin_stack_ssubst_merge_3 bs e1_1 e1_2) ; intros AdminSsubst.
+      unfold trans_expr ; simpl.
+      destruct (trans e1_2).
+      destruct t.
+ 
+        (* Case EAssign e1 e2, n = 0, e2 -> e2' *)
+        rewrite DpthLength4 in H ; apply le_n_0_eq in H.
+        rewrite trans_depth_0 with (bs1:=map_iter_booker e0 bs 0) (bs2:=map_iter_booker e1_2 bs 0) ;
+        [|generalize H ; clear ; intros ; auto].
+        destruct (trans e1_1).
+        rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi.
+        destruct t ; [|exfalso ; simpl in *|-* ; omega] ; simpl.
+        simpl in *|-*.
+        rewrite DpthLength4 in *|-*.
+        assert(S.CRaw.svalueb 0 e1_1 = true) as SValuebTrue.
+        apply CalculusProperties.svalueb_iff ; auto.
+        rewrite SValuebTrue.
+        unfold trans_expr in IHe1_2 ; destruct (trans e0).
+        inversion IHe1_2 ; subst.
+        apply Rel_step with (e1:=bind e3
+        (fun v2 => cast_eassign (phi e1_1 (map_iter_booker e1_2 bs 0)) v2)).
+        apply MP.astep_bind_assign_svalue ; auto.
+        constructor ; auto.
+        intros ; rewrite phi_depth_0 with (bs2:=(map_iter_booker e0 bs 0)) ; auto.
+        constructor.
+
+        (* Case EAssign e1 e2, n > 0, e2 -> e2' *)
+        specialize (sstep_booker_trans_0 
+          e1_2 e0 M1 M2 MemDepth0 H6 e1_1 bs 0) ; intros BKTrans.
+        specialize (eq_ssubst_gt e1_1 (map_iter_booker e1_2 bs 0)) ; intros EqSsubstEq.
+        specialize (AdminSsubst e0).
+        rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi.
+        destruct (trans e1_1).
+        rewrite plus_0_r in *|-*.
+        assert(depth e1_1 < depth e1_2) as D1.
+        simpl in DpthLength4 ; rewrite DpthLength4 in H2.
+        apply CalculusProperties.depth_svalue in H2.
+        rewrite <- DpthLength4 in H2 ; auto.
+        specialize (BKTrans D1).
+        destruct BKTrans as [BKTrans1 BKTrans2].
+        rewrite <- BKTrans1 in *|-* ; clear BKTrans1.
+        
+        
+
+        rewrite ContextStaticProperties.shift_merge_2 ;
+        [| rewrite DpthLength3, DpthLength4 in D1 ; auto ; fail].
+
+        cases (Context.merge t1 (t::t0)) as t eqn:Merge1.
+        simpl in Merge1 ; destruct t1 ; inversion Merge1.
+        cases (Context.shift (t::t0)) as t eqn:Merge2.
+        destruct t4 ; [exfalso |] ; auto ; simpl.
+        destruct p.
+        destruct (trans e0).
+        destruct IHe1_2.
+        exists x.
+        destruct H1 ; split ; auto.
+        destruct H3 ; [left|right] ; destruct H3.
+
+          (* Case svalue *)
+          destruct H4 ; destruct H5.
+          repeat(split) ; auto.
+          apply AdminSsubst ; auto.
+            
+          remember (S.CRaw.svalueb 0 e1_1).
+          destruct b ; symmetry in Heqb.
+
+          (* Case svalue 0 e1_1 *)
+          apply CalculusProperties.svalueb_iff in Heqb.
+          unfold admin_ssubst ; intros.
+          rewrite <- BKTrans2 ; auto.
+          rewrite MP.ssubst_bind with (f2:=
+            fun v2 => cast_eassign (ssubst (depth e1_2)
+               match depth e1_2 with
+               | 0 => ss | 1 => ss
+               | S (S n) =>
+                 if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+                 then StageSet.add (S n) ss else ss
+                 end (cast_var (hole_var v))
+                 (phi e1_1 (map_iter_booker e1_2 bs 0)) (phi x (0 :: nil)))
+               v2) ; auto.
+          constructor ; auto.
+          destruct H7 ; unfold admin_ssubst in H7.
+          remember (ltb v (nth 0 bs 0 + booker e1_2 0)).
+          destruct b ; symmetry in Heqb0.
+          assert(ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+                 apply leb_iff ; apply leb_iff in Heqb0 ; omega.
+          destruct (depth e1_2) ; try(apply H7 ; auto ; try(omega) ; constructor).
+          destruct n ; try(apply H7 ; auto ; try(omega) ; constructor).
+          rewrite True1 ; apply H7 ; auto.
+          destruct (depth e1_2) ; try(apply H7 ; auto).
+          destruct n ; try(apply H7 ; auto).
+          destruct (ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+          rewrite StageSetProperties.add_mem_4 ; auto.
+          destruct (ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+          rewrite <- StageSetProperties.ub_le_1 ; auto.
+
+          intros.
+          destruct EqSsubstEq with (m:=depth e1_2) (h:=v) (v:=(phi x (0 :: nil))) ; auto.
+          rewrite map_iter_booker_length ; omega.
+          destruct H11 ; specialize (H12 Heqb).
+          unfold eq_ssubst in H12.
+          destruct (depth e1_2) ; try(rewrite H12 ; auto ; try(omega) ; constructor).
+          destruct n ; try(rewrite H12 ; auto ; try(omega) ; constructor).
+          assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0) =
+           (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)))%nat as Eq1.
+          rewrite map_iter_booker_nth_indep ; simpl ; try(omega).
+          rewrite <- Eq1, H12 ; auto ; constructor.
+
+          intros ; rewrite MP.ssubst_eassign ; auto.
+
+          (* Case not svalue 0 e1_1 *)
+          unfold admin_ssubst ; intros.
+          rewrite MP.ssubst_bind with (f2:=(fun v1 : T.expr => bind
+            (ssubst (depth e1_2)
+            match depth e1_2 with
+              | 0 => ss | 1 => ss
+              | S (S n) => if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+              then StageSet.add (S n) ss else ss  end (cast_var (hole_var v)) e (phi x (0 :: nil)))
+            (fun v2 : T.expr => cast_eassign v1 v2))).
+          
+          constructor ; auto.
+          destruct EqSsubstEq with (m:=depth e1_2) (h:=v) (v:=(phi x (0 :: nil))) ; auto.
+          rewrite map_iter_booker_length ; omega.
+          unfold eq_ssubst in H10.
+          destruct (depth e1_2) ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+          destruct n ; try(rewrite H10 ; auto ; try(omega) ; constructor).
+          assert((nth 0 (map_iter_booker e1_2 bs 0) 0 + booker e1_1 0) =
+           (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)))%nat as Eq1.
+          rewrite map_iter_booker_nth_indep ; simpl ; try(omega).
+          rewrite <- Eq1, H10 ; auto ; constructor.
+
+          intros ; constructor ; auto ; [|intros ; constructor].
+          destruct H7 ; unfold admin_ssubst in H7.
+          destruct (depth e1_2) ; try(apply H7 ; auto ; omega).
+          destruct n ; try(apply H7 ; auto ; omega).
+          remember (ltb v (nth 0 bs 0 + booker e1_2 0)).
+          destruct b ; symmetry in Heqb0.
+          assert(ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0)) = true) as True1.
+                 apply leb_iff ; apply leb_iff in Heqb0 ; omega.
+          rewrite True1 ; apply H7 ; auto.
+          apply H7 ; auto.
+          destruct (ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+          rewrite StageSetProperties.add_mem_4 ; auto.
+          destruct (ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))) ; auto.
+          rewrite <- StageSetProperties.ub_le_1 ; auto.
+
+          intros.
+          rewrite MP.ssubst_bind with (f2:=(fun v0 : T.expr =>
+            cast_eassign (ssubst (depth e1_2)
+            match depth e1_2 with
+              | 0 => ss | 1 => ss
+              | S (S n) => if ltb v (nth 0 bs 0 + (booker e1_1 0 + booker e1_2 0))
+              then StageSet.add (S n) ss else ss  end (cast_var (hole_var v)) v2 (phi x (0 :: nil))) v0)) ; auto.
+          intros ; rewrite MP.ssubst_eassign ; auto.
+
+          (* patch *)
+          intros SV ; inversion SV.
+          
+
+          (* Case not svalue *)
+          exists x0.
+          destruct H3 ; destruct H4 ; destruct H5 ; 
+          destruct H7 ; subst ; repeat(split) ; auto.
+          remember (S.CRaw.svalueb 0 e1_1).
+          destruct b ; symmetry in Heqb ; auto.
+          apply CalculusProperties.svalueb_iff in Heqb.
+          rewrite BKTrans2 ; auto.
+          intros ; rewrite H7 ; auto.
+          unfold trans_expr ; destruct (trans x0).
+          simpl.
+          rewrite ContextStaticProperties.merge_unshift_2 ; auto.
+          specialize (ContextStaticProperties.shift_length (t :: t0)) ; intros L1.
+          rewrite <- Merge2 in L1.
+          rewrite L1 ; clear AdminSsubst EqSsubstEq BKTrans2 ; simpl in *|-*.
+          rewrite DpthLength3, DpthLength4 in *|-*.
+          generalize D1 ; clear ; intros.
+          apply le_S_n in D1 ; auto.
+
+      (* Case EAssign (ELoc) *)
+      symmetry in H.
+      clear IHe1_2 IHe1_1.
+      specialize (svalue_phi e2 bs H6) ; intros SValuePhi2.
+      specialize (depth_length e2 bs) ; intros DpthLength2.
+      unfold trans_expr in SValuePhi2.
+      rewrite_eq MP.Translation.trans trans ; 
+      rewrite_eq MP.Translation.phi phi.
+      unfold trans_expr.
+      
+      destruct (trans e2).
+      rewrite H in DpthLength2 ; destruct t ;
+      [|simpl in DpthLength2 ; inversion DpthLength2] ; clear DpthLength2.
+      subst.
+      apply Rel_step with (e1:=ret (phi e2 bs)).
+      apply MP.astep_bind_2 ; auto.
+      apply MP.astep_assign_loc ; auto.
+      constructor.
 
     (* Case EBox *)
     specialize (IHe1 (0::bs)).

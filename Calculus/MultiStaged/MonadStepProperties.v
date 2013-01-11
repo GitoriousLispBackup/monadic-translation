@@ -153,6 +153,13 @@ Module Type MonadStepProperties (R:Replacement)
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind e1 f) (M2, bind e2 f).
 
+  Parameter astep_bind_assign_svalue :
+    forall (v:S.expr) (e1 e2:expr) (M1 M2:Memory.t) (bs:list nat),
+    S.svalue 0 v ->
+    let f := fun v1 => cast_eassign (phi v bs) v1 in
+    astep (M1, e1) (M2, e2) ->
+    astep (M1, bind e1 f) (M2, bind e2 f).
+
   Parameter astep_bind_erun :
     forall (e1 e2:expr) (M1 M2:Memory.t),
     let f := fun v => cast_erun v in
@@ -189,6 +196,14 @@ Module Type MonadStepProperties (R:Replacement)
       (M, ssubst 0 StageSet.empty (cast_var f)
       (ssubst 0 StageSet.empty (cast_var x) e (phi v bs))
       (cast_efix (cast_var f) (cast_var x) e)).
+
+  (* Weakest version: Checked *)
+  Parameter astep_assign_loc :
+    forall (v:S.expr) (l:S.location) (bs:list nat) (M:S.Memory.t),
+    S.memory_svalue 0 M -> S.memory_depth M = 0 -> 
+    S.svalue 0 v -> l < length M ->
+    astep (trans_mem M bs, cast_eassign (cast_eloc l) 
+    (phi v bs)) (trans_mem (S.Memory.set l v M) bs, ret (phi v bs)).
 
   Parameter astep_eref :
     forall (v:S.expr) (M:Memory.t) (bs:list nat),

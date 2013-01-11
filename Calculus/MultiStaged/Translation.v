@@ -254,9 +254,13 @@ Module Type Translation (R:Replacement)
    | Admin_unbox_box : forall (e:expr) (bs:list nat), svalue 1 e ->
         admin (M.cast_eunbox (M.cast_ebox (trans_expr e bs))) 
           (trans_expr e bs)
-   | Admin_bind_phi : forall (v:expr) (e:T.expr) (bs:list nat), 
+   | Admin_bind_app_phi : forall (v:expr) (e:T.expr) (bs:list nat), 
        svalue 0 v ->
        let f := fun v0 => M.bind e (fun v1 => M.cast_eapp v0 v1) in
+       admin (M.bind (M.ret (phi v bs)) f) (f (phi v bs))
+  | Admin_bind_assign_phi : forall (v:expr) (e:T.expr) (bs:list nat), 
+       svalue 0 v ->
+       let f := fun v0 => M.bind e (fun v1 => M.cast_eassign v0 v1) in
        admin (M.bind (M.ret (phi v bs)) f) (f (phi v bs)).
 
   Definition admin_context :  relation Context.t := 

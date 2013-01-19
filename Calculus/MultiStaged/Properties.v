@@ -690,7 +690,8 @@ End ReplacementProperties.
 Module LispLikeCalculusProperties.
 
   Module BindingSetProperties := 
-    BindingSetProperties LispLikeCalculus.
+    BindingSetProperties LispLikeReplacement 
+    LispLikeCalculus.CRaw.BindingSet.
   Import LispLikeCalculus.
   Import LispLikeCalculus.CRaw.
   Import LispLikeReplacement.

@@ -109,8 +109,10 @@ VFILES:= Misc/LibTactics.v\
   Calculus/MultiStaged/Definitions.v\
   Calculus/MultiStaged/Properties.v\
   Calculus/MultiStaged/Monad.v\
+  Calculus/MultiStaged/PureMonad.v\
   Calculus/MultiStaged/Translation.v\
   Calculus/MultiStaged/MonadStepProperties.v\
+  Calculus/MultiStaged/PureMonadStepProperties.v\
   Calculus/MultiStaged/TranslationStaticProperties.v\
   Calculus/MultiStaged/TranslationHoleSubstProperties.v\
   Calculus/MultiStaged/TranslationStepProperties.v\
@@ -127,8 +129,10 @@ ORDEREDVFILES:= Misc/LibTactics.v\
   Calculus/MultiStaged/Definitions.v\
   Calculus/MultiStaged/Properties.v\
   Calculus/MultiStaged/Monad.v\
+  Calculus/MultiStaged/PureMonad.v\
   Calculus/MultiStaged/Translation.v\
   Calculus/MultiStaged/MonadStepProperties.v\
+  Calculus/MultiStaged/PureMonadStepProperties.v\
   Calculus/MultiStaged/TranslationStaticProperties.v\
   Calculus/MultiStaged/TranslationHoleSubstProperties.v\
   Calculus/MultiStaged/TranslationStepProperties.v\

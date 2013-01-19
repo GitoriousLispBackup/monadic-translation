@@ -18,8 +18,8 @@ Require Import "Calculus/MultiStaged/Monad".
 Require Import "Calculus/MultiStaged/Translation".
 Require Import "Calculus/MultiStaged/MonadStepProperties".
 
-Module Type ContextStaticProperties (R:Replacement)
-  (T:StagedCalculus) (M:Monad R T) (C:Context R T M).
+Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
+  (T:StagedCalculus) (M:Monad R S T) (C:Context R S T M).
 
   Import M.
   Import C.
@@ -356,90 +356,111 @@ Module Type ContextStaticProperties (R:Replacement)
 
 End ContextStaticProperties.
 
-Module ContextStaticPropertiesImpl (R:Replacement)
-  (T:StagedCalculus) (M:Monad R T) (C:Context R T M).
-  Include ContextStaticProperties R T M C.
+Module ContextStaticPropertiesImpl (R:Replacement) (S:ReplacementCalculus R)
+  (T:StagedCalculus) (M:Monad R S T) (C:Context R S T M).
+  Include ContextStaticProperties R S T M C.
 End ContextStaticPropertiesImpl.
 
-Module Type TranslationStaticProperties (R:Replacement) 
-    (T:StagedCalculus) (M:Monad R T) (Tr:Translation R T M).
+Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R)
+    (T:StagedCalculus) (M:Monad R S T) (Tr:Translation R S T M).
 
-  Module CalculusProperties := CalculusProperties R M.S.
-  Module ContextStaticProperties := ContextStaticPropertiesImpl R T M Tr.Context.
+  Module CalculusProperties := CalculusProperties R S.
+  Module ContextStaticProperties := ContextStaticPropertiesImpl R S T M Tr.Context.
   Import Tr.
-  Import M.S.
+  Import S.
   Import M.
 
+  Tactic Notation "try_specialize_1" ident(IHe) ident(bs) 
+    ident(dg) ident(dgs) ident(v) ident(v0) tactic(t) :=
+    try(specialize (IHe bs (dg_eabs dg v) dgs) ; t) ;
+    try(specialize (IHe bs (dg_efix dg v v0) dgs) ; t) ;
+    try(specialize (IHe bs (dg_eref dg) dgs) ; t) ;
+    try(specialize (IHe bs (dg_ederef dg) dgs) ; t) ;
+    try(specialize (IHe bs (dg_erun dg) dgs) ; t) ;
+    try(specialize (IHe bs (dg_elift dg) dgs) ; t).
+
+  Tactic Notation "try_specialize_2" ident(IHe1) constr(bs1) 
+     ident(IHe2) constr(bs2) ident(dg) ident(dgs) tactic(t) :=
+     try(specialize (IHe1 bs1 (dg_eapp_l dg) dgs) ;
+     specialize (IHe2 bs2 (dg_eapp_r dg) dgs) ; t) ;
+     try(specialize (IHe1 bs1 (dg_eassign_l dg) dgs) ;
+     specialize (IHe2 bs2 (dg_eassign_r dg) dgs) ; t).
+
   Lemma depth_length:
-    forall (e:expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     depth e = length cs.
   Proof.
     induction e ; simpl ; intros ;
+
+    (* EConst, EVar, ELoc *)
     try(auto ; fail) ;
-    try(specialize (IHe bs) ; destruct (trans e bs) ; auto ; fail) ;
+
+    (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
+    try(try_specialize_1 IHe bs dg dgs v v0 (destruct (trans e) ; auto ; fail)) ;
 
     (* EApp, EAssign *)
-    try(
-    specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    destruct (trans e1) ; 
+    try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
+    (destruct (trans e1) ; 
     destruct (trans e2) ;
-    simpl ; rewrite ContextStaticProperties.merge_length ; auto ; fail).
-    
+    simpl ; rewrite ContextStaticProperties.merge_length ; auto ; fail)).
+
+    (* EBox *)
     destruct (depth e).
-    specialize (IHe (0::bs)).
+    specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e).
     destruct t ; simpl in *|-*.
     reflexivity.
     inversion IHe.
 
-    specialize (IHe (0::bs)).
+    specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e).
     destruct t ; simpl in *|-*.
     inversion IHe.
     inversion IHe.
     reflexivity.
 
+    (* EUnbox *)
     destruct (List2.hd_cons bs 0).
-    specialize (IHe l).
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe l d l0).
     destruct (trans e).
-    simpl.
-    auto.
+    simpl ; auto.
   Qed.
 
   Lemma length_svalue:
-    forall (e:expr) (bs:list nat) (n:nat),
-    let (_, cs) := trans e bs in
+    forall (e:expr) (bs:list nat) (n:nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     length cs < (S n) <-> svalue (S n) e.
   Proof.
     intros.
     specialize (depth_length e) ; intros.
-    specialize (H bs).
+    specialize (H bs dg dgs).
     destruct (trans e).
     rewrite <- H.
     apply CalculusProperties.depth_svalue.
   Qed.
 
   Lemma length_sstep:
-    forall (e1 e2:expr) (M1 M2:Memory.t) (bs:list nat),
+    forall (e1 e2:expr) (M1 M2:Memory.t) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
     sstep (depth e1) (M1,e1) (M2,e2) ->
     memory_depth M1 = 0 ->
-    let (_, cs2) := trans e2 bs in
+    let (_, cs2) := trans e2 bs dg dgs in
     length cs2 <= depth e1.
   Proof.
     intros.
     specialize (CalculusProperties.depth_sstep_eq M1 e1 M2 e2 H0 H) ; intros.
     destruct H1.
     specialize (depth_length e2 bs) ; intros.
+    specialize (H3 dg dgs).
     destruct (trans e2).
     rewrite H3 in *|-*.
     assumption.
   Qed.
 
   Lemma svalue_phi:
-    forall (e:expr) (bs:list nat),
-    svalue 0 e -> trans_expr e bs = M.ret (phi e bs).
+    forall (e:expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    svalue 0 e -> trans_expr e bs dg dgs = M.ret dg (phi e bs dg dgs).
   Proof.
     intros ; inversion H ; subst ; simpl ;
     try(reflexivity) ;
@@ -450,6 +471,7 @@ Module Type TranslationStaticProperties (R:Replacement)
     simpl.
     inversion H ; subst.
     specialize (length_svalue e0 (0::bs) 0) ; intros.
+    specialize (H1 (dg_ebox dg) (dg::dgs)).
     destruct (trans e0).
     apply H1 in H3.
     destruct t ; simpl in *|-*.
@@ -473,33 +495,35 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma context_stack_not_nil:
-    forall (e:expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     ~ In nil cs.
   Proof.
-    induction e ; intros ; simpl ; auto ;
+    induction e ; intros ; simpl ; 
 
-    try(specialize (IHe bs) ; destruct (trans e) ; auto ; fail) ;
+    (* EConst, EVar, ELoc *)
+    auto ;
+
+    (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
+    try(try_specialize_1 IHe bs dg dgs v v0 (destruct (trans e) ; auto ; fail)) ;
 
     (* EApp, EAssign *)
-    try(
-    specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    destruct (trans e1) ; destruct (trans e2) ;
-    unfold not ; intros ;
-    apply context_merge_not_nil in H ;
-    tauto ; fail).
+    try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
+    destruct (trans e1) ; destruct (trans e2) ; unfold not ; intros ;
+    apply context_merge_not_nil in H ; tauto ; fail).
 
-
-    specialize (IHe (0::bs)).
+    (* EBox *)
+    specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e).
     destruct t ; simpl.
     tauto.
     unfold not ; intros ; apply IHe.
     simpl ; auto.
     
+    (* EUnbox *)
     destruct (List2.hd_cons bs 0).
-    specialize (IHe l).
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe l d l0).
     destruct (trans e).
     unfold not ; intros ; apply IHe.
     simpl in *|-*.
@@ -531,9 +555,9 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma admin_context_expr:
-    forall (k1 k2:Context.t) (e1 e2:T.expr),
+    forall (k1 k2:Context.t) (e1 e2:T.expr) (dg:dg_t),
     admin_context k1 k2 -> admin e1 e2 ->
-    admin (Context.fill k1 e1) (Context.fill k2 e2).
+    admin (Context.fill dg k1 e1) (Context.fill dg k2 e2).
   Proof.
     unfold admin_context ;
     induction k1 ; intros.
@@ -602,7 +626,7 @@ Module Type TranslationStaticProperties (R:Replacement)
     rewrite List2Properties.length_map_iter in IHe1 ;
     rewrite <- List2Properties.map_iter_app in IHe1 ;
     rewrite <- List2Properties.map_iter_app in IHe1 ] ;
-    destruct (Tr.S.CRaw.svalueb) ;
+    destruct (S.CRaw.svalueb) ;
     simpl in *|-* ; 
     destruct IHe1, IHe2 ; auto ;
     [rewrite H1, H2, H3| rewrite H1, H3 | 
@@ -649,6 +673,278 @@ Module Type TranslationStaticProperties (R:Replacement)
     assert(depth v <= 1).
     omega.
     specialize (trans_depth v (0::nil) bs1 bs2 H0) ; intros.
+    simpl in *|-*.
+    destruct H1 ; rewrite H1 ; auto.
+  Qed.
+
+  Lemma trans_depth_2:
+    forall (e:expr) (bs bs1 bs2:list nat) (dg:dg_t) (dgs dgs1 dgs2:list dg_t),
+    depth e <= length bs -> 
+    depth e <= length dgs ->
+      trans e (bs++bs1) dg (dgs++dgs1) = trans e (bs++bs2) dg (dgs++dgs2) /\ 
+      phi e (bs++bs1) dg (dgs++dgs1) = phi e (bs++bs2) dg (dgs++dgs2).
+  Proof.
+    assert(0 <= 0) as Ole.
+    auto.
+    induction e ; intros ; simpl in *|-* ; split ;
+
+    try(reflexivity) ;
+    
+    (* EAbs *)
+    try(specialize (IHe bs bs1 bs2 (dg_eabs dg v) dgs dgs1 dgs2 H H0) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail) ;
+
+    (* EFix *)
+    try(specialize (IHe bs bs1 bs2 (dg_efix dg v v0) dgs dgs1 dgs2 H H0) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* EApp *)
+    destruct bs ; simpl in *|-*.
+
+    apply le_n_0_eq in H ; symmetry in H ; apply max_0 in H ;
+    destruct H ; rewrite H, H1 in *|-* ;
+    specialize (IHe1 nil (map_iter_booker e2 bs1 0) 
+      (map_iter_booker e2 bs2 0) (dg_eapp_l dg) dgs dgs1 dgs2 Ole) ;
+    specialize (IHe2 nil bs1 bs2 (dg_eapp_r dg) dgs dgs1 dgs2 Ole) ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
+    [rewrite H2, H3, H4 | rewrite H2, H4] ; auto.
+
+    apply Nat.max_lub_iff in H ; destruct H ;
+    apply Nat.max_lub_iff in H0 ; destruct H0 ;
+    specialize (IHe1 (map_iter_booker e2 (n::bs) 0) 
+    (map_iter_booker e2 bs1 (0+(length (n::bs))))
+    (map_iter_booker e2 bs2 (0+(length (n::bs)))) (dg_eapp_l dg) dgs dgs1 dgs2) ;
+    specialize (IHe2 (n::bs) bs1 bs2 (dg_eapp_r dg) dgs dgs1 dgs2 H1) ;
+    unfold map_iter_booker in *|-* ;
+    rewrite List2Properties.length_map_iter in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; 
+    destruct IHe1, IHe2 ; auto ;
+    [rewrite H3, H4, H5| rewrite H3, H5] ; auto ; fail.
+
+    (* ERef *)
+    try(specialize (IHe bs bs1 bs2 (dg_eref dg) dgs dgs1 dgs2 H H0) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* EDeref *)
+    try(specialize (IHe bs bs1 bs2 (dg_ederef dg) dgs dgs1 dgs2 H H0) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* EAssign *)
+    destruct bs ; simpl in *|-*.
+
+    apply le_n_0_eq in H ; symmetry in H ; apply max_0 in H ;
+    destruct H ; rewrite H, H1 in *|-* ;
+    specialize (IHe1 nil (map_iter_booker e2 bs1 0) 
+      (map_iter_booker e2 bs2 0) (dg_eassign_l dg) dgs dgs1 dgs2 Ole) ;
+    specialize (IHe2 nil bs1 bs2 (dg_eassign_r dg) dgs dgs1 dgs2 Ole) ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
+    [rewrite H2, H3, H4 | rewrite H2, H4] ; auto.
+
+    apply Nat.max_lub_iff in H ; destruct H ;
+    apply Nat.max_lub_iff in H0 ; destruct H0 ;
+    specialize (IHe1 (map_iter_booker e2 (n::bs) 0) 
+    (map_iter_booker e2 bs1 (0+(length (n::bs))))
+    (map_iter_booker e2 bs2 (0+(length (n::bs)))) (dg_eassign_l dg) dgs dgs1 dgs2) ;
+    specialize (IHe2 (n::bs) bs1 bs2 (dg_eassign_r dg) dgs dgs1 dgs2 H1) ;
+    unfold map_iter_booker in *|-* ;
+    rewrite List2Properties.length_map_iter in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; 
+    destruct IHe1, IHe2 ; auto ;
+    [rewrite H3, H4, H5| rewrite H3, H5] ; auto ; fail.
+
+    (* EBox *)
+    assert(depth e <= S (length bs)).
+    omega.
+    specialize (IHe (0::bs) bs1 bs2 (dg_ebox dg) (dg::dgs) dgs1 dgs2 H1).
+    repeat(rewrite app_comm_cons).
+    destruct IHe.
+    simpl in *|-*.
+    destruct (depth e) ; simpl ; try(omega).
+    rewrite H2 ; reflexivity.
+    assert(depth e <= S (length bs)).
+    omega.
+    specialize (IHe (0::bs) bs1 bs2 (dg_ebox dg) (dg::dgs) dgs1 dgs2 H1).
+    repeat(rewrite app_comm_cons).
+    destruct IHe.
+    destruct (depth e) ; simpl ; try(omega).
+    rewrite H2 ; reflexivity.
+    
+    (* EUnbox *)
+    destruct bs ; simpl in *|-*.
+    exfalso ; omega.
+    destruct dgs ; simpl in *|-*.
+    exfalso ; omega.
+    apply le_S_n in H ; apply le_S_n in H0.
+    specialize (IHe bs bs1 bs2 d dgs dgs1 dgs2 H H0).
+    destruct IHe ; rewrite H1 ; reflexivity.
+
+    (* ERun *)
+    try(specialize (IHe bs bs1 bs2 (dg_erun dg) dgs dgs1 dgs2 H H0) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* ELift *)
+    try(specialize (IHe bs bs1 bs2 (dg_elift dg) dgs dgs1 dgs2 H H0) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+  Qed.
+
+  Lemma trans_depth_3:
+    forall (e:expr) (n:nat) (bs bs1 bs2:list nat) (dg:dg_t) (dgs dgs1 dgs2:list dg_t),
+    depth e <= length bs -> 
+    n <= length dgs ->
+    svalue (S n) e ->
+      trans e (bs++bs1) dg (dgs++dgs1) = trans e (bs++bs2) dg (dgs++dgs2) /\ 
+      phi e (bs++bs1) dg (dgs++dgs1) = phi e (bs++bs2) dg (dgs++dgs2).
+  Proof.
+    assert(0 <= 0) as Ole.
+    auto.
+    induction e ; intros n bs bs1 bs2 dg dgs dgs1 dgs2 ;
+    intros H H0 SValue ; simpl in *|-* ; split ;
+
+    try(reflexivity) ;
+    
+    (* EAbs *)
+    try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_eabs dg v) dgs dgs1 dgs2 H H0 H3) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail) ;
+
+    (* EFix *)
+    try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_efix dg v v0) dgs dgs1 dgs2 H H0 H3) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* EApp *)
+    inverts SValue.
+    destruct bs ; simpl in *|-*.
+    apply le_n_0_eq in H ; symmetry in H ; apply max_0 in H ;
+    destruct H ; rewrite H, H1 in *|-* ;
+    specialize (IHe1 n nil (map_iter_booker e2 bs1 0) 
+      (map_iter_booker e2 bs2 0) (dg_eapp_l dg) dgs dgs1 dgs2 Ole) ;
+    specialize (IHe2 n nil bs1 bs2 (dg_eapp_r dg) dgs dgs1 dgs2 Ole) ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
+    [rewrite H2, H3, H6 | rewrite H2, H6] ; auto.
+
+    apply Nat.max_lub_iff in H ; destruct H ;
+    specialize (IHe1 n (map_iter_booker e2 (n0::bs) 0) 
+    (map_iter_booker e2 bs1 (0+(length (n0::bs))))
+    (map_iter_booker e2 bs2 (0+(length (n0::bs)))) (dg_eapp_l dg) dgs dgs1 dgs2) ;
+    specialize (IHe2 n (n0::bs) bs1 bs2 (dg_eapp_r dg) dgs dgs1 dgs2 H1) ;
+    unfold map_iter_booker in *|-* ;
+    rewrite List2Properties.length_map_iter in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; 
+    destruct IHe1, IHe2 ; auto ; try(
+    destruct (depth e1) ; destruct (depth e2) ; simpl in *|-* ; auto ;
+    try(apply Nat.max_lub_iff in H0) ; omega ; fail) ;
+    [rewrite H2, H3, H6| rewrite H2, H6] ; auto ; fail.
+
+    (* ERef *)
+    try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_eref dg) dgs dgs1 dgs2 H H0 H3) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* EDeref *)
+    try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_ederef dg) dgs dgs1 dgs2 H H0 H3) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* EAssign *)
+    inverts SValue.
+    destruct bs ; simpl in *|-*.
+
+    apply le_n_0_eq in H ; symmetry in H ; apply max_0 in H ;
+    destruct H ; rewrite H, H1 in *|-* ;
+    specialize (IHe1 n nil (map_iter_booker e2 bs1 0) 
+      (map_iter_booker e2 bs2 0) (dg_eassign_l dg) dgs dgs1 dgs2 Ole) ;
+    specialize (IHe2 n nil bs1 bs2 (dg_eassign_r dg) dgs dgs1 dgs2 Ole) ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
+    [rewrite H2, H3, H6 | rewrite H2, H6] ; auto.
+
+    apply Nat.max_lub_iff in H ; destruct H ;
+    specialize (IHe1 n (map_iter_booker e2 (n0::bs) 0) 
+    (map_iter_booker e2 bs1 (0+(length (n0::bs))))
+    (map_iter_booker e2 bs2 (0+(length (n0::bs)))) (dg_eassign_l dg) dgs dgs1 dgs2) ;
+    specialize (IHe2 n (n0::bs) bs1 bs2 (dg_eassign_r dg) dgs dgs1 dgs2 H1) ;
+    unfold map_iter_booker in *|-* ;
+    rewrite List2Properties.length_map_iter in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    rewrite <- List2Properties.map_iter_app in IHe1 ;
+    destruct (S.CRaw.svalueb) ;
+    simpl in *|-* ; 
+    destruct IHe1, IHe2 ; auto ; try(
+    destruct (depth e1) ; destruct (depth e2) ; simpl in *|-* ; auto ;
+    try(apply Nat.max_lub_iff in H0) ; omega ; fail) ;
+    [rewrite H2, H3, H6| rewrite H2, H6] ; auto ; fail.
+
+    (* EBox *)
+    assert(depth e <= S (length bs)).
+    omega.
+    inverts SValue.
+    specialize (IHe (S n) (0::bs) bs1 bs2 (dg_ebox dg) (dg::dgs) dgs1 dgs2 H1).
+    repeat(rewrite app_comm_cons).
+    destruct IHe ; auto.
+    simpl in *|-*.
+    destruct (depth e) ; simpl ; try(omega).
+    rewrite H2 ; reflexivity.
+    assert(depth e <= S (length bs)).
+    omega.
+    inverts SValue.
+    specialize (IHe (S n) (0::bs) bs1 bs2 (dg_ebox dg) (dg::dgs) dgs1 dgs2 H1).
+    repeat(rewrite app_comm_cons).
+    destruct IHe ; auto.
+    destruct (depth e) ; simpl ; try(omega).
+    rewrite H2 ; reflexivity.
+    
+    (* EUnbox *)
+    inversion SValue ; subst.
+    destruct bs ; simpl in *|-*.
+    exfalso ; omega.
+    destruct dgs ; simpl in *|-*.
+    exfalso ; omega.
+    apply le_S_n in H ; apply le_S_n in H0.
+    specialize (IHe n0 bs bs1 bs2 d dgs dgs1 dgs2 H H0 H3).
+    destruct IHe ; simpl ; try(omega).
+    simpl in H1 ; rewrite H1 ; auto.
+
+    (* ERun *)
+    try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_erun dg) dgs dgs1 dgs2 H H0 H3) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+
+    (* ELift *)
+    try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_elift dg) dgs dgs1 dgs2 H H0 H3) ;
+    destruct IHe ; rewrite H1 ; reflexivity ; fail).
+  Qed.
+
+  Lemma trans_depth_0_2:
+    forall (e:expr) (bs1 bs2:list nat) (dg:dg_t) (dgs1 dgs2:list dg_t),
+    depth e = 0 -> trans e bs1 dg dgs1 = trans e bs2 dg dgs2.
+  Proof.
+    intros.
+    rewrite <- app_nil_l with (l:=bs1).
+    rewrite <- app_nil_l with (l:=bs2).
+    rewrite <- app_nil_l with (l:=dgs1).
+    rewrite <- app_nil_l with (l:=dgs2).
+    apply trans_depth_2 ;
+    simpl ; omega.
+  Qed.
+
+  Lemma phi_depth_0_2:
+    forall (v:expr) (bs1 bs2:list nat) (dg:dg_t) (dgs1 dgs2:list dg_t),
+    depth v = 0 -> phi v bs1 dg dgs1 = phi v bs2 dg dgs2.
+  Proof.
+    destruct v ; simpl ; intros ; auto.
+    rewrite trans_depth_0_2 with (bs2:=bs2) (dgs2:=dgs2) ; auto.
+    rewrite trans_depth_0_2 with (bs2:=bs2) (dgs2:=dgs2) ; auto.
+    assert(depth v <= 1).
+    omega.
+    specialize (trans_depth_2 v (0::nil) bs1 bs2 (dg_ebox dg) (dg::nil) dgs1 dgs2 H0 H0) ; intros.
     simpl in *|-*.
     destruct H1 ; rewrite H1 ; auto.
   Qed.
@@ -722,24 +1018,29 @@ Module Type TranslationStaticProperties (R:Replacement)
     List2.map_iter (fun b n => (b+(length (nth n cs nil)))%nat) bs n.
 
   Lemma booker_length:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     forall (n:nat),
     booker e n = length (nth n cs nil).
   Proof.
     induction e ; simpl ; intros ; 
+
+    (* EConst, EVar, ELoc *)
     try(destruct n ; auto ; fail) ;
-    try(specialize (IHe bs) ;
-    destruct (trans e) ; intros ; auto ; fail) ;
-    
-    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    destruct (trans e1) ; destruct (trans e2) ; intros ;
+
+    (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
+    try(try_specialize_1 IHe bs dg dgs v v0 
+    (destruct (trans e) ; intros ; auto ; fail)) ;
+
+    (* EApp, EAssign *)
+    try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
+    (destruct (trans e1) ; destruct (trans e2) ; intros ;
     rewrite ContextStaticProperties.merge_nth ;
     rewrite app_length ;
-    rewrite IHe1, IHe2 ; auto ; fail).
+    rewrite IHe1, IHe2 ; auto ; fail)).
 
-    specialize (IHe (0::bs)).
+    (* EBox *)
+    specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e) ; intros.
     destruct t ; intros.
     rewrite booker_le with (m:=n) ; auto.
@@ -749,8 +1050,10 @@ Module Type TranslationStaticProperties (R:Replacement)
     specialize (IHe (S n)).
     simpl in IHe ; assumption.
 
+    (* EUnbox *)
     destruct (List2.hd_cons bs 0).
-    specialize (IHe l) ; destruct (trans e) ; intros.
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe l d l0) ; destruct (trans e) ; intros.
     destruct n0.
     reflexivity.
     simpl.
@@ -791,12 +1094,12 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma map_iter_booker_stack:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     forall n, map_iter_booker e bs n = map_iter_stack cs bs n.
   Proof.
     intros.
-    specialize (booker_length e bs) ; intros BookerLength.
+    specialize (booker_length e bs dg dgs) ; intros BookerLength.
     destruct (trans e) ; induction bs ; intros ;
     unfold map_iter_booker, map_iter_stack in *|-* ; simpl ; auto.
     rewrite BookerLength, IHbs ; auto.
@@ -856,13 +1159,13 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma length_h:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     length cs <= length bs ->
-    forall (n m:nat),
+    forall (n m:nat) (dg:dg_t),
     let c := nth n cs nil in
     let l := length c in
-    let (_, h) := nth m c (M.cast_econst 0, (nth n bs 0) + l-m-1) in
+    let (_, h) := nth m c (M.cast_econst dg 0, (nth n bs 0) + l-m-1) in
     h = (nth n bs 0) + l-m-1.
   Proof.
     assert(forall (m n o p:nat),
@@ -871,14 +1174,18 @@ Module Type TranslationStaticProperties (R:Replacement)
 
     induction e ; simpl ; intros ;
 
+    (* EConst, EVar, ELoc *)
     try(destruct n ; destruct m ; simpl ; auto ; fail) ;
 
-    try(specialize (IHe bs) ; destruct (trans e) ; intros ;
-    specialize (IHe H n m) ; assumption ; fail) ;
-    
-    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    specialize (booker_length e2 bs) ; intros BookerL ;
+    (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
+    try(try_specialize_1 IHe bs dg dgs v v0 
+    (destruct (trans e) ; intros ;
+    specialize (IHe H n m dg0) ; assumption ; fail)) ;
+
+    (* EApp, EAssign *)
+    try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs 
+    (specialize (booker_length e2 bs (dg_eapp_r dg) dgs) ; intros BookerL1 ;
+    specialize (booker_length e2 bs (dg_eassign_r dg) dgs) ; intros BookerL2 ;
     destruct (trans e1) ; destruct (trans e2) ; intros ;
     rewrite ContextStaticProperties.merge_length in H ;
     apply Nat.max_lub_iff in H ; destruct H ;
@@ -891,7 +1198,7 @@ Module Type TranslationStaticProperties (R:Replacement)
     specialize (le_lt_dec (length (nth n t nil)) m) ; intros ;
     destruct H1 ; [
     rewrite app_nth2 ; auto ;
-    specialize (IHe2 n (m - length (nth n t nil))) ;
+    specialize (IHe2 n (m - length (nth n t nil)) dg0) ;
     simpl in IHe2 ;
     rewrite P1 in IHe2 ; auto |] ;
     rewrite app_nth1 ; auto ;
@@ -903,16 +1210,18 @@ Module Type TranslationStaticProperties (R:Replacement)
     rewrite nth_overflow with (l:=
     (List2.map_iter (fun b n : nat => (b + booker e2 n)%nat) bs 0)) in IHe1 ;
     [rewrite nth_overflow with (l:=bs) ; auto ;
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) in IHe1 ; auto ;
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) ; auto ;
+    specialize (IHe1 dg0) ;
+    rewrite nth_indep with (d':=(cast_econst dg 0, 0)) in IHe1 ; auto ;
+    rewrite nth_indep with (d':=(cast_econst dg 0, 0)) ; auto ;
     rewrite nth_overflow with (l:=t0) ; auto ; [
     rewrite plus_assoc ; simpl ; rewrite plus_0_r ;
     assumption |
     apply le_trans with (m:=length bs) ; auto ] |] ;
     rewrite List2Properties.length_map_iter ;
     assumption |
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) in IHe1 ; auto ;
-    rewrite nth_indep with (d':=(cast_econst 0, 0)) ; auto ;
+    specialize (IHe1 dg0) ;
+    rewrite nth_indep with (d':=(cast_econst dg0 0, 0)) in IHe1 ; auto ;
+    rewrite nth_indep with (d':=(cast_econst dg0 0, 0)) ; auto ;
     specialize(List2Properties.map_iter_nth 
     (fun b n => (b + booker e2 n)%nat) bs n 0 0) ; intros ;
     rewrite nth_indep with (d':=0) in H1 ; auto ; [
@@ -920,31 +1229,33 @@ Module Type TranslationStaticProperties (R:Replacement)
     rewrite plus_0_r in IHe1 ;
     rewrite <- plus_comm with (m:=length (nth n t nil)) ;
     rewrite plus_assoc ;
-    rewrite BookerL in IHe1 ; auto
-    | rewrite List2Properties.length_map_iter ; assumption]] ; fail).
+    try(rewrite BookerL1 in IHe1) ; try(rewrite BookerL2 in IHe1) ; auto
+    | rewrite List2Properties.length_map_iter ; assumption]] ; fail)).
 
-    (* Case EBox *)
-    specialize (IHe (0::bs)) ;
+    (* EBox *)
+    specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)) ;
     destruct (trans e).
     destruct t ; intros.
     destruct m ; destruct n ; simpl ; auto.
     specialize (le_n_S (length t0) (length bs) H) ; intros.
-    specialize (IHe H0 (S n) m).
+    specialize (IHe H0 (S n) m dg0).
     simpl in IHe.
     assumption.
     
-    (* Case EUnbox *)
+    (* EUnbox *)
     destruct bs ; simpl.
-    specialize (IHe nil) ;
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe nil d l) ;
     destruct (trans e) ; intros.
     simpl in H.
     exfalso ; omega.
     
-    specialize (IHe bs) ;
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe bs d l) ;
     destruct (trans e) ; intros.
     simpl in H.
     apply le_S_n in H.
-    specialize (IHe H (pred n0) m).
+    specialize (IHe H (pred n0) m dg0).
     destruct n0.
     simpl.
     destruct m ; auto.
@@ -956,8 +1267,8 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma length_h_match:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     length cs <= length bs ->
     match cs with
     | nil => True
@@ -969,7 +1280,7 @@ Module Type TranslationStaticProperties (R:Replacement)
     end.
   Proof.
     intros.
-    specialize (length_h e bs) ; intros.
+    specialize (length_h e bs dg dgs) ; intros.
     destruct (trans e).
     destruct t ; auto.
     specialize (ContextStaticProperties.shift_spec_2 (t::t0)) ; intros.
@@ -985,48 +1296,54 @@ Module Type TranslationStaticProperties (R:Replacement)
     rewrite plus_minus in H.
     simpl in *|-*.
     rewrite <- minus_n_O in H.
+    specialize (H dg).
     assumption.
     omega.
   Qed.
 
-  
   Lemma context_mem_length_booker:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     forall (n:nat),
     length (nth n cs nil) = booker e n.
   Proof.
     induction e ; simpl ; intros ; 
+
+    (* EConst, EVar, ELoc *)
     try(destruct n ; auto ; fail) ;
 
-    try(specialize(IHe bs) ;
-    destruct (trans e) ; intros ;
-    apply IHe ; fail) ;
+    (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
+    try(try_specialize_1 IHe bs dg dgs v v0 
+    (destruct (trans e) ; intros ;
+    apply IHe ; fail)) ;
 
-    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    destruct (trans e1) ; destruct (trans e2) ; intros ;
+    (* EApp, EAssign *)
+    try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
+    (destruct (trans e1) ; destruct (trans e2) ; intros ;
     rewrite ContextStaticProperties.merge_nth ;
     rewrite app_length ;
-    rewrite IHe1, IHe2 ; reflexivity).
+    rewrite IHe1, IHe2 ; reflexivity ; fail)).
 
-    specialize (IHe (0::bs)).
+    (* EBox *)
+    specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e).
     destruct t ; intros ; simpl in *|-*.
     specialize (IHe (S n)) ; destruct n ; auto.
     specialize (IHe (S n)) ; simpl in *|-*.
     assumption.
     
+    (* EUnbox *)
     destruct (List2.hd_cons bs 0).
-    specialize (IHe l).
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe l d l0).
     destruct (trans e) ; intros.
     simpl in *|-*.
     destruct n0 ; auto.
   Qed.
 
   Lemma context_mem_booker:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     forall (n:nat) (v:var),
     n < length bs ->
     VarSet.mem v (Context.context_hole_set (nth n cs nil)) = true ->
@@ -1034,14 +1351,16 @@ Module Type TranslationStaticProperties (R:Replacement)
   Proof.
     induction e ; simpl ; intros ;
     
+    (* EConst, EVar, ELoc *)
     try(destruct n ; inversion H0 ; fail) ;
 
-    try(specialize (IHe bs) ;
-    destruct (trans e) ; intros ;
-    apply IHe ; auto ; fail) ;
+    (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
+    try(try_specialize_1 IHe bs dg dgs v v0 (
+    destruct (trans e) ; intros ; apply IHe ; auto ; fail)) ;
 
-    try(specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ; unfold map_iter_booker in *|-* ;
+    (* EApp, EAssign *)
+    try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
+    (unfold map_iter_booker in *|-* ;
     destruct (trans e1) ; destruct (trans e2) ; intros ;
     rewrite ContextStaticProperties.merge_nth in H0 ;
     rewrite ContextStaticProperties.context_hole_set_app in H0 ;
@@ -1053,9 +1372,10 @@ Module Type TranslationStaticProperties (R:Replacement)
     (fun b n => (b + booker e2 n)%nat) bs n 0 0 0 H) ; intros ;
     rewrite H1 in IHe1 ;
     destruct IHe1 ; split ; rewrite plus_0_r in H3 ; omega|
-    clear IHe1 ; specialize (IHe2 n v H H0) ; omega]).
+    clear IHe1 ; specialize (IHe2 n v H H0) ; omega] ; fail)).
 
-    specialize (IHe (0::bs)).
+    (* EBox *)
+    specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e).
     destruct t ; simpl in *|-* ; intros.
     destruct n ; simpl in H0 ; inversion H0.
@@ -1063,8 +1383,10 @@ Module Type TranslationStaticProperties (R:Replacement)
     specialize (IHe (S n) v H H0) ; clear H H0 ; simpl in *|-*.
     assumption.
     
+    (* EUnbox *)
     destruct bs ; simpl in *|-*.
-    specialize (IHe nil).
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe nil d l).
     destruct (trans e) ; intros.
     destruct n ; simpl in *|-*.
     rewrite <- VarSetProperties.singleton_equal_add in H0.
@@ -1074,7 +1396,8 @@ Module Type TranslationStaticProperties (R:Replacement)
     specialize (IHe n v H H0) ; clear H H0.
     destruct n ; omega.
 
-    specialize (IHe bs).
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe bs d l).
     destruct (trans e) ; intros ; simpl in *|-*.
     destruct n0 ; simpl in *|-*.
     rewrite <- VarSetProperties.singleton_equal_add in H0.
@@ -1085,8 +1408,8 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma context_mem:
-    forall (e:S.expr) (bs:list nat),
-    let (_, cs) := trans e bs in
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    let (_, cs) := trans e bs dg dgs in
     forall (n:nat),
     n < length bs ->
     match nth n cs nil with
@@ -1095,75 +1418,54 @@ Module Type TranslationStaticProperties (R:Replacement)
     end.
   Proof.
     induction e ; intros ; simpl in *|-* ; intros ;
+
+    (* EConst, EVar, ELoc *)
     try(destruct n ; auto ; fail) ;
 
-    try(specialize (IHe bs) ;
+    (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
+    try(try_specialize_1 IHe bs dg dgs v v0 (
     destruct (trans e bs) ; intros ;
     specialize (IHe n H) ;
-    assumption).
+    assumption ; fail)) ;
 
-    (* EApp *)
-    specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    specialize (context_mem_booker e1 (map_iter_booker e2 bs 0)) ; 
-    intros CMB1 ;
-    specialize (context_mem_booker e2 bs) ; intros CMB2 ;
+    (* EApp, EAssign *)
+    try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
+    (specialize (context_mem_booker e1 (map_iter_booker e2 bs 0) (dg_eapp_l dg) dgs) ;
+    intros CMBApp1 ;
+    specialize (context_mem_booker e1 (map_iter_booker e2 bs 0) (dg_eassign_l dg) dgs) ;
+    intros CMBAssign1 ;
+    specialize (context_mem_booker e2 bs (dg_eapp_r dg) dgs) ; intros CMBApp2 ;
+    specialize (context_mem_booker e2 bs (dg_eassign_r dg) dgs) ; intros CMBAssign2 ;
     destruct (trans e1) ; destruct (trans e2) ;
     intros ; specialize (IHe1 n) ; specialize (IHe2 n) ;
     rewrite ContextStaticProperties.merge_nth ;
-    specialize (CMB1 n) ; specialize (CMB2 n) ;
+    try(specialize (CMBApp1 n) ; specialize (CMBApp2 n)) ;
+    try(specialize (CMBAssign1 n) ; specialize (CMBAssign2 n)) ;
     destruct (nth n t nil) ; simpl ; [
-    apply IHe2 ; auto |].
+    apply IHe2 ; auto |] ;
     destruct p ;
     rewrite ContextStaticProperties.context_hole_set_app ;
     rewrite VarSetProperties.union_mem ;
     apply orb_false_iff ; 
-    unfold map_iter_booker in *|-* ; split.
-    rewrite List2Properties.length_map_iter in IHe1.
-    apply IHe1 ; auto.
-    rewrite List2Properties.length_map_iter in CMB1.
-    remember (VarSet.mem v (Context.context_hole_set (nth n t0 nil))).
-    symmetry in Heqb ; destruct b ; auto ; exfalso.
-    apply CMB2 in Heqb ; auto ; clear CMB2.
-    assert(VarSet.mem v (Context.context_hole_set ((e3, v) :: t1)) = true).
-    simpl ; apply VarSetProperties.add_mem_3.
-    specialize (CMB1 v H H0) ; clear H0 IHe2 IHe1 ;
+    unfold map_iter_booker in *|-* ; split ; [
+    rewrite List2Properties.length_map_iter in IHe1 ;
+    apply IHe1 ; auto |] ;
+    rewrite List2Properties.length_map_iter in CMBApp1, CMBAssign1 ;
+    remember (VarSet.mem v (Context.context_hole_set (nth n t0 nil))) ;
+    symmetry in Heqb ; destruct b ; auto ; exfalso ;
+    try(apply CMBApp2 in Heqb ; auto ; clear CMBApp2) ;
+    try(apply CMBAssign2 in Heqb ; auto ; clear CMBAssign2) ;
+    assert(VarSet.mem v (Context.context_hole_set ((e3, v) :: t1)) = true) ;
+    [simpl ; apply VarSetProperties.add_mem_3 |
+    try(specialize (CMBApp1 v H H0)) ;
+    try(specialize (CMBAssign1 v H H0)) ; clear H0 IHe2 IHe1 ;
     specialize(List2Properties.map_iter_nth_indep 
       (fun b n => (b + booker e2 n)%nat) bs n 0 0 0 H) ; intros ;
-    rewrite plus_0_r in H0 ; rewrite H0 in CMB1 ; clear H0 ;
-    omega.
+    rewrite plus_0_r in H0 ; rewrite H0 in *|-* ; clear H0 ;
+    omega] ; fail)).
 
-    (* EAssign (same as EApp. Should deduplicate) *)
-    specialize (IHe1 (map_iter_booker e2 bs 0)) ;
-    specialize (IHe2 bs) ;
-    specialize (context_mem_booker e1 (map_iter_booker e2 bs 0)) ; 
-    intros CMB1 ;
-    specialize (context_mem_booker e2 bs) ; intros CMB2 ;
-    destruct (trans e1) ; destruct (trans e2) ;
-    intros ; specialize (IHe1 n) ; specialize (IHe2 n) ;
-    rewrite ContextStaticProperties.merge_nth ;
-    specialize (CMB1 n) ; specialize (CMB2 n) ;
-    destruct (nth n t nil) ; simpl ; [
-    apply IHe2 ; auto |].
-    destruct p ;
-    rewrite ContextStaticProperties.context_hole_set_app ;
-    rewrite VarSetProperties.union_mem ;
-    apply orb_false_iff ; unfold map_iter_booker in *|-* ; split.
-    rewrite List2Properties.length_map_iter in IHe1.
-    apply IHe1 ; auto.
-    rewrite List2Properties.length_map_iter in CMB1.
-    remember (VarSet.mem v (Context.context_hole_set (nth n t0 nil))).
-    symmetry in Heqb ; destruct b ; auto ; exfalso.
-    apply CMB2 in Heqb ; auto ; clear CMB2.
-    assert(VarSet.mem v (Context.context_hole_set ((e3, v) :: t1)) = true).
-    simpl ; apply VarSetProperties.add_mem_3.
-    specialize (CMB1 v H H0) ; clear H0 IHe2 IHe1 ;
-    specialize(List2Properties.map_iter_nth_indep 
-      (fun b n => (b + booker e2 n)%nat) bs n 0 0 0 H) ; intros ;
-    rewrite plus_0_r in H0 ; rewrite H0 in CMB1 ; clear H0 ;
-    omega.
-    
-    specialize (IHe (0 :: bs)).
+    (* EBox *)    
+    specialize (IHe (0 :: bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e) ; intros.
     destruct t ; simpl in *|-* ; intros.
     destruct n ; auto.
@@ -1171,14 +1473,17 @@ Module Type TranslationStaticProperties (R:Replacement)
     apply IHe ; auto.
     apply lt_n_S ; auto.
 
+    (* EUnbox *)
     destruct bs ; simpl in *|-*.
-    specialize (IHe nil).
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe nil d l).
     destruct (trans e nil) ; intros.
     simpl in *|-*.
     destruct n ; auto.
     apply IHe ; auto ; omega.
 
-    specialize (IHe bs).
+    destruct (List2.hd_cons dgs dg_empty).
+    specialize (IHe bs d l).
     destruct (trans e) ; intros.
     simpl in *|-*.
     destruct n0 ; auto.
@@ -1187,24 +1492,24 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma trans_mem_length:
-    forall (M:Memory.t) (bs:list nat), 
-    length (trans_mem M bs) = length M.
+    forall (M:Memory.t) (bs:list nat) (dg:dg_t) (dgs:list dg_t), 
+    length (trans_mem M bs dg dgs) = length M.
   Proof.
     induction M ; simpl ; intros ; auto.
   Qed.
 
   Lemma trans_mem_fresh:
-    forall (M:Memory.t) (bs:list nat), 
-    T.Memory.fresh (trans_mem M bs) = Memory.fresh M.
+    forall (M:Memory.t) (bs:list nat) (dg:dg_t) (dgs:list dg_t), 
+    T.Memory.fresh (trans_mem M bs dg dgs) = Memory.fresh M.
   Proof.
     induction M ; simpl ; intros ; auto.
   Qed.
 
   Lemma trans_mem_set:
-    forall (M:Memory.t) (l:CRaw.location) (bs:list nat) (v:S.expr),
+    forall (M:Memory.t) (l:CRaw.location) (bs:list nat) (dg:dg_t) (dgs:list dg_t) (v:S.expr),
     l <= length M ->
-    trans_mem (CRaw.Memory.set l v M) bs =
-    T.Memory.set l (phi v bs) (trans_mem M bs).
+    trans_mem (CRaw.Memory.set l v M) bs dg dgs =
+    T.Memory.set l (phi v bs dg dgs) (trans_mem M bs dg dgs).
   Proof.
     induction M ; simpl ; intros.
     apply le_n_0_eq in H ; subst ; auto.
@@ -1214,17 +1519,17 @@ Module Type TranslationStaticProperties (R:Replacement)
   Qed.
 
   Lemma trans_mem_get:
-    forall (M:Memory.t) (l:CRaw.location) (bs:list nat),
+    forall (M:Memory.t) (l:CRaw.location) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
     l < length M ->
-    phi (CRaw.Memory.get l M) bs =
-    T.Memory.get l (trans_mem M bs).
+    phi (CRaw.Memory.get l M) bs dg dgs =
+    T.Memory.get l (trans_mem M bs dg dgs).
   Proof.
     induction M ; simpl ; intros.
     apply lt_n_O in H ; contradiction.
     destruct l ; simpl ; auto.
     apply lt_S_n in H.
     unfold CRaw.Memory.get, T.Memory.get ; simpl.
-    specialize (IHM l bs H).
+    specialize (IHM l bs dg dgs H).
     unfold CRaw.Memory.get, T.Memory.get in IHM ; simpl in IHM.
     rewrite IHM ; auto.
   Qed.
@@ -1505,7 +1810,7 @@ Module Type TranslationStaticProperties (R:Replacement)
 
 End TranslationStaticProperties.
 
-Module TranslationStaticPropertiesImpl (R:Replacement) 
-    (T:StagedCalculus) (M:Monad R T) (Tr:Translation R T M).
-  Include TranslationStaticProperties R T M Tr.
+Module TranslationStaticPropertiesImpl (R:Replacement) (S:ReplacementCalculus R)
+    (T:StagedCalculus) (M:Monad R S T) (Tr:Translation R S T M).
+  Include TranslationStaticProperties R S T M Tr.
 End TranslationStaticPropertiesImpl.

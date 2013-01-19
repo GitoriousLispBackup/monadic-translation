@@ -265,7 +265,7 @@ End VarSetProperties.
 (** * Binding Set *)
 
 (** ** Definitions *)
-Module BindingSet(Repl:Replacement).
+Module Type BindingSet(Repl:Replacement).
 
   Definition t : Type := list StageSet.t.
   Definition var := nat.
@@ -316,10 +316,16 @@ Module BindingSet(Repl:Replacement).
 
 End BindingSet.
 
-(** ** Properties *)
-Module BindingSetProperties(Repl:Replacement).
+Module BindingSetImpl (Repl:Replacement) <: BindingSet Repl.
 
-  Module BindingSet := BindingSet Repl.
+  Include BindingSet Repl.
+
+End BindingSetImpl.
+
+(** ** Properties *)
+Module BindingSetProperties(Repl:Replacement) (B:BindingSet Repl).
+
+  Module BindingSet := B.
   Import NatSet.
   Import NatSetProperties.
   Import BindingSet.

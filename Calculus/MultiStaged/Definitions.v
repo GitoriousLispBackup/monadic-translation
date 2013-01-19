@@ -130,7 +130,7 @@ Module CalculusRaw (Repl:Replacement).
   Definition ssticks (n:nat) (e:expr) := True.
 
   (** ** Binding Set *)
-  Module BindingSet := BindingSet Repl.
+  Module BindingSet := BindingSetImpl Repl.
 
   (** ** Substitution *)
   Fixpoint ssubst (n:nat) (St:StageSet.t) (x:var) (e v:expr) :=

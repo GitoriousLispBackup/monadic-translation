@@ -3129,7 +3129,7 @@ Ltac auto_false_base cont :=
             | try split; intros_all; tryfalse by congruence/ ].
 
 Tactic Notation "auto_false" :=
-   auto_false_base ltac:(fun tt => auto).
+   auto_false_base ltac:(fun tt => auto*).
 Tactic Notation "auto_false" "~" :=
    auto_false_base ltac:(fun tt => auto~).
 Tactic Notation "auto_false" "*" :=
@@ -3851,15 +3851,15 @@ Notation "'Something'" :=
 
 Lemma ltac_something_eq : forall (e:Type),
   e = (@ltac_something _ e).
-Proof. auto. Qed.
+Proof. auto*. Qed.
 
 Lemma ltac_something_hide : forall (e:Type),
   e -> (@ltac_something _ e).
-Proof. auto. Qed.
+Proof. auto*. Qed.
 
 Lemma ltac_something_show : forall (e:Type),
   (@ltac_something _ e) -> e.
-Proof. auto. Qed.
+Proof. auto~. Qed.
 
 (** [hide_def x] and [show_def x] can be used to hide/show 
     the body of the definition [x]. *)

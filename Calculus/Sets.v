@@ -46,7 +46,7 @@ Module StageSetProperties.
     assert(forall n, Proper (Logic.eq ==> Logic.eq) 
       (fun x : elt => leb x n)).
     intros x s1 s2 H1 ; subst ; reflexivity.
-    apply MSetEqProps.for_all_mem_1 ; auto ; intros.
+    apply MSetEqProps.for_all_mem_1 ; auto ~ ; intros.
     rewrite MSetEqProps.empty_mem in H0.
     inversion H0.
   Qed.
@@ -59,8 +59,8 @@ Module StageSetProperties.
     assert(forall n, Proper (Logic.eq ==> Logic.eq) 
       (fun x : elt => leb x n)).
     intros x s1 s2 H1 ; subst ; reflexivity.
-    remember (mem n lst) ; destruct b ; symmetry in Heqb ; auto ; exfalso.
-    apply MSetEqProps.for_all_mem_2 with (x:=n) in H0 ; auto.
+    remember (mem n lst) ; destruct b ; symmetry in Heqb ; auto ~ ; exfalso.
+    apply MSetEqProps.for_all_mem_2 with (x:=n) in H0 ; auto ~.
     apply leb_iff in H0 ; omega.
   Qed.
 
@@ -70,7 +70,7 @@ Module StageSetProperties.
   Proof.
     intros.
     apply remove_equal.
-    apply ub_mem_1 with (m:=m) ; auto.
+    apply ub_mem_1 with (m:=m) ; auto ~.
   Qed.
 
   Lemma ub_le_1:
@@ -191,8 +191,8 @@ Module StageSetProperties.
     intros.
     remember(mem n lst).
     destruct b ; symmetry in Heqb.
-    rewrite add_mem_1 ; auto.
-    rewrite remove_equal with (lst:=lst) ; auto.
+    rewrite add_mem_1 ; auto ~.
+    rewrite remove_equal with (lst:=lst) ; auto ~.
     apply MSetEqProps.remove_add in Heqb.
     apply eq_leibniz.
     apply equal_spec.
@@ -209,14 +209,14 @@ Module StageSetProperties.
     rewrite MSetEqProps.add_mem_1.
     rewrite remove_mem_1.
     apply MSetEqProps.add_mem_1.
-    auto.
-    rewrite MSetEqProps.add_mem_2 ; auto.
+    auto ~.
+    rewrite MSetEqProps.add_mem_2 ; auto ~.
     case_beq_nat m0 n.
     rewrite MSetEqProps.remove_mem_1 ; symmetry.
     apply MSetEqProps.remove_mem_1.
-    rewrite MSetEqProps.remove_mem_2 ; auto.
-    rewrite MSetEqProps.remove_mem_2 ; auto.
-    rewrite MSetEqProps.add_mem_2 ; auto.
+    rewrite MSetEqProps.remove_mem_2 ; auto ~.
+    rewrite MSetEqProps.remove_mem_2 ; auto ~.
+    rewrite MSetEqProps.add_mem_2 ; auto ~.
   Qed.
 
 End StageSetProperties.
@@ -358,12 +358,12 @@ Module BindingSetProperties(Repl:Replacement) (B:BindingSet Repl).
     intros ; generalize dependent y ;
     generalize dependent B ; 
     induction x ; simpl ; intros.
-    destruct y ; [ exfalso ; auto |
+    destruct y ; [ exfalso ; auto ~ |
     destruct B ; reflexivity ].
     destruct y.
     destruct B ; destruct x ; reflexivity.
     assert(x <> y).
-    auto.
+    auto ~.
     destruct B.
     specialize (IHx nil y H0).
     assert(get x nil = StageSet.empty).
@@ -536,11 +536,11 @@ Module BindingSetProperties(Repl:Replacement) (B:BindingSet Repl).
     specialize (MSetEqProps.add_remove s n H) ; intros.
     apply MSetIntern.equal_spec, MSetIntern.eq_leibniz in H0.
     rewrite <- H0.
-    rewrite MSetEqProps.fold_add ; auto.
+    rewrite MSetEqProps.fold_add ; auto ~.
     apply andb_false_iff ; left.
     apply negb_false_iff ; assumption.
-    clear ; constructor ; auto.
-    unfold Transitive ; intros ; subst ; auto.
+    clear ; constructor ; auto ~.
+    unfold Transitive ; intros ; subst ; auto ~.
     clear ; unfold Proper.
     unfold respectful ; intros.
     subst ; reflexivity.

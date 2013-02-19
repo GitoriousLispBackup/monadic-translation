@@ -41,7 +41,7 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     nil = merge cs1 cs2 -> (cs1 = nil /\ cs2 = nil).
   Proof.
     intros ; destruct cs1 ; destruct cs2 ; simpl in *|-* ; 
-    split ; auto ; try(omega) ;
+    split ; auto ~ ; try(omega) ;
     inversion H.
   Qed.
 
@@ -106,7 +106,7 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     simpl in *|-* ; reflexivity.
     destruct (shift (t0 :: cs)).
     simpl.
-    rewrite IHcs ; simpl ; auto.
+    rewrite IHcs ; simpl ; auto ~.
     omega.
   Qed.
 
@@ -126,8 +126,8 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     forall (cs:t_stack) (c:t),
     unshift cs c = cs ++ (c::nil).
   Proof.
-    induction cs ; intros ; simpl in *|-* ; auto.
-    rewrite IHcs ; auto.
+    induction cs ; intros ; simpl in *|-* ; auto ~.
+    rewrite IHcs ; auto ~.
   Qed.
 
   Lemma shift_length:
@@ -135,10 +135,10 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     let (_, cs') := shift cs in
     length cs' = pred (length cs).
   Proof.
-    induction cs ; simpl ; intros ; auto.
+    induction cs ; simpl ; intros ; auto ~.
     destruct (shift cs).
-    destruct cs ; auto.
-    simpl in IHcs ; simpl ; auto.
+    destruct cs ; auto ~.
+    simpl in IHcs ; simpl ; auto ~.
   Qed.
 
   Lemma context_hole_set_app:
@@ -174,14 +174,14 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     forall (cs:t_stack),
     merge cs nil = cs.
   Proof.
-    induction cs ; auto.
+    induction cs ; auto ~.
   Qed.
 
   Lemma merge_nil_l:
     forall (cs:t_stack),
     merge nil cs = cs.
   Proof.
-    induction cs ; auto.
+    induction cs ; auto ~.
   Qed.
 
   Lemma merge_app:
@@ -190,11 +190,11 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     merge (cs1++cs3) (cs2++cs4) = (merge cs1 cs2) ++ (merge cs3 cs4).
   Proof.
     induction cs1 ; simpl ; intros.
-    destruct cs2 ; [|inversion H] ; auto.
+    destruct cs2 ; [|inversion H] ; auto ~.
     destruct cs2 ; [inversion H|].
     simpl in H ; inversion H ; subst.
     rewrite <- app_comm_cons.
-    rewrite IHcs1 ; auto.
+    rewrite IHcs1 ; auto ~.
   Qed.
 
   Lemma shift_merge_1:
@@ -203,17 +203,17 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     shift (merge cs1 cs2) = let (c1, cs1) := shift cs1 in (c1, merge cs1 cs2).
   Proof.
     induction cs1 ; simpl ; intros.
-    destruct cs2 ; auto ; simpl in *|-* ; exfalso ; omega.
-    destruct cs2 ; auto ; simpl in *|-*.
+    destruct cs2 ; auto ~ ; simpl in *|-* ; exfalso ; omega.
+    destruct cs2 ; auto ~ ; simpl in *|-*.
     destruct (shift cs1).
-    destruct cs1 ; auto.
+    destruct cs1 ; auto ~.
 
-    rewrite IHcs1 ; auto.
+    rewrite IHcs1 ; auto ~.
     destruct (shift cs1).
     destruct cs1.
     exfalso ; simpl in *|-* ; omega.
     simpl.
-    destruct cs2 ; auto.
+    destruct cs2 ; auto ~.
     omega.
   Qed.
 
@@ -223,17 +223,17 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     shift (merge cs2 cs1) = let (c1, cs1) := shift cs1 in (c1, merge cs2 cs1).
   Proof.
     induction cs1 ; simpl ; intros.
-    destruct cs2 ; auto ; simpl in *|-* ; exfalso ; omega.
-    destruct cs2 ; auto ; simpl in *|-*.
+    destruct cs2 ; auto ~ ; simpl in *|-* ; exfalso ; omega.
+    destruct cs2 ; auto ~ ; simpl in *|-*.
     destruct (shift cs1).
-    destruct cs1 ; auto.
+    destruct cs1 ; auto ~.
 
-    rewrite IHcs1 ; auto.
+    rewrite IHcs1 ; auto ~.
     destruct (shift cs1).
     destruct cs1.
     exfalso ; simpl in *|-* ; omega.
     simpl.
-    destruct cs2 ; auto.
+    destruct cs2 ; auto ~.
     omega.
   Qed.
 
@@ -246,12 +246,12 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
       (c1++c2, merge cs1 cs2).
   Proof.
     induction cs1 ; simpl ; intros.
-    destruct cs2 ; auto ; simpl in *|-* ; exfalso ; omega.
-    destruct cs2 ; inversion H ; subst ; auto ; simpl in *|-*.
-    rewrite IHcs1 ; auto.
+    destruct cs2 ; auto ~ ; simpl in *|-* ; exfalso ; omega.
+    destruct cs2 ; inversion H ; subst ; auto ~ ; simpl in *|-*.
+    rewrite IHcs1 ; auto ~.
     destruct (shift cs1).
     destruct (shift cs2).
-    destruct cs1 ; destruct cs2 ; auto.
+    destruct cs1 ; destruct cs2 ; auto ~.
     inversion H1 ; subst.
     inversion H1 ; subst.
   Qed.
@@ -264,11 +264,11 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
   Proof.
     induction cs1 ; intros.
     destruct cs2 ; [|exfalso ; simpl in *|-* ; omega].
-    simpl ; auto.
+    simpl ; auto ~.
     destruct cs2.
-    simpl ; auto.
+    simpl ; auto ~.
     simpl.
-    rewrite IHcs1 ; auto.
+    rewrite IHcs1 ; auto ~.
     simpl in *|-* ; omega.
   Qed.
 
@@ -281,11 +281,11 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     intros cs1 cs2 ; generalize dependent cs1.
     induction cs2 ; intros.
     destruct cs1 ; [|exfalso ; simpl in *|-* ; omega].
-    simpl ; auto.
+    simpl ; auto ~.
     destruct cs1.
-    simpl ; auto.
+    simpl ; auto ~.
     simpl.
-    rewrite IHcs2 ; auto.
+    rewrite IHcs2 ; auto ~.
     simpl in *|-* ; omega.
   Qed.
 
@@ -321,10 +321,10 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     length c1 = length c2.
   Proof.
     induction c1 ; simpl ; intros.
-    inversion H ; subst ; auto.
+    inversion H ; subst ; auto ~.
     inversion H ; subst ; simpl.
     specialize (IHc1 c3 n m b1 b2 h v H4).
-    auto.
+    auto ~.
   Qed.
 
   Lemma congr_stack_ssubst_length:
@@ -334,10 +334,10 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     length cs1 = length cs2.
   Proof.
     induction cs1 ; simpl ; intros.
-    inversion H ; subst ; auto.
-    inversion H ; subst ; simpl ; auto.
+    inversion H ; subst ; auto ~.
+    inversion H ; subst ; simpl ; auto ~.
     specialize (IHcs1 (c2'::cs3) (pred n) h v bs0 b1 H6).
-    simpl in IHcs1 ; rewrite IHcs1 ; auto.
+    simpl in IHcs1 ; rewrite IHcs1 ; auto ~.
   Qed.
 
   Lemma congr_ssubst_context_app:
@@ -348,10 +348,10 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
     congr_context_ssubst P n h m v b1 b2 (c1 ++ c2) (c3 ++ c4).
   Proof.
     induction c1 ; simpl ; intros ;
-    inversion H ; subst ; auto.
+    inversion H ; subst ; auto ~.
     assert((b2 + length c2 + length c1) = b2 + (length (c1++c2)))%nat as Eq1.
     rewrite app_length ; simpl ; omega.
-    rewrite Eq1 ; constructor ; auto.
+    rewrite Eq1 ; constructor ; auto ~.
   Qed.
 
 End ContextStaticProperties.
@@ -394,16 +394,16 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     induction e ; simpl ; intros ;
 
     (* EConst, EVar, ELoc *)
-    try(auto ; fail) ;
+    try(auto ~ ; fail) ;
 
     (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
-    try(try_specialize_1 IHe bs dg dgs v v0 (destruct (trans e) ; auto ; fail)) ;
+    try(try_specialize_1 IHe bs dg dgs v v0 (destruct (trans e) ; auto ~ ; fail)) ;
 
     (* EApp, EAssign *)
     try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
     (destruct (trans e1) ; 
     destruct (trans e2) ;
-    simpl ; rewrite ContextStaticProperties.merge_length ; auto ; fail)).
+    simpl ; rewrite ContextStaticProperties.merge_length ; auto ~ ; fail)).
 
     (* EBox *)
     destruct (depth e).
@@ -425,7 +425,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     destruct (List2.hd_cons dgs dg_empty).
     specialize (IHe l d l0).
     destruct (trans e).
-    simpl ; auto.
+    simpl ; auto ~.
   Qed.
 
   Lemma length_svalue:
@@ -502,10 +502,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     induction e ; intros ; simpl ; 
 
     (* EConst, EVar, ELoc *)
-    auto ;
+    auto ~ ;
 
     (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
-    try(try_specialize_1 IHe bs dg dgs v v0 (destruct (trans e) ; auto ; fail)) ;
+    try(try_specialize_1 IHe bs dg dgs v v0 (destruct (trans e) ; auto ~ ; fail)) ;
 
     (* EApp, EAssign *)
     try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
@@ -518,7 +518,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     destruct t ; simpl.
     tauto.
     unfold not ; intros ; apply IHe.
-    simpl ; auto.
+    simpl ; auto ~.
     
     (* EUnbox *)
     destruct (List2.hd_cons bs 0).
@@ -543,7 +543,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     exfalso ; omega.
 
     destruct cs ;
-    apply not_or_and in H0 ; destruct H0 ; auto.
+    apply not_or_and in H0 ; destruct H0 ; auto ~.
     destruct (Context.shift (t :: cs)).
     assert(length (t :: cs) > 0).
     simpl ; omega.
@@ -551,7 +551,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     destruct IHcs.
     clear H ; split.
     assumption.
-    simpl ; apply and_not_or ; auto.
+    simpl ; apply and_not_or ; auto ~.
   Qed.
 
   Lemma admin_context_expr:
@@ -602,7 +602,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       phi e (bs++bs1) = phi e (bs++bs2).
   Proof.
     assert(0 <= 0) as Ole.
-    auto.
+    auto ~.
     induction e ; intros ; simpl in *|-* ; split ;
 
     try(reflexivity) ;
@@ -628,9 +628,9 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     rewrite <- List2Properties.map_iter_app in IHe1 ] ;
     destruct (S.CRaw.svalueb) ;
     simpl in *|-* ; 
-    destruct IHe1, IHe2 ; auto ;
+    destruct IHe1, IHe2 ; auto ~ ;
     [rewrite H1, H2, H3| rewrite H1, H3 | 
-    rewrite H1, H2, H3| rewrite H1, H3] ; auto ; fail).
+    rewrite H1, H2, H3| rewrite H1, H3] ; auto ~ ; fail).
 
     (* EBox *)
     assert(depth e <= S (length bs)).
@@ -667,14 +667,14 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     forall (v:expr) (bs1 bs2:list nat),
     depth v = 0 -> phi v bs1 = phi v bs2.
   Proof.
-    destruct v ; simpl ; intros ; auto.
-    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
-    rewrite trans_depth_0 with (bs2:=bs2) ; auto.
+    destruct v ; simpl ; intros ; auto ~.
+    rewrite trans_depth_0 with (bs2:=bs2) ; auto ~.
+    rewrite trans_depth_0 with (bs2:=bs2) ; auto ~.
     assert(depth v <= 1).
     omega.
     specialize (trans_depth v (0::nil) bs1 bs2 H0) ; intros.
     simpl in *|-*.
-    destruct H1 ; rewrite H1 ; auto.
+    destruct H1 ; rewrite H1 ; auto ~.
   Qed.
 
   Lemma trans_depth_2:
@@ -685,7 +685,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       phi e (bs++bs1) dg (dgs++dgs1) = phi e (bs++bs2) dg (dgs++dgs2).
   Proof.
     assert(0 <= 0) as Ole.
-    auto.
+    auto ~.
     induction e ; intros ; simpl in *|-* ; split ;
 
     try(reflexivity) ;
@@ -707,8 +707,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       (map_iter_booker e2 bs2 0) (dg_eapp_l dg) dgs dgs1 dgs2 Ole) ;
     specialize (IHe2 nil bs1 bs2 (dg_eapp_r dg) dgs dgs1 dgs2 Ole) ;
     destruct (S.CRaw.svalueb) ;
-    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
-    [rewrite H2, H3, H4 | rewrite H2, H4] ; auto.
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ~ ;
+    [rewrite H2, H3, H4 | rewrite H2, H4] ; auto ~.
 
     apply Nat.max_lub_iff in H ; destruct H ;
     apply Nat.max_lub_iff in H0 ; destruct H0 ;
@@ -722,8 +722,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     rewrite <- List2Properties.map_iter_app in IHe1 ;
     destruct (S.CRaw.svalueb) ;
     simpl in *|-* ; 
-    destruct IHe1, IHe2 ; auto ;
-    [rewrite H3, H4, H5| rewrite H3, H5] ; auto ; fail.
+    destruct IHe1, IHe2 ; auto ~ ;
+    [rewrite H3, H4, H5| rewrite H3, H5] ; auto ~ ; fail.
 
     (* ERef *)
     try(specialize (IHe bs bs1 bs2 (dg_eref dg) dgs dgs1 dgs2 H H0) ;
@@ -742,8 +742,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       (map_iter_booker e2 bs2 0) (dg_eassign_l dg) dgs dgs1 dgs2 Ole) ;
     specialize (IHe2 nil bs1 bs2 (dg_eassign_r dg) dgs dgs1 dgs2 Ole) ;
     destruct (S.CRaw.svalueb) ;
-    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
-    [rewrite H2, H3, H4 | rewrite H2, H4] ; auto.
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ~ ;
+    [rewrite H2, H3, H4 | rewrite H2, H4] ; auto ~.
 
     apply Nat.max_lub_iff in H ; destruct H ;
     apply Nat.max_lub_iff in H0 ; destruct H0 ;
@@ -757,8 +757,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     rewrite <- List2Properties.map_iter_app in IHe1 ;
     destruct (S.CRaw.svalueb) ;
     simpl in *|-* ; 
-    destruct IHe1, IHe2 ; auto ;
-    [rewrite H3, H4, H5| rewrite H3, H5] ; auto ; fail.
+    destruct IHe1, IHe2 ; auto ~ ;
+    [rewrite H3, H4, H5| rewrite H3, H5] ; auto ~ ; fail.
 
     (* EBox *)
     assert(depth e <= S (length bs)).
@@ -804,7 +804,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       phi e (bs++bs1) dg (dgs++dgs1) = phi e (bs++bs2) dg (dgs++dgs2).
   Proof.
     assert(0 <= 0) as Ole.
-    auto.
+    auto ~.
     induction e ; intros n bs bs1 bs2 dg dgs dgs1 dgs2 ;
     intros H H0 SValue ; simpl in *|-* ; split ;
 
@@ -827,8 +827,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       (map_iter_booker e2 bs2 0) (dg_eapp_l dg) dgs dgs1 dgs2 Ole) ;
     specialize (IHe2 n nil bs1 bs2 (dg_eapp_r dg) dgs dgs1 dgs2 Ole) ;
     destruct (S.CRaw.svalueb) ;
-    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
-    [rewrite H2, H3, H6 | rewrite H2, H6] ; auto.
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ~ ;
+    [rewrite H2, H3, H6 | rewrite H2, H6] ; auto ~.
 
     apply Nat.max_lub_iff in H ; destruct H ;
     specialize (IHe1 n (map_iter_booker e2 (n0::bs) 0) 
@@ -841,10 +841,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     rewrite <- List2Properties.map_iter_app in IHe1 ;
     destruct (S.CRaw.svalueb) ;
     simpl in *|-* ; 
-    destruct IHe1, IHe2 ; auto ; try(
-    destruct (depth e1) ; destruct (depth e2) ; simpl in *|-* ; auto ;
+    destruct IHe1, IHe2 ; auto ~ ; try(
+    destruct (depth e1) ; destruct (depth e2) ; simpl in *|-* ; auto ~ ;
     try(apply Nat.max_lub_iff in H0) ; omega ; fail) ;
-    [rewrite H2, H3, H6| rewrite H2, H6] ; auto ; fail.
+    [rewrite H2, H3, H6| rewrite H2, H6] ; auto ~ ; fail.
 
     (* ERef *)
     try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_eref dg) dgs dgs1 dgs2 H H0 H3) ;
@@ -864,8 +864,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       (map_iter_booker e2 bs2 0) (dg_eassign_l dg) dgs dgs1 dgs2 Ole) ;
     specialize (IHe2 n nil bs1 bs2 (dg_eassign_r dg) dgs dgs1 dgs2 Ole) ;
     destruct (S.CRaw.svalueb) ;
-    simpl in *|-* ; destruct IHe1, IHe2 ; auto ;
-    [rewrite H2, H3, H6 | rewrite H2, H6] ; auto.
+    simpl in *|-* ; destruct IHe1, IHe2 ; auto ~ ;
+    [rewrite H2, H3, H6 | rewrite H2, H6] ; auto ~.
 
     apply Nat.max_lub_iff in H ; destruct H ;
     specialize (IHe1 n (map_iter_booker e2 (n0::bs) 0) 
@@ -878,10 +878,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     rewrite <- List2Properties.map_iter_app in IHe1 ;
     destruct (S.CRaw.svalueb) ;
     simpl in *|-* ; 
-    destruct IHe1, IHe2 ; auto ; try(
-    destruct (depth e1) ; destruct (depth e2) ; simpl in *|-* ; auto ;
+    destruct IHe1, IHe2 ; auto ~ ; try(
+    destruct (depth e1) ; destruct (depth e2) ; simpl in *|-* ; auto ~ ;
     try(apply Nat.max_lub_iff in H0) ; omega ; fail) ;
-    [rewrite H2, H3, H6| rewrite H2, H6] ; auto ; fail.
+    [rewrite H2, H3, H6| rewrite H2, H6] ; auto ~ ; fail.
 
     (* EBox *)
     assert(depth e <= S (length bs)).
@@ -889,7 +889,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     inverts SValue.
     specialize (IHe (S n) (0::bs) bs1 bs2 (dg_ebox dg) (dg::dgs) dgs1 dgs2 H1).
     repeat(rewrite app_comm_cons).
-    destruct IHe ; auto.
+    destruct IHe ; auto ~.
     simpl in *|-*.
     destruct (depth e) ; simpl ; try(omega).
     rewrite H2 ; reflexivity.
@@ -898,7 +898,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     inverts SValue.
     specialize (IHe (S n) (0::bs) bs1 bs2 (dg_ebox dg) (dg::dgs) dgs1 dgs2 H1).
     repeat(rewrite app_comm_cons).
-    destruct IHe ; auto.
+    destruct IHe ; auto ~.
     destruct (depth e) ; simpl ; try(omega).
     rewrite H2 ; reflexivity.
     
@@ -911,7 +911,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     apply le_S_n in H ; apply le_S_n in H0.
     specialize (IHe n0 bs bs1 bs2 d dgs dgs1 dgs2 H H0 H3).
     destruct IHe ; simpl ; try(omega).
-    simpl in H1 ; rewrite H1 ; auto.
+    simpl in H1 ; rewrite H1 ; auto ~.
 
     (* ERun *)
     try(inverts SValue ; specialize (IHe n bs bs1 bs2 (dg_erun dg) dgs dgs1 dgs2 H H0 H3) ;
@@ -939,14 +939,14 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     forall (v:expr) (bs1 bs2:list nat) (dg:dg_t) (dgs1 dgs2:list dg_t),
     depth v = 0 -> phi v bs1 dg dgs1 = phi v bs2 dg dgs2.
   Proof.
-    destruct v ; simpl ; intros ; auto.
-    rewrite trans_depth_0_2 with (bs2:=bs2) (dgs2:=dgs2) ; auto.
-    rewrite trans_depth_0_2 with (bs2:=bs2) (dgs2:=dgs2) ; auto.
+    destruct v ; simpl ; intros ; auto ~.
+    rewrite trans_depth_0_2 with (bs2:=bs2) (dgs2:=dgs2) ; auto ~.
+    rewrite trans_depth_0_2 with (bs2:=bs2) (dgs2:=dgs2) ; auto ~.
     assert(depth v <= 1).
     omega.
     specialize (trans_depth_2 v (0::nil) bs1 bs2 (dg_ebox dg) (dg::nil) dgs1 dgs2 H0 H0) ; intros.
     simpl in *|-*.
-    destruct H1 ; rewrite H1 ; auto.
+    destruct H1 ; rewrite H1 ; auto ~.
   Qed.
 
   Lemma trans_memory_depth_0:
@@ -957,21 +957,21 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     reflexivity.
     simpl in *|-*.
     apply max_0 in H ; destruct H.
-    rewrite IHM with (bs2:=bs2) ; auto.
-    rewrite phi_depth_0 with (bs2:=bs2) ; auto.
+    rewrite IHM with (bs2:=bs2) ; auto ~.
+    rewrite phi_depth_0 with (bs2:=bs2) ; auto ~.
   Qed.
 
   Lemma booker_depth:
     forall (e:expr) (n:nat),
     depth e <= n -> booker e n = 0.
   Proof.
-    induction e ; simpl ; intros ; auto.
+    induction e ; simpl ; intros ; auto ~.
     apply Nat.max_lub_iff in H.
-    destruct H ; rewrite IHe1, IHe2 ; auto.
+    destruct H ; rewrite IHe1, IHe2 ; auto ~.
     apply Nat.max_lub_iff in H.
-    destruct H ; rewrite IHe1, IHe2 ; auto.
+    destruct H ; rewrite IHe1, IHe2 ; auto ~.
     apply IHe ; omega.
-    destruct n ; [exfalso ; omega|auto].
+    destruct n ; [exfalso ; omega|auto ~].
     apply IHe ; omega.
   Qed.
 
@@ -980,10 +980,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     depth v = 0 ->
     booker (S.ssubst m ss x e v) n = booker e n.
   Proof.
-    induction e ; simpl ; intros ; auto.
-    destruct (beq_nat x v && CRaw.BindingSet.rho m ss) ; auto.
+    induction e ; simpl ; intros ; auto ~.
+    destruct (beq_nat x v && CRaw.BindingSet.rho m ss) ; auto ~.
     apply booker_depth ; omega.
-    destruct n ; auto.
+    destruct n ; auto ~.
   Qed.
 
   Lemma map_iter_ssubst:
@@ -992,25 +992,25 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     List2.map_iter (fun b n => (b + booker (S.ssubst m ss x e v) n)%nat) bs o =
     List2.map_iter (fun b n => (b + booker e n)%nat) bs o.
   Proof.
-    induction bs ; simpl ; intros ; auto.
-    rewrite booker_ssubst ; auto.
-    rewrite IHbs ; auto.
+    induction bs ; simpl ; intros ; auto ~.
+    rewrite booker_ssubst ; auto ~.
+    rewrite IHbs ; auto ~.
   Qed.
 
   Lemma booker_le:
     forall (e:S.expr) (m n:nat),
     m <= n -> booker e m = 0 -> booker e n = 0.
   Proof.
-    induction e ; simpl ; intros ; auto ;
-    try(apply IHe with (m:=m) ; auto ; fail) ;
+    induction e ; simpl ; intros ; auto ~ ;
+    try(apply IHe with (m:=m) ; auto ~ ; fail) ;
     try(apply plus_is_O in H0 ; destruct H0 ;
-    rewrite IHe1 with (m:=m) ; simpl ; auto ; 
-    rewrite IHe2 with (m:=m) ; auto ; fail).
+    rewrite IHe1 with (m:=m) ; simpl ; auto ~ ; 
+    rewrite IHe2 with (m:=m) ; auto ~ ; fail).
     rewrite IHe with (m:=S m) ; omega.
     destruct n.
-    apply le_n_0_eq in H ; subst ; auto.
+    apply le_n_0_eq in H ; subst ; auto ~.
     destruct m ; [inversion H0 |].
-    rewrite IHe with (m:=m) ; auto.
+    rewrite IHe with (m:=m) ; auto ~.
     omega.
   Qed.
 
@@ -1026,27 +1026,27 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     induction e ; simpl ; intros ; 
 
     (* EConst, EVar, ELoc *)
-    try(destruct n ; auto ; fail) ;
+    try(destruct n ; auto ~ ; fail) ;
 
     (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
     try(try_specialize_1 IHe bs dg dgs v v0 
-    (destruct (trans e) ; intros ; auto ; fail)) ;
+    (destruct (trans e) ; intros ; auto ~ ; fail)) ;
 
     (* EApp, EAssign *)
     try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
     (destruct (trans e1) ; destruct (trans e2) ; intros ;
     rewrite ContextStaticProperties.merge_nth ;
     rewrite app_length ;
-    rewrite IHe1, IHe2 ; auto ; fail)).
+    rewrite IHe1, IHe2 ; auto ~ ; fail)).
 
     (* EBox *)
     specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e) ; intros.
     destruct t ; intros.
-    rewrite booker_le with (m:=n) ; auto.
-    destruct n ; auto.
-    rewrite IHe ; auto.
-    destruct n ; auto.
+    rewrite booker_le with (m:=n) ; auto ~.
+    destruct n ; auto ~.
+    rewrite IHe ; auto ~.
+    destruct n ; auto ~.
     specialize (IHe (S n)).
     simpl in IHe ; assumption.
 
@@ -1064,8 +1064,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     forall (e:S.expr) (bs:list nat) (n:nat),
     length (map_iter_booker e bs n) = length bs.
   Proof.
-    induction bs ; simpl ; intros ; auto.
-    unfold map_iter_booker in *|-* ; rewrite IHbs ; auto.
+    induction bs ; simpl ; intros ; auto ~.
+    unfold map_iter_booker in *|-* ; rewrite IHbs ; auto ~.
   Qed.
 
   Lemma map_iter_booker_nth:
@@ -1077,7 +1077,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     unfold map_iter_booker.
     specialize (List2Properties.map_iter_nth 
       (fun b n0 : nat => (b + booker e n0)%nat) bs m n 0) ; intros P.
-    simpl in P ; rewrite P ; auto.
+    simpl in P ; rewrite P ; auto ~.
   Qed.
 
   Lemma map_iter_booker_nth_indep:
@@ -1090,7 +1090,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     unfold map_iter_booker.
     specialize (List2Properties.map_iter_nth_indep 
       (fun b n0 : nat => (b + booker e n0)%nat) bs m n 0) ; intros P.
-    simpl in P ; rewrite P ; auto.
+    simpl in P ; rewrite P ; auto ~.
   Qed.
 
   Lemma map_iter_booker_stack:
@@ -1101,15 +1101,15 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     intros.
     specialize (booker_length e bs dg dgs) ; intros BookerLength.
     destruct (trans e) ; induction bs ; intros ;
-    unfold map_iter_booker, map_iter_stack in *|-* ; simpl ; auto.
-    rewrite BookerLength, IHbs ; auto.
+    unfold map_iter_booker, map_iter_stack in *|-* ; simpl ; auto ~.
+    rewrite BookerLength, IHbs ; auto ~.
   Qed.
 
   Lemma map_iter_stack_nil:
     forall (bs:list nat) (n:nat),
     map_iter_stack nil bs n = bs.
   Proof.
-    induction bs ; simpl ; intros ; auto.
+    induction bs ; simpl ; intros ; auto ~.
     unfold map_iter_stack in *|-* ; simpl ;
     rewrite IHbs ; destruct n ; rewrite plus_0_r ; reflexivity.
   Qed.
@@ -1118,7 +1118,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     forall (bs:list nat) (c:Context.t) (cs:Context.t_stack) (n:nat),
     map_iter_stack (c::cs) bs (S n) = map_iter_stack cs bs n.
   Proof.
-    induction bs ; simpl ; intros ; auto.
+    induction bs ; simpl ; intros ; auto ~.
     unfold map_iter_stack in *|-* ; simpl in *|-*.
     rewrite IHbs ; destruct n ; reflexivity.
   Qed.
@@ -1128,7 +1128,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     map_iter_stack cs (b :: bs) n = 
     (b + length (nth n cs nil))%nat :: map_iter_stack cs bs (S n).
   Proof.
-    induction bs ; simpl ; intros ; auto.
+    induction bs ; simpl ; intros ; auto ~.
   Qed.
 
   Lemma map_iter_stack_nth:
@@ -1141,7 +1141,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (List2Properties.map_iter_nth 
       (fun b n0 : nat => (b + length (nth n0 cs nil))%nat) bs m n 0) ; intros P.
     simpl in P ; rewrite P.
-    rewrite plus_comm with (m:=m) ; auto.
+    rewrite plus_comm with (m:=m) ; auto ~.
   Qed.
 
   Lemma map_iter_stack_nth_indep:
@@ -1154,8 +1154,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     unfold map_iter_stack.
     specialize (List2Properties.map_iter_nth_indep 
       (fun b n0 : nat => (b + length (nth n0 cs nil))%nat) bs m n 0) ; intros P.
-    simpl in P ; rewrite P ; auto.
-    rewrite plus_comm with (m:=m) ; auto.
+    simpl in P ; rewrite P ; auto ~.
+    rewrite plus_comm with (m:=m) ; auto ~.
   Qed.
 
   Lemma length_h:
@@ -1175,7 +1175,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     induction e ; simpl ; intros ;
 
     (* EConst, EVar, ELoc *)
-    try(destruct n ; destruct m ; simpl ; auto ; fail) ;
+    try(destruct n ; destruct m ; simpl ; auto ~ ; fail) ;
 
     (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
     try(try_specialize_1 IHe bs dg dgs v v0 
@@ -1197,11 +1197,11 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     rewrite app_length ;
     specialize (le_lt_dec (length (nth n t nil)) m) ; intros ;
     destruct H1 ; [
-    rewrite app_nth2 ; auto ;
+    rewrite app_nth2 ; auto ~ ;
     specialize (IHe2 n (m - length (nth n t nil)) dg0) ;
     simpl in IHe2 ;
-    rewrite P1 in IHe2 ; auto |] ;
-    rewrite app_nth1 ; auto ;
+    rewrite P1 in IHe2 ; auto ~ |] ;
+    rewrite app_nth1 ; auto ~ ;
     specialize (IHe1 n m) ;
     unfold map_iter_booker in *|-* ;
     clear IHe2 ;
@@ -1209,34 +1209,34 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     destruct H1 ; [
     rewrite nth_overflow with (l:=
     (List2.map_iter (fun b n : nat => (b + booker e2 n)%nat) bs 0)) in IHe1 ;
-    [rewrite nth_overflow with (l:=bs) ; auto ;
+    [rewrite nth_overflow with (l:=bs) ; auto ~ ;
     specialize (IHe1 dg0) ;
-    rewrite nth_indep with (d':=(cast_econst dg 0, 0)) in IHe1 ; auto ;
-    rewrite nth_indep with (d':=(cast_econst dg 0, 0)) ; auto ;
-    rewrite nth_overflow with (l:=t0) ; auto ; [
+    rewrite nth_indep with (d':=(cast_econst dg 0, 0)) in IHe1 ; auto ~ ;
+    rewrite nth_indep with (d':=(cast_econst dg 0, 0)) ; auto ~ ;
+    rewrite nth_overflow with (l:=t0) ; auto ~ ; [
     rewrite plus_assoc ; simpl ; rewrite plus_0_r ;
     assumption |
-    apply le_trans with (m:=length bs) ; auto ] |] ;
+    apply le_trans with (m:=length bs) ; auto ~ ] |] ;
     rewrite List2Properties.length_map_iter ;
     assumption |
     specialize (IHe1 dg0) ;
-    rewrite nth_indep with (d':=(cast_econst dg0 0, 0)) in IHe1 ; auto ;
-    rewrite nth_indep with (d':=(cast_econst dg0 0, 0)) ; auto ;
+    rewrite nth_indep with (d':=(cast_econst dg0 0, 0)) in IHe1 ; auto ~ ;
+    rewrite nth_indep with (d':=(cast_econst dg0 0, 0)) ; auto ~ ;
     specialize(List2Properties.map_iter_nth 
     (fun b n => (b + booker e2 n)%nat) bs n 0 0) ; intros ;
-    rewrite nth_indep with (d':=0) in H1 ; auto ; [
+    rewrite nth_indep with (d':=0) in H1 ; auto ~ ; [
     rewrite H1 in IHe1 ; clear H1 ;
     rewrite plus_0_r in IHe1 ;
     rewrite <- plus_comm with (m:=length (nth n t nil)) ;
     rewrite plus_assoc ;
-    try(rewrite BookerL1 in IHe1) ; try(rewrite BookerL2 in IHe1) ; auto
+    try(rewrite BookerL1 in IHe1) ; try(rewrite BookerL2 in IHe1) ; auto ~
     | rewrite List2Properties.length_map_iter ; assumption]] ; fail)).
 
     (* EBox *)
     specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)) ;
     destruct (trans e).
     destruct t ; intros.
-    destruct m ; destruct n ; simpl ; auto.
+    destruct m ; destruct n ; simpl ; auto ~.
     specialize (le_n_S (length t0) (length bs) H) ; intros.
     specialize (IHe H0 (S n) m dg0).
     simpl in IHe.
@@ -1258,10 +1258,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe H (pred n0) m dg0).
     destruct n0.
     simpl.
-    destruct m ; auto.
+    destruct m ; auto ~.
     rewrite <- minus_n_O.
-    rewrite plus_minus_n ; auto.
-    destruct m ; auto.
+    rewrite plus_minus_n ; auto ~.
+    destruct m ; auto ~.
     simpl in *|-*.
     destruct n ; assumption.
   Qed.
@@ -1282,14 +1282,14 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     intros.
     specialize (length_h e bs dg dgs) ; intros.
     destruct (trans e).
-    destruct t ; auto.
+    destruct t ; auto ~.
     specialize (ContextStaticProperties.shift_spec_2 (t::t0)) ; intros.
     simpl length in *|-*.
     simpl pred in *|-*.
     specialize (H H1 (length t0) 0).
     destruct (Context.shift (t::t0)).
     subst.
-    destruct (nth (length t0) (t :: t0) nil) ; auto.
+    destruct (nth (length t0) (t :: t0) nil) ; auto ~.
     simpl in *|-*.
     rewrite <- minus_n_O in H.
     simpl in *|-*.
@@ -1310,7 +1310,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     induction e ; simpl ; intros ; 
 
     (* EConst, EVar, ELoc *)
-    try(destruct n ; auto ; fail) ;
+    try(destruct n ; auto ~ ; fail) ;
 
     (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
     try(try_specialize_1 IHe bs dg dgs v v0 
@@ -1328,7 +1328,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe (0::bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e).
     destruct t ; intros ; simpl in *|-*.
-    specialize (IHe (S n)) ; destruct n ; auto.
+    specialize (IHe (S n)) ; destruct n ; auto ~.
     specialize (IHe (S n)) ; simpl in *|-*.
     assumption.
     
@@ -1338,7 +1338,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe l d l0).
     destruct (trans e) ; intros.
     simpl in *|-*.
-    destruct n0 ; auto.
+    destruct n0 ; auto ~.
   Qed.
 
   Lemma context_mem_booker:
@@ -1356,7 +1356,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
 
     (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
     try(try_specialize_1 IHe bs dg dgs v v0 (
-    destruct (trans e) ; intros ; apply IHe ; auto ; fail)) ;
+    destruct (trans e) ; intros ; apply IHe ; auto ~ ; fail)) ;
 
     (* EApp, EAssign *)
     try(try_specialize_2 IHe1 (map_iter_booker e2 bs 0) IHe2 bs dg dgs
@@ -1403,8 +1403,8 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     rewrite <- VarSetProperties.singleton_equal_add in H0.
     rewrite VarSetProperties.singleton_mem in H0.
     subst ; omega.
-    apply IHe ; auto.
-    apply lt_S_n in H ; auto.
+    apply IHe ; auto ~.
+    apply lt_S_n in H ; auto ~.
   Qed.
 
   Lemma context_mem:
@@ -1420,7 +1420,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     induction e ; intros ; simpl in *|-* ; intros ;
 
     (* EConst, EVar, ELoc *)
-    try(destruct n ; auto ; fail) ;
+    try(destruct n ; auto ~ ; fail) ;
 
     (* EAbs, EFix, ERef, EDeref, ERun, ELift *)
     try(try_specialize_1 IHe bs dg dgs v v0 (
@@ -1442,19 +1442,19 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     try(specialize (CMBApp1 n) ; specialize (CMBApp2 n)) ;
     try(specialize (CMBAssign1 n) ; specialize (CMBAssign2 n)) ;
     destruct (nth n t nil) ; simpl ; [
-    apply IHe2 ; auto |] ;
+    apply IHe2 ; auto ~ |] ;
     destruct p ;
     rewrite ContextStaticProperties.context_hole_set_app ;
     rewrite VarSetProperties.union_mem ;
     apply orb_false_iff ; 
     unfold map_iter_booker in *|-* ; split ; [
     rewrite List2Properties.length_map_iter in IHe1 ;
-    apply IHe1 ; auto |] ;
+    apply IHe1 ; auto ~ |] ;
     rewrite List2Properties.length_map_iter in CMBApp1, CMBAssign1 ;
     remember (VarSet.mem v (Context.context_hole_set (nth n t0 nil))) ;
-    symmetry in Heqb ; destruct b ; auto ; exfalso ;
-    try(apply CMBApp2 in Heqb ; auto ; clear CMBApp2) ;
-    try(apply CMBAssign2 in Heqb ; auto ; clear CMBAssign2) ;
+    symmetry in Heqb ; destruct b ; auto ~ ; exfalso ;
+    try(apply CMBApp2 in Heqb ; auto ~ ; clear CMBApp2) ;
+    try(apply CMBAssign2 in Heqb ; auto ~ ; clear CMBAssign2) ;
     assert(VarSet.mem v (Context.context_hole_set ((e3, v) :: t1)) = true) ;
     [simpl ; apply VarSetProperties.add_mem_3 |
     try(specialize (CMBApp1 v H H0)) ;
@@ -1468,10 +1468,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe (0 :: bs) (dg_ebox dg) (dg::dgs)).
     destruct (trans e) ; intros.
     destruct t ; simpl in *|-* ; intros.
-    destruct n ; auto.
+    destruct n ; auto ~.
     specialize (IHe (S n)).
-    apply IHe ; auto.
-    apply lt_n_S ; auto.
+    apply IHe ; auto ~.
+    apply lt_n_S ; auto ~.
 
     (* EUnbox *)
     destruct bs ; simpl in *|-*.
@@ -1479,15 +1479,15 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe nil d l).
     destruct (trans e nil) ; intros.
     simpl in *|-*.
-    destruct n ; auto.
-    apply IHe ; auto ; omega.
+    destruct n ; auto ~.
+    apply IHe ; auto ~ ; omega.
 
     destruct (List2.hd_cons dgs dg_empty).
     specialize (IHe bs d l).
     destruct (trans e) ; intros.
     simpl in *|-*.
-    destruct n0 ; auto.
-    apply IHe ; auto.
+    destruct n0 ; auto ~.
+    apply IHe ; auto ~.
     omega.
   Qed.
 
@@ -1495,14 +1495,14 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     forall (M:Memory.t) (bs:list nat) (dg:dg_t) (dgs:list dg_t), 
     length (trans_mem M bs dg dgs) = length M.
   Proof.
-    induction M ; simpl ; intros ; auto.
+    induction M ; simpl ; intros ; auto ~.
   Qed.
 
   Lemma trans_mem_fresh:
     forall (M:Memory.t) (bs:list nat) (dg:dg_t) (dgs:list dg_t), 
     T.Memory.fresh (trans_mem M bs dg dgs) = Memory.fresh M.
   Proof.
-    induction M ; simpl ; intros ; auto.
+    induction M ; simpl ; intros ; auto ~.
   Qed.
 
   Lemma trans_mem_set:
@@ -1512,10 +1512,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     T.Memory.set l (phi v bs dg dgs) (trans_mem M bs dg dgs).
   Proof.
     induction M ; simpl ; intros.
-    apply le_n_0_eq in H ; subst ; auto.
-    destruct l ; simpl ; auto.
+    apply le_n_0_eq in H ; subst ; auto ~.
+    destruct l ; simpl ; auto ~.
     apply le_S_n in H.
-    rewrite IHM ; auto.
+    rewrite IHM ; auto ~.
   Qed.
 
   Lemma trans_mem_get:
@@ -1526,12 +1526,12 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
   Proof.
     induction M ; simpl ; intros.
     apply lt_n_O in H ; contradiction.
-    destruct l ; simpl ; auto.
+    destruct l ; simpl ; auto ~.
     apply lt_S_n in H.
     unfold CRaw.Memory.get, T.Memory.get ; simpl.
     specialize (IHM l bs dg dgs H).
     unfold CRaw.Memory.get, T.Memory.get in IHM ; simpl in IHM.
-    rewrite IHM ; auto.
+    rewrite IHM ; auto ~.
   Qed.
 
   Lemma sstep_booker:
@@ -1544,11 +1544,11 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     induction e1 ; simpl ; intros e2 M1 M2 MDepth0 ; intros ;
 
     (* EConst, EVar, ELoc *)
-    try(inversion H ; subst ; auto ; fail) ;
+    try(inversion H ; subst ; auto ~ ; fail) ;
 
     (* EAbs, EFix *)
     try(inversion H ; subst ; simpl ;
-    apply IHe1 with (e2:=e3) (M1:=M1) (M2:=M2) ; rewrite H1 in H3 ; auto ; fail).
+    apply IHe1 with (e2:=e3) (M1:=M1) (M2:=M2) ; rewrite H1 in H3 ; auto ~ ; fail).
 
 
     (* EApp *)
@@ -1556,49 +1556,49 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (Nat.max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
     destruct Spec1 ; destruct H1 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H3 ; [contradiction|omega] |
-    simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto].
+    simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto ~].
 
     specialize (Nat.max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
     destruct Spec1 ; destruct H1 ; rewrite Nat.max_comm in H2 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H8 ; [contradiction|omega] |
-    simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto].
+    simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto ~].
     
     simpl in *|-*.
     assert(depth e = 0).
-    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto ~.
     assert(depth e1_2 = 0).
-    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto ~.
     assert(depth (CRaw.ssubst 0 StageSet.empty x e e1_2) = 0).
     specialize (CalculusProperties.depth_ssubst e e1_2 StageSet.empty x 0) ; intros.
-    rewrite H2, H4 in H5 ; simpl in H5 ; apply le_n_0_eq in H5 ; auto.
-    repeat(rewrite booker_depth) ; auto ; try(omega).
+    rewrite H2, H4 in H5 ; simpl in H5 ; apply le_n_0_eq in H5 ; auto ~.
+    repeat(rewrite booker_depth) ; auto ~ ; try(omega).
 
     simpl in *|-*.
     assert(depth e = 0).
-    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto ~.
     assert(depth e1_2 = 0).
-    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto.
+    destruct (depth e) ; destruct (depth e1_2) ; simpl in H1 ; inversion H1 ; auto ~.
     assert(depth (CRaw.ssubst 0 StageSet.empty f (CRaw.ssubst 0 StageSet.empty x e e1_2)
      (CRaw.EFix f x e)) = 0).
     specialize (CalculusProperties.depth_ssubst (CRaw.ssubst 0 StageSet.empty x e e1_2) (CRaw.EFix f x e) StageSet.empty f 0) ; intros.
     assert(depth (CRaw.ssubst 0 StageSet.empty x e e1_2) = 0).
     specialize (CalculusProperties.depth_ssubst e e1_2 StageSet.empty x 0) ; intros.
-    rewrite H2, H4 in H6 ; simpl in H6 ; apply le_n_0_eq in H6 ; auto.
-    simpl in H5 ; rewrite H2, H6 in H5 ; simpl in H5 ; apply le_n_0_eq in H5 ; auto.
-    repeat(rewrite booker_depth) ; auto ; try(omega).
+    rewrite H2, H4 in H6 ; simpl in H6 ; apply le_n_0_eq in H6 ; auto ~.
+    simpl in H5 ; rewrite H2, H6 in H5 ; simpl in H5 ; apply le_n_0_eq in H5 ; auto ~.
+    repeat(rewrite booker_depth) ; auto ~ ; try(omega).
 
     (* ERef *)
     inversion H ; subst.
-    apply IHe1 with (m:=m) in H3 ; auto.
+    apply IHe1 with (m:=m) in H3 ; auto ~.
     simpl ; rewrite booker_depth ; omega.
 
     (* Deref *)
     inversion H ; subst.
-    apply IHe1 with (m:=m) in H3 ; auto.
+    apply IHe1 with (m:=m) in H3 ; auto ~.
     assert(depth (CRaw.Memory.get l M2) = 0).
     specialize (CalculusProperties.memory_depth_get l M2) ; intros Dpth1.
-    rewrite MDepth0 in Dpth1 ; apply le_n_0_eq in Dpth1 ; auto.
-    simpl ; rewrite booker_depth ; auto ; omega.
+    rewrite MDepth0 in Dpth1 ; apply le_n_0_eq in Dpth1 ; auto ~.
+    simpl ; rewrite booker_depth ; auto ~ ; omega.
     
     (* Assign *)
     inversion H ; subst.
@@ -1606,46 +1606,46 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (Nat.max_spec (depth e1_1) (depth e1_2)) ; intros Spec1 ;
     destruct Spec1 ; destruct H1 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H3 ; [contradiction|omega] |
-    simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto].
+    simpl ; rewrite IHe1_1 with (e2:=e3) (M1:=M1) (M2:=M2) ; auto ~].
 
     specialize (Nat.max_spec (depth e1_2) (depth e1_1)) ; intros Spec1 ;
     destruct Spec1 ; destruct H1 ; rewrite Nat.max_comm in H2 ; rewrite H2 in *|-* ; [
     apply CalculusProperties.depth_sstep_lt in H8 ; [contradiction|omega] |
-    simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto].
+    simpl ; rewrite IHe1_2 with (e2:=e0) (M1:=M1) (M2:=M2) ; auto ~].
     
-    simpl ; auto.
+    simpl ; auto ~.
     
     (* EBox *)
     inversion H ; subst.
     assert(S (pred (depth e1)) = depth e1).
     specialize (CalculusProperties.depth_sstep_lt M1 e1 M2 e3 (S (pred (depth e1)))) ; intros.
-    destruct (depth e1) ; auto.
+    destruct (depth e1) ; auto ~.
     apply H1 in H3 ; try(omega) ; contradiction.
-    rewrite H1 in H3 ;  simpl ; apply IHe1 with (m:=S m) in H3 ; auto ; omega.
+    rewrite H1 in H3 ;  simpl ; apply IHe1 with (m:=S m) in H3 ; auto ~ ; omega.
 
     (* EUnbox *)
     inversion H ; subst.
-    simpl ; destruct m ; auto.
-    apply IHe1 with (m:=m) in H3 ; auto ; omega.
+    simpl ; destruct m ; auto ~.
+    apply IHe1 with (m:=m) in H3 ; auto ~ ; omega.
     simpl in *|-*.
     destruct m ; [|exfalso ; omega].
     exfalso ; omega.
 
     (* ERun *)
     inversion H ; subst.
-    apply IHe1 with (m:=m) in H3 ; auto.
+    apply IHe1 with (m:=m) in H3 ; auto ~.
     simpl in *|-*.
     specialize (booker_depth e2) ; intros.
     destruct (depth e2).
-    repeat(rewrite H2) ; auto ; omega.
+    repeat(rewrite H2) ; auto ~ ; omega.
     destruct n ; simpl in *|-* ; [|inversion H1].
-    repeat(rewrite H2) ; auto ; try(omega).
+    repeat(rewrite H2) ; auto ~ ; try(omega).
     
     (* ELift *)
     inversion H ; subst.
-    apply IHe1 with (m:=m) in H3 ; auto.
+    apply IHe1 with (m:=m) in H3 ; auto ~.
     simpl in *|-*.
-    repeat(rewrite booker_depth) ; auto ; try(omega).
+    repeat(rewrite booker_depth) ; auto ~ ; try(omega).
   Qed.
 
   Lemma map_iter_booker_comm:
@@ -1653,12 +1653,12 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     (map_iter_booker e1 (map_iter_booker e2 bs m) n)
     = (map_iter_booker e2 (map_iter_booker e1 bs n) m).
   Proof.
-    induction bs ; simpl ; intros ; auto.
+    induction bs ; simpl ; intros ; auto ~.
     unfold map_iter_booker in *|-* ; simpl.
-    rewrite IHbs ; auto.
+    rewrite IHbs ; auto ~.
     assert(a + booker e2 m + booker e1 n = a + booker e1 n + booker e2 m)%nat.
     omega.
-    rewrite H ; auto.
+    rewrite H ; auto ~.
   Qed.
 
   Lemma map_iter_booker_app:
@@ -1666,10 +1666,10 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     map_iter_booker e (bs1++bs2) n
     = (map_iter_booker e bs1 n) ++ (map_iter_booker e bs2 (length bs1 + n)).
   Proof.
-    induction bs1 ; simpl ; intros ; auto.
+    induction bs1 ; simpl ; intros ; auto ~.
     unfold map_iter_booker in *|-* ; simpl.
-    rewrite IHbs1 ; auto.
-    rewrite <- plus_Snm_nSm ; auto.
+    rewrite IHbs1 ; auto ~.
+    rewrite <- plus_Snm_nSm ; auto ~.
   Qed.
 
   Lemma map_iter_booker_hd_cons:
@@ -1692,15 +1692,15 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
       phi e3 (bs1++(map_iter_booker e2 bs n))).
   Proof.
     intros e1 e2 M1 M2 MDepth0 Step.
-    induction e3 ; intros ; simpl ; auto ;
+    induction e3 ; intros ; simpl ; auto ~ ;
 
     (* Case EAbs, EFix, ERef, EDEref, ERun, ELift *)
     try(specialize (IHe3 bs bs1 n H) ;
     destruct IHe3 ; rewrite H0 in *|-* ;
-    split ; intros ; auto ; fail).
+    split ; intros ; auto ~ ; fail).
 
     (* Case EApp *)
-    repeat(rewrite map_iter_booker_app) ; auto.
+    repeat(rewrite map_iter_booker_app) ; auto ~.
     specialize(IHe3_1 (map_iter_booker e3_2 bs (length bs1 + 0)) 
       (map_iter_booker e3_2 bs1 0) n).
     specialize(IHe3_2 bs bs1 n).
@@ -1718,16 +1718,16 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe3_2 H0) ; clear H0.
     destruct IHe3_1 ; destruct IHe3_2.
     rewrite H0, H2 in *|-*.
-    split ; intros ; auto.
+    split ; intros ; auto ~.
     remember (S.CRaw.svalueb 0 e3_1).
-    destruct b ; symmetry in Heqb ; auto.
+    destruct b ; symmetry in Heqb ; auto ~.
     apply CalculusProperties.svalueb_iff in Heqb.
     specialize (H1  Heqb).
-    rewrite H1 ; auto.
+    rewrite H1 ; auto ~.
 
     
     (* Case EAssign *)
-    repeat(rewrite map_iter_booker_app) ; auto.
+    repeat(rewrite map_iter_booker_app) ; auto ~.
     specialize(IHe3_1 (map_iter_booker e3_2 bs (length bs1 + 0)) 
       (map_iter_booker e3_2 bs1 0) n).
     specialize(IHe3_2 bs bs1 n).
@@ -1745,12 +1745,12 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe3_2 H0) ; clear H0.
     destruct IHe3_1 ; destruct IHe3_2.
     rewrite H0, H2 in *|-*.
-    split ; intros ; auto.
+    split ; intros ; auto ~.
     remember (S.CRaw.svalueb 0 e3_1).
-    destruct b ; symmetry in Heqb ; auto.
+    destruct b ; symmetry in Heqb ; auto ~.
     apply CalculusProperties.svalueb_iff in Heqb.
     specialize (H1  Heqb).
-    rewrite H1 ; auto.
+    rewrite H1 ; auto ~.
 
 
     (* Case EBox *)
@@ -1759,18 +1759,18 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     simpl in H.
     remember (depth e3).
     destruct n0.
-    rewrite trans_depth_0 with (bs2:=((0 :: bs1) ++ map_iter_booker e2 bs n)) ; auto.
+    rewrite trans_depth_0 with (bs2:=((0 :: bs1) ++ map_iter_booker e2 bs n)) ; auto ~.
     simpl in *|-*.
     assert(S (n0 + n) < depth e1 + S (length bs1)).
     omega.
     specialize (IHe3 H0) ; clear H0.
     destruct IHe3 ; rewrite H0 in *|-*.
-    split ; intros ; auto.
+    split ; intros ; auto ~.
 
     (* Case EUnbox *)
     destruct bs1 ; simpl in *|-*.
     destruct bs.
-    unfold map_iter_booker ; simpl ; split ; intros ; auto.
+    unfold map_iter_booker ; simpl ; split ; intros ; auto ~.
     repeat(rewrite map_iter_booker_hd_cons).
     simpl in *|-*.
     specialize (IHe3 bs nil (S n)).
@@ -1780,14 +1780,14 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
     specialize (IHe3 H0) ; clear H0.
     destruct IHe3 ; rewrite H0 in *|-*.
     specialize (sstep_booker e1 e2 M1 M2 MDepth0 Step n) ; intros SBooker.
-    rewrite SBooker ; auto ; try(omega).
+    rewrite SBooker ; auto ~ ; try(omega).
    
     specialize (IHe3 bs bs1 n).
     assert(depth e3 + n < depth e1 + length bs1).
     omega.
     specialize (IHe3 H0) ; clear H0.
     destruct IHe3 ; rewrite H0 in *|-*.
-    split ; intros ; auto.
+    split ; intros ; auto ~.
   Qed.
 
 

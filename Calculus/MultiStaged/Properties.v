@@ -27,9 +27,9 @@ Module CalculusProperties (Repl:Replacement)
   Proof.
     induction e ; simpl ; intros ;
     try(exists 0 ; constructor ; fail) ;
-    try(destruct IHe ; exists (S x) ; constructor ; auto ; fail) ;
+    try(destruct IHe ; exists (S x) ; constructor ; auto ~ ; fail) ;
     try(destruct IHe1 ; destruct IHe2 ; 
-    exists (S (max x x0)) ; constructor ; auto).
+    exists (S (max x x0)) ; constructor ; auto ~).
   Qed.
 
   Lemma complexity_unique:
@@ -37,7 +37,7 @@ Module CalculusProperties (Repl:Replacement)
     complexity m e -> complexity n e -> m = n.
   Proof.
     induction e ; intros ; 
-    try(inversion H ; inversion H0 ; auto ; fail).
+    try(inversion H ; inversion H0 ; auto ~ ; fail).
   Qed.
 
   (** ** Values *)
@@ -46,51 +46,51 @@ Module CalculusProperties (Repl:Replacement)
     forall (e:expr) (n:nat),
     svalueb n e = true <-> svalue n e.
   Proof.
-    induction e ; simpl ; split ; intros ; auto ;
+    induction e ; simpl ; split ; intros ; auto ~ ;
 
     (* Case EConst, ELoc *)
-    try(constructor ; auto ; fail) ;
+    try(constructor ; auto ~ ; fail) ;
 
     (* Case ERef, EDeref, ERun, ELift *)
     try(destruct n ; [inversion H|] ; 
-      apply IHe in H ; constructor ; auto ; fail) ;
-    try(inversion H ; subst ; apply IHe in H2 ; auto ; fail) ;
+      apply IHe in H ; constructor ; auto ~ ; fail) ;
+    try(inversion H ; subst ; apply IHe in H2 ; auto ~ ; fail) ;
 
     (* Case EApp, EAssign *)
     try(apply andb_true_iff in H ; destruct H ;
     destruct n ; [inversion H|] ;
-    apply IHe1 in H ; apply IHe2 in H0 ; constructor ; auto ; fail) ;
+    apply IHe1 in H ; apply IHe2 in H0 ; constructor ; auto ~ ; fail) ;
     try(inversion H ; subst ;
     apply IHe1 in H3 ; apply IHe2 in H4 ;
-    apply andb_true_iff ; split ; auto ; fail).
+    apply andb_true_iff ; split ; auto ~ ; fail).
 
     (* Case EAbs *)
     apply orb_true_iff in H.
     destruct H.
     apply beq_nat_true_iff in H ; subst ; constructor.
     apply IHe in H.
-    destruct n ; constructor ; auto.
+    destruct n ; constructor ; auto ~.
     apply orb_true_iff.
     inversion H ; subst.
-    apply IHe in H2 ; right ; auto.
-    left ; rewrite <- beq_nat_refl ; auto.
+    apply IHe in H2 ; right ; auto ~.
+    left ; rewrite <- beq_nat_refl ; auto ~.
 
     (* Case EFix *)
     apply orb_true_iff in H.
     destruct H.
     apply beq_nat_true_iff in H ; subst ; constructor.
     apply IHe in H.
-    destruct n ; constructor ; auto.
+    destruct n ; constructor ; auto ~.
     apply orb_true_iff.
     inversion H ; subst.
-    apply IHe in H2 ; right ; auto.
-    left ; rewrite <- beq_nat_refl ; auto.
+    apply IHe in H2 ; right ; auto ~.
+    left ; rewrite <- beq_nat_refl ; auto ~.
 
     (* Case EUnbox *)
     destruct n ; [inversion H|].
     destruct n ; [inversion H|].
     simpl in H.
-    apply IHe in H ; constructor ; auto.
+    apply IHe in H ; constructor ; auto ~.
   Qed.
 
   Lemma svalueb_iff_conv:
@@ -136,9 +136,9 @@ Module CalculusProperties (Repl:Replacement)
     svalue (S n) e -> (S n) <= m -> svalue m e.
   Proof.
     intros.
-    induction H0 ; subst ; auto.
+    induction H0 ; subst ; auto ~.
     destruct m ; [exfalso ; omega|].
-    apply svalue_Sn_SSn ; auto.
+    apply svalue_Sn_SSn ; auto ~.
   Qed.
 
   Lemma memory_svalue_get:
@@ -149,9 +149,9 @@ Module CalculusProperties (Repl:Replacement)
     induction M ; simpl ; intros.
     apply lt_n_O in H ; contradiction.
     inversion H0 ; subst.
-    destruct l ; simpl ; auto.
+    destruct l ; simpl ; auto ~.
     unfold Memory.get ; unfold Memory.get in IHM ; simpl in *|-*.
-    apply IHM ; auto.
+    apply IHM ; auto ~.
     omega.
   Qed.
 
@@ -167,23 +167,23 @@ Module CalculusProperties (Repl:Replacement)
     try(destruct H ; inversion H ; subst ;
     specialize (IHe (S n0)) ;
     inversion H0 ; subst ;
-    apply IHe in H3 ; auto ;
-    exists (N,e2) ; auto ; fail) ;
+    apply IHe in H3 ; auto ~ ;
+    exists (N,e2) ; auto ~ ; fail) ;
 
     (* Case EApp, EAssign *)
     try(inversion H0 ; subst ;
     destruct H ;
     inversion H ; subst ; [
-    apply IHe1 in H4 ; auto ;
-    exists (N,e4) ; auto |
-    apply IHe2 in H5 ; auto ;
-    exists (N,e3) ; auto] ; fail) ;
+    apply IHe1 in H4 ; auto ~ ;
+    exists (N,e4) ; auto ~ |
+    apply IHe2 in H5 ; auto ~ ;
+    exists (N,e3) ; auto ~] ; fail) ;
 
     (* Case ERef, EDeref, ERun, ELift *)
     try(inversion H0 ; subst ;
     destruct H ; inversion H ; subst ;
-    apply IHe in H3 ; auto ;
-    exists (N, e2) ; auto ; fail).
+    apply IHe in H3 ; auto ~ ;
+    exists (N, e2) ; auto ~ ; fail).
   Qed.
 
   Lemma svalue_not_sprogresses:
@@ -312,36 +312,36 @@ Module CalculusProperties (Repl:Replacement)
     (svalue n (ssubst m ss x e v) <-> svalue n e).
   Proof.
     induction e ; simpl ; intros ; split ; intros ;
-    try(constructor ; auto ; fail) ;
+    try(constructor ; auto ~ ; fail) ;
     try(inversion H1 ; subst ; constructor ; 
-    apply IHe in H4 ; auto ; fail) ;
-    try(inversion H1 ; constructor ; apply IHe ; auto ; fail).
+    apply IHe in H4 ; auto ~ ; fail) ;
+    try(inversion H1 ; constructor ; apply IHe ; auto ~ ; fail).
 
     (* Case EVar *)
-    destruct (beq_nat x v && BindingSet.rho m ss) ; auto.
-    inversion H0 ; subst ; try(constructor) ; auto.
+    destruct (beq_nat x v && BindingSet.rho m ss) ; auto ~.
+    inversion H0 ; subst ; try(constructor) ; auto ~.
 
     (* Case EAbs *)
     destruct n ; [constructor|].
-    apply depth_svalue ; auto ; omega.
+    apply depth_svalue ; auto ~ ; omega.
     destruct n ; [constructor|].
-    apply depth_svalue ; auto ; omega.
+    apply depth_svalue ; auto ~ ; omega.
     simpl in H.
-    apply svalue_le with (n:=0) ; auto ; omega.
+    apply svalue_le with (n:=0) ; auto ~ ; omega.
 
     (* Case EApp *)
     inversion H1 ; subst.
-    apply IHe1 in H5 ; auto ; apply IHe2 in H6 ; auto.
-    constructor ; auto.
+    apply IHe1 in H5 ; auto ~ ; apply IHe2 in H6 ; auto ~.
+    constructor ; auto ~.
     inversion H1 ; subst.
-    constructor ; [apply IHe1 | apply IHe2] ; auto.
+    constructor ; [apply IHe1 | apply IHe2] ; auto ~.
 
     (* Case EAssign *)
     inversion H1 ; subst.
-    apply IHe1 in H5 ; auto ; apply IHe2 in H6 ; auto.
-    constructor ; auto.
+    apply IHe1 in H5 ; auto ~ ; apply IHe2 in H6 ; auto ~.
+    constructor ; auto ~.
     inversion H1 ; subst.
-    constructor ; [apply IHe1 | apply IHe2] ; auto.
+    constructor ; [apply IHe1 | apply IHe2] ; auto ~.
   Qed.
 
 
@@ -362,11 +362,11 @@ Module CalculusProperties (Repl:Replacement)
      (depth (ssubst n ss x e1_2 e2))) ; intros ;
     destruct H ; destruct H ; rewrite H0 in *|-* ;
     [specialize (IHe1_2 e2 ss x n) ;
-    apply le_trans with (m := depth e1_2 + depth e2) ; auto ;
+    apply le_trans with (m := depth e1_2 + depth e2) ; auto ~ ;
     apply plus_le_compat_r ;
     apply le_max_r |
     specialize (IHe1_1 e2 ss x n) ;
-    apply le_trans with (m := depth e1_1 + depth e2) ; auto ;
+    apply le_trans with (m := depth e1_1 + depth e2) ; auto ~ ;
     apply plus_le_compat_r ;
     apply le_max_l]).
 
@@ -408,7 +408,7 @@ Module CalculusProperties (Repl:Replacement)
     reflexivity.
     rewrite H in *|-*.
     apply le_max_l.
-    destruct M ; simpl ; auto.
+    destruct M ; simpl ; auto ~.
     apply le_trans with (m:=memory_depth M).
     apply IHl.
     apply le_max_r.
@@ -420,7 +420,7 @@ Module CalculusProperties (Repl:Replacement)
   Proof.
     induction M ; simpl ; intros.
     induction l ; simpl.
-    auto.
+    auto ~.
     assumption.
     assert(CRaw.depth = depth).
     reflexivity.
@@ -458,18 +458,18 @@ Module CalculusProperties (Repl:Replacement)
     try(inversion H0 ; fail) ;
     try(destruct n ; [omega|] ;
       inversion H0 ; subst ;
-      apply IHe1 in H3 ; auto ; omega ; fail) ;
+      apply IHe1 in H3 ; auto ~ ; omega ; fail) ;
     try(destruct n ; [omega|] ;
       apply le_S_n in H ;
       apply Nat.max_lub_iff in H ;
       destruct H ;
       inversion H0 ; subst ; [
       apply IHe1_1 in H4 | apply IHe1_2 in H9] ; 
-      auto ; omega ; fail).
+      auto ~ ; omega ; fail).
     destruct n ; [omega|].
     destruct n ; [omega|].
     inversion H0 ; subst.
-    apply IHe1 in H3 ; auto ; omega.
+    apply IHe1 in H3 ; auto ~ ; omega.
   Qed.
 
   Lemma depth_sstep_eq:
@@ -501,7 +501,7 @@ Module CalculusProperties (Repl:Replacement)
     destruct H1 ; destruct H1 ;
     rewrite H2 in *|-* ;
     [ apply depth_sstep_lt in H3 ; [destruct H3 ; subst ; 
-    rewrite max_r ; auto ; apply lt_le_weak |] ; assumption |
+    rewrite max_r ; auto ~ ; apply lt_le_weak |] ; assumption |
     specialize (IHe1_1 M2 e3 H3) ;
     destruct IHe1_1 ; split ; 
     [apply max_lub |] ; assumption]) ;
@@ -514,7 +514,7 @@ Module CalculusProperties (Repl:Replacement)
     [apply lt_n_O in H1 ; contradiction|
     apply depth_svalue in H4 ;
     apply depth_sstep_lt in H8 ; [destruct H8; subst ;
-    rewrite max_l ; auto ; apply lt_le_weak |] ; assumption ] | 
+    rewrite max_l ; auto ~ ; apply lt_le_weak |] ; assumption ] | 
     specialize (IHe1_2 M2 e0 H8) ;
     destruct IHe1_2 ; split ; 
     [apply max_lub |] ; assumption]).
@@ -555,13 +555,13 @@ Module CalculusProperties (Repl:Replacement)
     (* Case EDeref, n=0 *)
     specialize (memory_depth_get l M2) ; intros.
     rewrite H in *|-*.
-    split ; auto.
+    split ; auto ~.
 
     (* Case EAssign, n=0 *)
     specialize (memory_depth_set e2 M1 l) ; intros.
     rewrite <- H1 in *|-*.
     rewrite H in *|-*.
-    simpl in H2 ; apply le_n_0_eq in H2 ; split ; auto.
+    simpl in H2 ; apply le_n_0_eq in H2 ; split ; auto ~.
     
     (* Case EBox *)
     specialize (depth_sstep_lt M1 e1 M2 e3 1) ; intros.
@@ -569,11 +569,11 @@ Module CalculusProperties (Repl:Replacement)
     reflexivity.
     destruct (depth e1) ; simpl in *|-*.
     assert(0 < 1).
-    auto.
+    auto ~.
     specialize (H1 H4 H3).
     contradiction.
     specialize (IHe1 M2 e3 H3).
-    destruct IHe1 ; split ; auto.
+    destruct IHe1 ; split ; auto ~.
     assert(n = pred (S n)).
     reflexivity.
     rewrite H6.
@@ -581,11 +581,11 @@ Module CalculusProperties (Repl:Replacement)
 
     (* Case EUnbox -> EUnbox *)
     specialize (IHe1 M2 e3 H3).
-    destruct IHe1 ; split ; auto.
+    destruct IHe1 ; split ; auto ~.
     apply le_n_S ; assumption.
 
     (* Case EUnbox (Box) *)
-    split ; auto.
+    split ; auto ~.
     apply depth_svalue in H3.
     apply le_S_n.
     assumption.
@@ -621,15 +621,15 @@ Module CalculusProperties (Repl:Replacement)
     destruct (Repl.rho n) ; [
     apply VarSetProperties.singleton_mem in H ;
     subst ;
-    destruct (fresh e) ; [auto |] ; 
+    destruct (fresh e) ; [auto ~ |] ; 
     apply le_trans with (m:= S x) ;
-    [auto | apply le_n_S ; apply le_max_l]
+    [auto ~ | apply le_n_S ; apply le_max_l]
     | ] ; inversion H | 
     apply IHe in H ;
     destruct (fresh e) ; [
     inversion H | 
     apply le_trans with (m:= S v0) ; 
-    [auto | apply le_n_S ; apply le_max_r]]].
+    [auto ~ | apply le_n_S ; apply le_max_r]]].
 
     (* Case EFix *)
     rewrite VarSetProperties.union_mem in H.
@@ -640,8 +640,8 @@ Module CalculusProperties (Repl:Replacement)
     destruct (Repl.rho n) ; [
     apply VarSetProperties.singleton_mem in H ;
     subst ;
-    destruct (fresh e) ; [auto |] ; 
-    apply le_trans with (m:= S x) ; auto ;
+    destruct (fresh e) ; [auto ~ |] ; 
+    apply le_trans with (m:= S x) ; auto ~ ;
     apply le_n_S ; apply le_max_l |
     inversion H ].
 
@@ -653,18 +653,18 @@ Module CalculusProperties (Repl:Replacement)
     destruct (Repl.rho n) ; [
     apply VarSetProperties.singleton_mem in H ;
     subst ;
-    destruct (fresh e) ; [auto |] ; 
-    apply le_trans with (m:= S x) ; auto ;
+    destruct (fresh e) ; [auto ~ |] ; 
+    apply le_trans with (m:= S x) ; auto ~ ;
     [apply le_n_S ; apply Nat.le_max_r |
-    apply le_trans with (m:= S (max x v0)) ; auto ;
+    apply le_trans with (m:= S (max x v0)) ; auto ~ ;
     [apply le_n_S ; apply Nat.le_max_l |
     apply le_n_S ; apply Nat.le_max_r ]] | inversion H].
 
     apply IHe in H ;
     destruct (fresh e) ; [
     inversion H | 
-    apply le_trans with (m:= S v1)] ; auto ;
-    apply le_n_S ; apply le_trans with (m:= (max v0 v1)) ; auto ;
+    apply le_trans with (m:= S v1)] ; auto ~ ;
+    apply le_n_S ; apply le_trans with (m:= (max v0 v1)) ; auto ~ ;
     apply le_max_r.
 
     (* Case EBox *)
@@ -797,10 +797,10 @@ Module LispLikeCalculusProperties.
     rewrite H2, andb_false_r.
     destruct (beq_nat x v) ; rewrite IHe ; 
     try(assumption) ; try(reflexivity).
-    rewrite <- StageSetProperties.ub_le_1 ; auto.
+    rewrite <- StageSetProperties.ub_le_1 ; auto ~.
     rewrite StageSetProperties.add_mem_4.
     assumption.
-    auto.
+    auto ~.
 
     (* Fix *)
     destruct n.
@@ -820,28 +820,28 @@ Module LispLikeCalculusProperties.
     destruct (beq_nat x v) ; rewrite IHe ; 
     try(assumption) ; try(reflexivity).
     rewrite orb_true_l.
-    rewrite <- StageSetProperties.ub_le_1 ; auto.
+    rewrite <- StageSetProperties.ub_le_1 ; auto ~.
     rewrite orb_true_l.
-    rewrite StageSetProperties.add_mem_4 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
     rewrite orb_false_l.
     destruct (beq_nat x v0).
-    rewrite <- StageSetProperties.ub_le_1 ; auto.
+    rewrite <- StageSetProperties.ub_le_1 ; auto ~.
     assumption.
     rewrite orb_false_l.
     destruct (beq_nat x v0).
-    rewrite StageSetProperties.add_mem_4 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
     assumption.
 
     (* Box *)
     rewrite IHe ; try(reflexivity) ; try(assumption).
-    apply StageSetProperties.ub_le_2 with (m:=n) ; auto.
+    apply StageSetProperties.ub_le_2 with (m:=n) ; auto ~.
     omega.
 
     (* Unbox *)
     destruct n ; [exfalso ; omega|].
     simpl ; rewrite IHe ; try(reflexivity) ; try(assumption).
-    rewrite <- StageSetProperties.ub_S ; auto.
-    rewrite StageSetProperties.remove_mem_1 ; auto.
+    rewrite <- StageSetProperties.ub_S ; auto ~.
+    rewrite StageSetProperties.remove_mem_1 ; auto ~.
     omega.
   Qed.
 
@@ -851,7 +851,7 @@ Module LispLikeCalculusProperties.
     ssubst 0 StageSet.empty x e v = ll_subst 0 x e v.
   Proof.
     intros ; rewrite ssubst_ll_subst ; 
-    auto ; omega.
+    auto ~ ; omega.
   Qed.
 
   (** ** Explicit Lisp-Like Free Variables Function *)
@@ -904,8 +904,8 @@ Module LispLikeCalculusProperties.
     rewrite BindingSetProperties.rho_le_O ; trivial.
     destruct (BindingSet.rho 0 (BindingSet.get v B)) ; trivial.
     rewrite VarSetProperties.singleton_equal_add.
-    apply VarSetProperties.add_mem_4 ; auto.
-    destruct n ; [exfalso ; auto|].
+    apply VarSetProperties.add_mem_4 ; auto ~.
+    destruct n ; [exfalso ; auto ~|].
     rewrite BindingSetProperties.rho_false ; trivial.
 
     (* Abs *)
@@ -914,8 +914,8 @@ Module LispLikeCalculusProperties.
     rewrite BindingSetProperties.add_get_1.
     case_beq_nat n 0.
     apply StageSetProperties.add_mem_3.
-    rewrite StageSetProperties.add_mem_4 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
 
     (* Fix *)
     rewrite IHe with (n:=n) ; trivial.
@@ -926,26 +926,26 @@ Module LispLikeCalculusProperties.
     rewrite BindingSetProperties.add_get_1.
     case_beq_nat n 0.
     apply StageSetProperties.add_mem_3.
-    rewrite StageSetProperties.add_mem_4 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
 
     case_beq_nat v x.
     rewrite BindingSetProperties.add_get_1.
     case_beq_nat n 0.
     apply StageSetProperties.add_mem_3.
-    rewrite StageSetProperties.add_mem_4 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
 
     (* Box *)
-    apply IHe ; auto ; omega.
+    apply IHe ; auto ~ ; omega.
 
     (* Unbox *)
     destruct n.
     inversion H0.
     apply le_S_n in H0.
-    apply IHe ; auto.
+    apply IHe ; auto ~.
     rewrite BindingSetProperties.remove_get.
-    rewrite StageSetProperties.remove_mem_1 ; auto.
+    rewrite StageSetProperties.remove_mem_1 ; auto ~.
   Qed.
 
   Lemma fv_ll_fv:
@@ -988,14 +988,14 @@ Module LispLikeCalculusProperties.
     rewrite StageSetProperties.remove_mem_1 ; trivial.
     rewrite IHe ; trivial.
     rewrite BindingSetProperties.ub_le_1 ; trivial.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
 
     rewrite IHe ; trivial.
     rewrite BindingSetProperties.ub_le_1 ; trivial.
     case_beq_nat v x.
     rewrite BindingSetProperties.add_get_1.
-    rewrite StageSetProperties.add_mem_4 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
 
     (* Fix *)
     destruct n.
@@ -1007,7 +1007,7 @@ Module LispLikeCalculusProperties.
     apply StageSetProperties.add_mem_3.
     rewrite BindingSetProperties.add_get_2 ; trivial.
     rewrite BindingSetProperties.add_get_1.
-    apply StageSetProperties.add_mem_3 ; auto.
+    apply StageSetProperties.add_mem_3 ; auto ~.
 
     rewrite StageSetProperties.remove_mem_1 ; trivial.
     case_beq_nat v x.
@@ -1019,28 +1019,28 @@ Module LispLikeCalculusProperties.
     rewrite IHe ; trivial.
     rewrite BindingSetProperties.ub_le_1 ; trivial.
     rewrite BindingSetProperties.ub_le_1 ; trivial.
-    rewrite BindingSetProperties.add_get_2 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
 
     rewrite IHe ; trivial.
     rewrite BindingSetProperties.ub_le_1 ; trivial.
     rewrite BindingSetProperties.ub_le_1 ; trivial.
     case_beq_nat v x.
     rewrite BindingSetProperties.add_get_1.
-    rewrite StageSetProperties.add_mem_4 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
     case_beq_nat v0 x.
     rewrite BindingSetProperties.add_get_1.
-    rewrite StageSetProperties.add_mem_4 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
     case_beq_nat v0 x.
     rewrite BindingSetProperties.add_get_1.
-    rewrite StageSetProperties.add_mem_4 ; auto.
-    rewrite BindingSetProperties.add_get_2 ; auto.
+    rewrite StageSetProperties.add_mem_4 ; auto ~.
+    rewrite BindingSetProperties.add_get_2 ; auto ~.
 
     (* Box *)
     apply IHe ; trivial.
-    apply BindingSetProperties.ub_le_2 with (m:=n) ; auto.
+    apply BindingSetProperties.ub_le_2 with (m:=n) ; auto ~.
     omega.
 
     (* Unbox *)
@@ -1060,7 +1060,7 @@ Module LispLikeCalculusProperties.
   Proof.
     intros.
     apply StageSetProperties.equal_mem_1 ; intros.
-    apply fv_ll_fv ; auto.
+    apply fv_ll_fv ; auto ~.
     destruct m ; simpl ; reflexivity.
     omega.
   Qed.
@@ -1098,38 +1098,38 @@ Module LispLikeCalculusProperties.
     (* Const, Var, Loc *)
     try(reflexivity) ;
     (* App, Assign *)
-    try(rewrite IHe1, IHe2 ; auto ;
+    try(rewrite IHe1, IHe2 ; auto ~ ;
     [apply max_lub_r in H | apply max_lub_l in H ];
     trivial ; fail) ;
     (* Ref, Deref, Run, Lift *)
-    try(apply IHe ; auto ; fail).
+    try(apply IHe ; auto ~ ; fail).
 
     (* Abs *)
     destruct n ; simpl ;
     unfold BindingSet.bindSet, rho.
     rewrite <- beq_nat_refl.
     rewrite StageSetProperties.singleton_union_1.
-    rewrite IHe ; auto.
+    rewrite IHe ; auto ~.
     assert(beq_nat (S n) 0 = false).
-    apply beq_nat_false_iff ; auto.
+    apply beq_nat_false_iff ; auto ~.
     rewrite H0.
     rewrite VarSetProperties.empty_union_1.
-    apply IHe ; auto.
+    apply IHe ; auto ~.
 
     (* Fix *)
     destruct n ; simpl ;
     unfold BindingSet.bindSet, rho.
     rewrite <- beq_nat_refl.
     repeat(rewrite StageSetProperties.singleton_union_1).
-    rewrite IHe ; auto.
+    rewrite IHe ; auto ~.
     assert(beq_nat (S n) 0 = false).
-    apply beq_nat_false_iff ; auto.
+    apply beq_nat_false_iff ; auto ~.
     rewrite H0.
     repeat(rewrite VarSetProperties.empty_union_1).
-    apply IHe ; auto.
+    apply IHe ; auto ~.
 
     (* Box *)
-    apply IHe ; auto.
+    apply IHe ; auto ~.
     omega.
 
     (* Unbox *)
@@ -1145,7 +1145,7 @@ Module LispLikeCalculusProperties.
     bv 0 e = ll_bv 0 e.
   Proof.
     intros ; apply bv_ll_bv ; 
-    auto ; omega.
+    auto ~ ; omega.
   Qed.
 
 End LispLikeCalculusProperties.

@@ -14,7 +14,7 @@ Tactic Notation "cases" constr(E) "as" ident(v) "eqn:" ident(H) :=
   set (X := E) in *; def_to_eq X H E;
   destruct X.
 
-
+(*
 Tactic Notation "rewrite_eq" constr(E1) constr(E2) :=
   let X := fresh "H" in
   let Eqn := fresh "H" in
@@ -28,3 +28,4 @@ Tactic Notation "simpl_rem" constr(E) :=
 Tactic Notation "simpl_rem_all" constr(E) :=
   let v := fresh "v" in
   remember E as v ; simpl in *|-* ; subst v.
+*)

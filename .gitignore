@@ -2,4 +2,9 @@
 *.glob
 *.d
 *.vo
+*.o
+*.cmx
+*.native
+*.cmi
+*.cmxs
 html

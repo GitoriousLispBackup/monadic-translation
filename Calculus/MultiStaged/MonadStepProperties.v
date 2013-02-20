@@ -241,6 +241,24 @@ Module Type MonadStepProperties (R:Replacement)
     astep (M1, (bind dg (ret dg (phi v bs dg dgs)) f)) (M2, e).
 
   (* Weakest version: checked *)
+  (* This is used in EBox, n=1 case *)
+  Parameter astep_app_abs_hole:
+    forall (e1 eh:S.expr) (e:T.expr) (h:S.var) (t:Context.t) (M:S.Memory.t),
+    S.svalue 0 eh -> S.depth eh = 0 ->
+    S.memory_svalue 0 M -> S.memory_depth M = 0 ->
+    (e, ((trans_expr eh (0 :: nil) dg_empty nil, h) :: t) :: nil) =
+          trans e1 (0 :: nil) (dg_ebox dg_empty) (dg_empty :: nil) ->
+    astep (trans_mem M nil dg_empty nil, cast_eapp dg_empty
+      (cast_eabs dg_empty (cast_var (hole_var h))
+       (Context.fill dg_empty t (ret dg_empty (cast_ebox dg_empty e))))
+       (phi eh nil dg_empty nil))
+       (trans_mem M nil dg_empty nil,
+       ssubst 0 StageSet.empty (cast_var (hole_var h))
+       (Context.fill dg_empty t (ret dg_empty (cast_ebox dg_empty e))) 
+       (phi eh nil dg_empty nil)).
+
+  (* Weakest version: checked *)
+  (* This is used in EApp(EAbs), n=0 case *)
   Parameter astep_app_abs :
     forall (v:S.expr) (x:S.var) (e:S.expr) (M:S.Memory.t),
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> S.depth e = 0 ->
@@ -251,6 +269,7 @@ Module Type MonadStepProperties (R:Replacement)
       ssubst 0 StageSet.empty (cast_var x) (trans_expr e nil dg_empty nil) (phi v nil dg_empty nil)).
 
   (* Weakest version: checked *)
+  (* This is used in EApp(EFix), n=0 case *)
   Parameter astep_app_fix :
     forall (v:S.expr) (f x:S.var) (e:S.expr) (M:S.Memory.t),
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> S.depth e = 0 ->
@@ -262,6 +281,7 @@ Module Type MonadStepProperties (R:Replacement)
       (cast_efix dg_empty (cast_var f) (cast_var x) (trans_expr e nil dg_empty nil))).
 
   (* Weakest version: checked *)
+  (* This is used in EAssign(ELoc), n=0 case *)
   Parameter astep_assign_loc :
     forall (v:S.expr) (l:S.location) (M:S.Memory.t),
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> 
@@ -271,6 +291,7 @@ Module Type MonadStepProperties (R:Replacement)
       (trans_mem (S.Memory.set l v M) nil dg_empty nil, ret dg_empty (phi v nil dg_empty nil)).
 
   (* Weakest version: checked *)
+  (* This is used in ERef, n=0 case *)
   Parameter astep_eref :
     forall (v:S.expr) (M:S.Memory.t),
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> 
@@ -281,6 +302,7 @@ Module Type MonadStepProperties (R:Replacement)
       ret dg_empty (cast_eloc dg_empty (Memory.fresh (trans_mem M nil dg_empty nil)))).
     
   (* Weakest version: checked *)
+  (* This is used in EDeref, n=0 case *)
   Parameter astep_ederef :
     forall (l:S.location) (M:S.Memory.t),
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> 
@@ -289,6 +311,7 @@ Module Type MonadStepProperties (R:Replacement)
     (trans_mem M nil dg_empty nil, ret dg_empty (Memory.get l (trans_mem M nil dg_empty nil))).
 
   (* Weakest version: checked *)
+  (* This is used in ERun, n=0 case *)
   Parameter astep_erun :
     forall (M:S.Memory.t) (e:S.expr),
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> 
@@ -298,6 +321,7 @@ Module Type MonadStepProperties (R:Replacement)
     (trans_mem M nil dg_empty nil, trans_expr e nil dg_empty nil).
 
   (* Weakest version: checked *)
+  (* This is used in ELift, n=0 case *)
   Parameter astep_elift :
     forall (M:S.Memory.t) (v:S.expr),
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> 

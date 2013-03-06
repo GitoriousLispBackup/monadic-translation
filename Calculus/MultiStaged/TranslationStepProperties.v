@@ -2727,28 +2727,30 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         destruct H3 ; subst.
 
           (* Case svalue *)
-          destruct H3 ; subst.
-          destruct H3 ; destruct H3 ; subst.
-          destruct H4 ; destruct H4.
+          destruct H3 ; subst ;
+          destruct H3 ;
+          destruct H4 ; subst ;
+          destruct H5 ;
+          destruct H5 ;
           destruct t2 ; simpl in *|-*.
 
-          inversion H3 ; subst.
+          inversion H4 ; subst.
           exists x ; split ; auto ~ ; left.
           repeat(split; auto ~) ; simpl.
           constructor.
           destruct t1 ; [|destruct (Context.shift (t1 :: t2))] ; 
           inversion Shift1 ; subst.
           rewrite DpthLength in *|-* ; simpl in *|-*.
-          rewrite_eq E.Translation.Context.fill Context.fill ;
-          rewrite_eq E.Translation.booker booker.
+          (*rewrite_eq E.Translation.Context.fill Context.fill ;
+          rewrite_eq E.Translation.booker booker.*)
           apply FillSubst ; simpl ; auto ~.
           clear ; omega.
 
           (* patch *)
           intros VL.
           inversion VL ; subst.
-          apply LthSvalue in H8.
-          exfalso ; generalize H8 ; clear ; intros ; omega.
+          apply LthSvalue in H9.
+          exfalso ; generalize H9 ; clear ; intros ; omega.
          
           exists x ; split ; auto ~ ; left.
           repeat(split; auto ~) ; simpl.
@@ -2761,28 +2763,28 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           (* patch *)
           intros VL.
           inversion VL ; subst.
-          apply LthSvalue in H8.
-          exfalso ; generalize H8 ; clear ; intros ; omega.
-          
-          inversion H3 ; subst.
-          destruct t3 ; simpl in H10 ; inversion H10.
+          apply LthSvalue in H9.
+          exfalso ; generalize H9 ; clear ; intros ; omega.
+
+          inversion H4 ; subst.
+          destruct t3 ; simpl in H11 ; inversion H11.
 
           exists x ; split ; auto ~ ; left.
           repeat(split; auto ~) ; simpl.
           destruct t1 ; [ inversion Shift1 ; subst ;
-          simpl in H7 ; inversion H7|] ; subst.
+          simpl in H8 ; inversion H8|] ; subst.
           apply FillSubst ; simpl ; auto ~.
           generalize BSLength ; clear ; simpl ; intros ; omega.
           destruct (Context.shift (t1 :: t4)) ; inversion Shift1 ; subst.
-          simpl in H7 ; inversion H7 ; subst ; auto ~.
+          simpl in H8 ; inversion H8 ; subst ; auto ~.
           apply FillSubst ; simpl ; auto ~.
           generalize BSLength ; simpl in *|-* ; clear ; intros ; omega.
 
           (* patch *)
           intros VL.
           inversion VL ; subst.
-          apply LthSvalue in H9.
-          exfalso ; generalize H9 ; clear ; intros ; omega.
+          apply LthSvalue in H10.
+          exfalso ; generalize H10 ; clear ; intros ; omega.
 
           (* Case not svalue *)
           destruct H3 ; destruct H2 ; destruct H3 ; 
@@ -2790,24 +2792,33 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           exists x ; split ; auto ~ ; right.
           exists x0.
           repeat(split ; auto ~).
-          rewrite trans_memory_depth_0 with (bs2:=0::bs) ; auto ~.
+          intros ; auto ~.
+          apply H5 ; auto ~.
+          rewrite DpthLength in *|-* ; simpl in *|- * ; 
+          generalize H3 ; clear ; intros ; omega.
+
+          (*rewrite trans_memory_depth_0 with (bs2:=0::bs) ; auto ~.
           rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs) ; auto ~.
           apply CalculusProperties.depth_sstep_eq in H1 ; auto ~.
           destruct H1 ; assumption.
           intros ; auto ~.
           apply H5 ; auto ~.
           rewrite DpthLength in *|-* ; simpl in *|- * ; 
-          generalize H3 ; clear ; intros ; omega.
+          generalize H3 ; clear ; intros ; omega.*)
 
     (* Case EUnbox *)
     destruct bs ; [inversion BSLength|] ; simpl.
-    specialize (depth_length e1 bs) ; intros DpthLength1.
-    specialize (length_h e1 bs) ; intros LengthH.
-    specialize (length_h_match e1 bs) ; intros LengthHMatch.
-    specialize (booker_length e1 bs) ; intros BKLength1.
-    specialize (IHe1 bs).
-    cases (trans e1 bs) as e eqn:TransE1.
+    destruct dgs ; [ destruct DGProp ;
+    simpl in H ; exfalso ; generalize H ; clear ; intros ; omega|] ; simpl.
+    specialize (depth_length e1 bs d dgs) ; intros DpthLength1.
+    specialize (length_h e1 bs d dgs) ; intros LengthH.
+    specialize (length_h_match e1 bs d dgs) ; intros LengthHMatch.
+    specialize (booker_length e1 bs d dgs) ; intros BKLength1.
+    specialize (IHe1 bs d dgs).
+    cases (trans e1 bs d dgs) as e eqn:TransE1.
     inversion Step ; subst.
+
+      (* Proven until now *)
 
       (* Case EUnbox -> EUnbox *)
       apply le_S_n in BSLength.

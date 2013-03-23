@@ -108,6 +108,7 @@ VFILES:= Misc/LibTactics.v\
   Calculus/Monad.v\
   Calculus/MultiStaged/Definitions.v\
   Calculus/MultiStaged/Properties.v\
+  Calculus/MultiStaged/DataGathering.v\
   Calculus/MultiStaged/Monad.v\
   Calculus/MultiStaged/PureMonad.v\
   Calculus/MultiStaged/Translation.v\
@@ -128,6 +129,7 @@ ORDEREDVFILES:= Misc/LibTactics.v\
   Calculus/Monad.v\
   Calculus/MultiStaged/Definitions.v\
   Calculus/MultiStaged/Properties.v\
+  Calculus/MultiStaged/DataGathering.v\
   Calculus/MultiStaged/Monad.v\
   Calculus/MultiStaged/PureMonad.v\
   Calculus/MultiStaged/Translation.v\

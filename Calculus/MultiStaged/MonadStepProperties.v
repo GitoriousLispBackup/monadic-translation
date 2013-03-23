@@ -16,70 +16,37 @@ Require Import "Calculus/MultiStaged/Definitions".
 Require Import "Calculus/MultiStaged/Properties".
 Require Import "Calculus/MultiStaged/Monad".
 Require Import "Calculus/MultiStaged/Translation".
+Require Import "Calculus/MultiStaged/DataGathering".
 
 (* TODO: Create a UniformMonadProperties type *)
 Module Type MonadStepProperties (R:Replacement) 
-  (S:ReplacementCalculus R) (T:StagedCalculus) (M:Monad R S T).
+  (S:ReplacementCalculus R) (T:StagedCalculus)
+  (DG:DataGathering R S) (DGP:DataGatheringPredicates R S DG) 
+  (DGR:DataGatheringRequirements R S DG DGP) 
+  (M:Monad R S T DG).
 
-  Module Translation := TranslationImpl R S T M.
+  Module Translation := TranslationImpl R S T DG DGP DGR M.
   Import Translation.
   Import T.
   Import M.
+  Import DG.
+  Import DGP.
+  Import DGR.
 
   (** Data Gathering Properties *)
 
-  Inductive dg_comp : dg_t -> dg_t -> Prop :=
-  | DgCompId : forall (dg:dg_t), dg_comp dg dg
-  | DgCompEAbs : forall (dg1 dg2:dg_t) (x:S.var),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_eabs dg2 x)
-  | DgCompEFix : forall (dg1 dg2:dg_t) (f x:S.var),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_efix dg2 f x)
-  | DgCompEAppL : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_eapp_l dg2)
-  | DgCompEAppR : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_eapp_r dg2)
-  | DgCompERef : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_eref dg2)
-  | DgCompEDeref : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_ederef dg2)
-  | DgCompEAssignL : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_eassign_l dg2)
-  | DgCompEAssignR : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_eassign_r dg2)
-  | DgCompERun : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_erun dg2)
-  | DgCompELift : forall (dg1 dg2:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg1 (dg_elift dg2).
+  (**
+  The following properties ensure that data gathering
+  over values won't have effect on the translation of the value.
+  In the case of free variables replacement, we can assume
+  that we have Barendregt Property.
+  *)
 
-  Inductive dg_comp_lst (dg:dg_t) : (list dg_t) -> Prop :=
-  | DgCompLstNil : dg_comp_lst dg nil
-  | DgCompLstCons : forall (dg1:dg_t) (dgs:list dg_t),
-    dg_comp_lst dg1 dgs -> dg_comp (dg_ebox dg1) dg -> dg_comp_lst dg (dg1::dgs).
-
-  Inductive dg_nth_empty : dg_t -> nat -> Prop :=
-  | DgNthEmpty0 : dg_nth_empty dg_empty 0
-  | DgNthEmptyS : forall (dg1 dg2:dg_t) (n:nat),
-      dg_nth_empty dg1 n -> dg_comp (dg_ebox dg1) dg2 -> 
-      dg_nth_empty dg2 (S n).
-
-  Parameter dg_eabs_empty : 
-    forall (x:S.var), dg_eabs dg_empty x = dg_empty.
-
-  Parameter dg_efix_empty :
-    forall (f x:S.var), dg_efix dg_empty f x = dg_empty.
-
-  Parameter dg_eapp_l_empty : dg_eapp_l dg_empty = dg_empty.
-  Parameter dg_eapp_r_empty : dg_eapp_r dg_empty = dg_empty.
-  Parameter dg_eref_empty : dg_eref dg_empty = dg_empty.
-  Parameter dg_ederef_empty : dg_ederef dg_empty = dg_empty.
-  Parameter dg_eassign_l_empty : dg_eassign_l dg_empty = dg_empty.
-  Parameter dg_eassign_r_empty : dg_eassign_r dg_empty = dg_empty.
-  Parameter dg_erun_empty : dg_erun dg_empty = dg_empty.
-  Parameter dg_elift_empty : dg_elift dg_empty = dg_empty.
-
-  Parameter dg_ebox_empty :
-    forall (dg:dg_t) (n:nat), R.rho (S n) = true ->
-    dg_nth_empty dg n -> dg_ebox dg = dg_empty.
+  Parameter dg_svalue_trans :
+    forall (e:S.expr) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
+    S.svalue 1 e ->
+    dg_comp (dg_ebox dg_empty) dg ->
+    trans e bs (dg_ebox dg_empty) dgs  = trans e bs dg dgs.
 
   (** Substitution Properties *)
 
@@ -173,20 +140,20 @@ Module Type MonadStepProperties (R:Replacement)
   Parameter astep_bind_app_svalue :
     forall (v:S.expr) (e1 e2:expr) (M1 M2:Memory.t) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
     S.svalue 0 v ->
-    let f := fun v1 => cast_eapp dg (phi v bs (M.dg_eapp_l dg) dgs) v1 in
+    let f := fun v1 => cast_eapp dg (phi v bs (dg_eapp_l dg) dgs) v1 in
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind dg e1 f) (M2, bind dg e2 f).
 
   (* Todo: remove those two clauses *)
   Parameter astep_bind_app_eabs :
     forall (e1 e2 ef:expr) (M1 M2:Memory.t) (x:var) (dg:dg_t),
-    let f := fun v => cast_eapp dg (cast_eabs (M.dg_eapp_l dg) x ef) v in
+    let f := fun v => cast_eapp dg (cast_eabs (dg_eapp_l dg) x ef) v in
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind dg e1 f) (M2, bind dg e2 f).
 
   Parameter astep_bind_app_efix :
     forall (e1 e2 ef:expr) (M1 M2:Memory.t) (f x:var) (dg:dg_t),
-    let f := fun v => cast_eapp dg (cast_efix (M.dg_eapp_l dg) f x ef) v in
+    let f := fun v => cast_eapp dg (cast_efix (dg_eapp_l dg) f x ef) v in
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind dg e1 f) (M2, bind dg e2 f).
 
@@ -211,7 +178,7 @@ Module Type MonadStepProperties (R:Replacement)
   Parameter astep_bind_assign_svalue :
     forall (v:S.expr) (e1 e2:expr) (M1 M2:Memory.t) (bs:list nat) (dg:dg_t) (dgs:list dg_t),
     S.svalue 0 v ->
-    let f := fun v1 => cast_eassign dg (phi v bs (M.dg_eassign_l dg) dgs) v1 in
+    let f := fun v1 => cast_eassign dg (phi v bs (dg_eassign_l dg) dgs) v1 in
     astep (M1, e1) (M2, e2) ->
     astep (M1, bind dg e1 f) (M2, bind dg e2 f).
 
@@ -317,7 +284,7 @@ Module Type MonadStepProperties (R:Replacement)
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> 
     S.svalue 1 e ->
     astep (trans_mem M nil dg_empty nil, cast_erun dg_empty (cast_ebox dg_empty
-    (trans_expr e nil (M.dg_ebox dg_empty) (dg_empty::nil)))) 
+    (trans_expr e nil (dg_ebox dg_empty) (dg_empty::nil)))) 
     (trans_mem M nil dg_empty nil, trans_expr e nil dg_empty nil).
 
   (* Weakest version: checked *)
@@ -327,6 +294,6 @@ Module Type MonadStepProperties (R:Replacement)
     S.memory_svalue 0 M -> S.memory_depth M = 0 -> 
     S.depth v = 0 -> S.svalue 0 v ->
     astep (trans_mem M nil dg_empty nil, cast_elift dg_empty (phi v nil dg_empty nil)) 
-    (trans_mem M nil dg_empty nil, ret dg_empty (cast_ebox dg_empty (ret (M.dg_ebox dg_empty) (phi v nil (M.dg_ebox dg_empty) (dg_empty::nil))))).
+    (trans_mem M nil dg_empty nil, ret dg_empty (cast_ebox dg_empty (ret (dg_ebox dg_empty) (phi v nil (dg_ebox dg_empty) (dg_empty::nil))))).
 
 End MonadStepProperties.

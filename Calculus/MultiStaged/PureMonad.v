@@ -4,6 +4,7 @@ Require Import "Calculus/Definitions".
 Require Import "Calculus/Monad".
 Require Import "Calculus/MultiStaged/Definitions".
 Require Import "Calculus/MultiStaged/Monad".
+Require Import "Calculus/MultiStaged/DataGathering".
 
 Module Type PureMonad (R:Replacement) (S:ReplacementCalculus R) 
   (T:StagedCalculus).
@@ -39,11 +40,8 @@ Module Type PureMonad (R:Replacement) (S:ReplacementCalculus R)
 
 End PureMonad.
 
-Module Type PureToMonad (R:Replacement) 
-  (S:ReplacementCalculus R) (T:StagedCalculus) 
-  (PM:PureMonad R S T) <: Monad R S T.
-
-  Import T.
+Module Type EmptyDataGathering (R:Replacement) 
+  (S:ReplacementCalculus R) <: DataGathering R S.
 
   (** Data Gathering *)
   Definition dg_t := nat.
@@ -60,6 +58,97 @@ Module Type PureToMonad (R:Replacement)
   Definition dg_erun := dg_id.
   Definition dg_elift := dg_id.
   Definition dg_ebox := fun (dg:dg_t) => dg_empty.
+
+End EmptyDataGathering.
+
+Module EmptyDataGatheringImpl (R:Replacement) 
+  (S:ReplacementCalculus R) <: EmptyDataGathering R S.
+  Include EmptyDataGathering R S.
+End EmptyDataGatheringImpl.
+
+Module Type EmptyDataGatheringRequirements (R:Replacement) 
+  (S:ReplacementCalculus R) (EDG:EmptyDataGathering R S)
+  (DGP:DataGatheringPredicates R S EDG)
+  <: DataGatheringRequirements R S EDG DGP.
+
+  Import EDG.
+  Import DGP.
+
+  Lemma dg_eabs_empty : 
+    forall (x:S.var), dg_eabs dg_empty x = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_efix_empty :
+    forall (f x:S.var), dg_efix dg_empty f x = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_eapp_l_empty : dg_eapp_l dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_eapp_r_empty : dg_eapp_r dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_eref_empty : dg_eref dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_ederef_empty : dg_ederef dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_eassign_l_empty : dg_eassign_l dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_eassign_r_empty : dg_eassign_r dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_erun_empty : dg_erun dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_elift_empty : dg_elift dg_empty = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+  Lemma dg_ebox_empty :
+    forall (dg:dg_t) (n:nat), R.rho (S n) = true ->
+    dg_nth_empty dg n -> dg_ebox dg = dg_empty.
+  Proof.
+    auto.
+  Qed.
+
+End EmptyDataGatheringRequirements.
+
+Module EmptyDataGatheringRequirementsImpl (R:Replacement) 
+  (S:ReplacementCalculus R) (EDG:EmptyDataGathering R S)
+  (DGP:DataGatheringPredicates R S EDG)
+  <: EmptyDataGatheringRequirements R S EDG DGP.
+  Include EmptyDataGatheringRequirements R S EDG DGP.
+End EmptyDataGatheringRequirementsImpl.
+
+Module Type PureToMonad (R:Replacement) 
+  (S:ReplacementCalculus R) (T:StagedCalculus) 
+  (PM:PureMonad R S T) (EDG:EmptyDataGathering R S)
+  <: Monad R S T EDG.
+
+  Import T.
+  Import EDG.
 
   (** Terms Mapping *)
   Definition cast_econst := fun (dg:dg_t) => PM.cast_econst.
@@ -92,9 +181,10 @@ End PureToMonad.
 
 Module PureToMonadImpl (R:Replacement) 
   (S:ReplacementCalculus R) (T:StagedCalculus) 
-  (PM:PureMonad R S T).
+  (PM:PureMonad R S T) (EDG:EmptyDataGathering R S)
+  <: PureToMonad R S T PM EDG.
 
-  Include PureToMonad R S T PM.
+  Include PureToMonad R S T PM EDG.
 
 End PureToMonadImpl.
 

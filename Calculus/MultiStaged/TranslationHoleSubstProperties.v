@@ -18,12 +18,16 @@ Require Import "Calculus/MultiStaged/Monad".
 Require Import "Calculus/MultiStaged/Translation".
 Require Import "Calculus/MultiStaged/MonadStepProperties".
 Require Import "Calculus/MultiStaged/TranslationStaticProperties".
+Require Import "Calculus/MultiStaged/DataGathering".
 
 Definition ltb (m n:nat) := leb (S m) n.
 
 Module EqSubstProperties3 (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) (M:Monad R S T)
-    (MP:MonadStepProperties R S T M) (TrSP:TranslationStaticProperties R S T M MP.Translation).
+    (T:StagedCalculus) (DG:DataGathering R S) 
+    (DGP:DataGatheringPredicates R S DG)
+    (DGR:DataGatheringRequirements R S DG DGP)
+    (M:Monad R S T DG) (MP:MonadStepProperties R S T DG DGP DGR M) 
+    (TrSP:TranslationStaticProperties R S T DG DGP DGR M MP.Translation).
 
   Module Translation := MP.Translation.
   Module StaticProperties := TrSP.
@@ -34,6 +38,7 @@ Module EqSubstProperties3 (R:Replacement) (S:ReplacementCalculus R)
   Import Translation.
   Import S.
   Import M.
+  Import DG.
 
   Definition eq_ssubst_3 (n:nat) (h:CRaw.var) 
       (m:nat) (v:T.expr) (b:nat) (u1 u2:T.expr) : Prop :=
@@ -996,8 +1001,11 @@ Module EqSubstProperties3 (R:Replacement) (S:ReplacementCalculus R)
 End EqSubstProperties3.
 
 Module EqSubstProperties2 (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) (M:Monad R S T) (MP:MonadStepProperties R S T M)
-    (TrSP:TranslationStaticProperties R S T M MP.Translation).
+    (T:StagedCalculus) (DG:DataGathering R S) 
+    (DGP:DataGatheringPredicates R S DG)
+    (DGR:DataGatheringRequirements R S DG DGP)
+    (M:Monad R S T DG) (MP:MonadStepProperties R S T DG DGP DGR M)
+    (TrSP:TranslationStaticProperties R S T DG DGP DGR M MP.Translation).
 
   Module Translation := MP.Translation.
   Module StaticProperties := TrSP.
@@ -1008,6 +1016,7 @@ Module EqSubstProperties2 (R:Replacement) (S:ReplacementCalculus R)
   Import Translation.
   Import S.
   Import M.
+  Import DG.
 
   Definition eq_ssubst_2 (n:nat) (h:CRaw.var) 
       (m:nat) (v:T.expr) (b:nat) (u1 u2:T.expr) : Prop :=
@@ -1845,11 +1854,14 @@ Module EqSubstProperties2 (R:Replacement) (S:ReplacementCalculus R)
 End EqSubstProperties2.
 
 Module EqSubstProperties (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) (M:Monad R S T) (MP:MonadStepProperties R S T M)
-    (TrSP:TranslationStaticProperties R S T M MP.Translation).
+    (T:StagedCalculus) (DG:DataGathering R S) 
+    (DGP:DataGatheringPredicates R S DG)
+    (DGR:DataGatheringRequirements R S DG DGP)
+    (M:Monad R S T DG) (MP:MonadStepProperties R S T DG DGP DGR M)
+    (TrSP:TranslationStaticProperties R S T DG DGP DGR M MP.Translation).
 
-  Module E3 := EqSubstProperties3 R S T M MP TrSP.
-  Module E2 := EqSubstProperties2 R S T M MP TrSP.
+  Module E3 := EqSubstProperties3 R S T DG DGP DGR M MP TrSP.
+  Module E2 := EqSubstProperties2 R S T DG DGP DGR M MP TrSP.
   Module Translation := MP.Translation.
   Module StaticProperties := TrSP.
   Module ContextStaticProperties := TrSP.ContextStaticProperties.
@@ -1861,6 +1873,7 @@ Module EqSubstProperties (R:Replacement) (S:ReplacementCalculus R)
   Import Translation.
   Import S.
   Import M.
+  Import DG.
 
   Definition eq_ssubst (n:nat) (h:CRaw.var) 
       (m:nat) (v:T.expr) (b:nat) (u1 u2:T.expr) : Prop :=
@@ -2022,12 +2035,15 @@ Module EqSubstProperties (R:Replacement) (S:ReplacementCalculus R)
 End EqSubstProperties.
 
 Module AdminSubstProperties (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) (M:Monad R S T) (MP:MonadStepProperties R S T M)
-    (TrSP:TranslationStaticProperties R S T M MP.Translation).
+    (T:StagedCalculus) (DG:DataGathering R S) 
+    (DGP:DataGatheringPredicates R S DG)
+    (DGR:DataGatheringRequirements R S DG DGP)
+    (M:Monad R S T DG) (MP:MonadStepProperties R S T DG DGP DGR M)
+    (TrSP:TranslationStaticProperties R S T DG DGP DGR M MP.Translation).
 
-  Module E := EqSubstProperties R S T M MP TrSP.
+  Module E := EqSubstProperties R S T DG DGP DGR M MP TrSP.
   Module E2 := E.E2.
-  Module E3 := EqSubstProperties3 R S T M MP TrSP.
+  Module E3 := EqSubstProperties3 R S T DG DGP DGR M MP TrSP.
   Module Translation := MP.Translation.
   Module StaticProperties := TrSP.
   Module ContextStaticProperties := TrSP.ContextStaticProperties.
@@ -2040,6 +2056,7 @@ Module AdminSubstProperties (R:Replacement) (S:ReplacementCalculus R)
   Import Translation.
   Import S.
   Import M.
+  Import DG.
 
   Definition admin_ssubst (n:nat) (h:CRaw.var) 
       (m:nat) (v:T.expr) (b:nat) (u1 u2:T.expr) : Prop :=

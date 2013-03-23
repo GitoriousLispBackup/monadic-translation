@@ -3,27 +3,14 @@ Require Import "Calculus/Sets".
 Require Import "Calculus/Definitions".
 Require Import "Calculus/Monad".
 Require Import "Calculus/MultiStaged/Definitions".
+Require Import "Calculus/MultiStaged/DataGathering".
 
 Module Type Monad (R:Replacement) 
-  (S:ReplacementCalculus R) (T:StagedCalculus)
-  <: StagedMonad S T.
+  (S:ReplacementCalculus R) (T:StagedCalculus) 
+  (DG:DataGathering R S) <: StagedMonad S T.
 
   Import T.
-
-  (** Data Gathering *)
-  Parameter dg_t: Type.
-  Parameter dg_empty: dg_t.
-  Parameter dg_eabs: dg_t -> S.var -> dg_t.
-  Parameter dg_efix: dg_t -> S.var -> S.var -> dg_t.
-  Parameter dg_eapp_l: dg_t -> dg_t.
-  Parameter dg_eapp_r: dg_t -> dg_t.
-  Parameter dg_eref: dg_t -> dg_t.
-  Parameter dg_ederef: dg_t -> dg_t.
-  Parameter dg_eassign_l: dg_t -> dg_t.
-  Parameter dg_eassign_r: dg_t -> dg_t.
-  Parameter dg_erun: dg_t -> dg_t.
-  Parameter dg_elift: dg_t -> dg_t.
-  Parameter dg_ebox: dg_t -> dg_t.
+  Import DG.
 
   (** Terms Mapping *)
   Parameter cast_econst: dg_t -> nat -> T.expr.

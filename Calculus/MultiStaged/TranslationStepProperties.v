@@ -19,161 +19,14 @@ Require Import "Calculus/MultiStaged/Translation".
 Require Import "Calculus/MultiStaged/MonadStepProperties".
 Require Import "Calculus/MultiStaged/TranslationStaticProperties".
 Require Import "Calculus/MultiStaged/TranslationHoleSubstProperties".
-
-Module DGValid (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) 
-    (M:Monad R S T) (MP:MonadStepProperties R S T M).
-
-  Import M.
-  Import MP.
-
-  Definition valid_dgs (n:nat) (dg:dg_t) (dgs:list dg_t) :=
-    n <= length dgs /\
-    MP.dg_comp_lst dg dgs /\
-    forall (m:nat), m <= n -> R.rho m = true -> 
-    match (n - m) with
-    | 0 => dg = dg_empty
-    | S n => nth n dgs dg_empty = dg_empty
-    end.
-
-  Lemma dg_comp_trans:
-    forall (dg1 dg2 dg3:dg_t),
-    dg_comp dg1 dg2 -> dg_comp dg2 dg3 -> dg_comp dg1 dg3.
-  Proof.
-    intros ; generalize dependent dg1.
-    induction H0 ; intros ; auto ~ ;
-    try(constructor ; auto ~ ; fail).
-  Qed.
-
-  Lemma dg_comp_lst_trans:
-    forall (dg1 dg2:dg_t) (dgs:list dg_t),
-    dg_comp dg1 dg2 -> dg_comp_lst dg1 dgs -> dg_comp_lst dg2 dgs.
-  Proof.
-    intros ; generalize dependent dgs.
-    inverts H ; intros ; auto ~ ;
-    try(destruct dgs ; inverts H1 ; constructor ; auto ~ ;
-    apply dg_comp_trans with (dg2:=dg1) ; auto ~ ;
-    constructor ; auto ~).
-  Qed.
-
-  Lemma dg_comp_empty_ind:
-    forall (dg1 dg2:dg_t), dg_comp dg1 dg2 -> dg1 = dg_empty -> dg2 = dg_empty.
-  Proof.
-    assert(dg_empty = dg_empty) as Eq1.
-    reflexivity.
-
-    intros ; induction H ; subst ; auto ~ ;
-    specialize (IHdg_comp Eq1) ; subst.
-    apply dg_eabs_empty.
-    apply dg_efix_empty.
-    apply dg_eapp_l_empty.
-    apply dg_eapp_r_empty.
-    apply dg_eref_empty.
-    apply dg_ederef_empty.
-    apply dg_eassign_l_empty.
-    apply dg_eassign_r_empty.
-    apply dg_erun_empty.
-    apply dg_elift_empty.
-  Qed.
-
-  Lemma dg_comp_empty:
-    forall (dg:dg_t), dg_comp dg_empty dg -> dg = dg_empty.
-  Proof.
-     intros ; apply dg_comp_empty_ind with (dg1:=dg_empty) ; auto ~.
-  Qed.
-
-  Lemma valid_dgs_trans:
-    forall (n:nat) (dg1 dg2:dg_t) (dgs:list dg_t),
-    dg_comp dg1 dg2 -> valid_dgs n dg1 dgs -> valid_dgs n dg2 dgs.
-  Proof.
-    unfold valid_dgs ; intros ; repeat(split) ; auto ~ ; intros.
-    destruct H0 ; auto ~.
-    destruct H0 ; destruct H1.
-    apply dg_comp_lst_trans with (dg1:=dg1) ; auto ~.
-    destruct H0 ; destruct H3.
-    specialize (H4 m H1 H2).
-    destruct (n-m) ; subst ; auto ~.
-    apply dg_comp_empty ; auto ~.
-  Qed.
-
-  Lemma valid_dgs_eunbox:
-    forall (n:nat) (dg1 dg2:dg_t) (dgs:list dg_t),
-    valid_dgs (S n) dg1 (dg2::dgs) -> valid_dgs n dg2 dgs.
-  Proof.
-    unfold valid_dgs ; intros ; repeat(split) ; auto ~ ; intros.
-    destruct H ; simpl in *|-* ; omega.
-    destruct H ; destruct H0 ; inverts H0 ; auto ~.
-    destruct H ; destruct H2.
-    assert(m <= S n) as Eq1.
-    omega.
-    specialize (H3 m Eq1 H1).
-    rewrite <- minus_Sn_m in H3 ; auto ~.
-    destruct (n - m) ; auto ~.
-  Qed.
-
-  Lemma dg_nth_empty_lst:
-    forall (n:nat) (dg:dg_t) (dgs:list dg_t),
-    length dgs >= n ->
-    dg_comp_lst dg dgs ->
-    nth n (dg::dgs) dg_empty = dg_empty -> 
-    dg_nth_empty dg n.
-  Proof.
-    induction n ; simpl ; intros.
-    subst ; constructor.
-    destruct dgs.
-    exfalso ; simpl in *|-* ; omega.
-    simpl in H ; apply le_S_n in H.
-    inverts H0.
-    specialize (IHn d dgs H H4).
-    apply DgNthEmptyS with (dg1:=d) ; auto ~.
-  Qed.
-
-  Lemma valid_dgs_ebox:
-    forall (n:nat) (dg:dg_t) (dgs:list dg_t),
-    valid_dgs n dg dgs -> valid_dgs (S n) (dg_ebox dg) (dg :: dgs).
-  Proof.
-    unfold valid_dgs ; intros ; repeat(split) ; auto ~ ; intros.
-    simpl ; omega.
-    destruct H ; destruct H0 ; constructor ; auto ~ ; repeat(constructor).
-    case_beq_nat m (S n).
-    rewrite minus_diag.
-    apply dg_ebox_empty with (n:=n) ; auto ~.
-    destruct H ; destruct H2.
-    assert(0 <= n) as Eq1.
-    omega.
-    specialize (H3 0 Eq1 R.rho_O).
-    apply dg_nth_empty_lst with (dgs:=dgs) ; auto ~.
-    rewrite <- minus_n_O in H3 ; destruct n ; auto ~.
-    assert(m <= n) as Eq1.
-    omega.
-    rewrite <- minus_Sn_m ; auto ~.
-    destruct H ; destruct H2 ; specialize (H3 m Eq1 H1).
-    destruct (n-m) ; auto ~.
-  Qed.
-
-  Lemma dg_valid_dgs_nil: valid_dgs 0 dg_empty nil.
-  Proof.
-    repeat(split) ; intros ; auto ~.
-    constructor.
-  Qed.
-
-  Lemma dg_valid_dgs_empty: 
-    forall (dg:dg_t) (dgs:list dg_t),
-    valid_dgs 0 dg dgs -> dg = dg_empty.
-  Proof.
-    intros ; destruct H.
-    destruct H0.
-    specialize (H1 0) ; simpl in *|-*.
-    apply H1 ; auto.
-    apply R.rho_O.
-  Qed.
-  
-End DGValid.
+Require Import "Calculus/MultiStaged/DataGathering".
 
 Module ContextProperties (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) 
-    (M:Monad R S T) (MP:MonadStepProperties R S T M)
-    (TrSP:TranslationStaticProperties R S T M MP.Translation).
+    (T:StagedCalculus) (DG:DataGathering R S) 
+    (DGP:DataGatheringPredicates R S DG)
+    (DGR:DataGatheringRequirements R S DG DGP)
+    (M:Monad R S T DG) (MP:MonadStepProperties R S T DG DGP DGR M)
+    (TrSP:TranslationStaticProperties R S T DG DGP DGR M MP.Translation).
 
   Module TranslationStaticProperties := TrSP.
   Module StaticProperties := TrSP.ContextStaticProperties.
@@ -181,6 +34,7 @@ Module ContextProperties (R:Replacement) (S:ReplacementCalculus R)
   Import StaticProperties.
   Import MP.Translation.
   Import M.
+  Import DG.
   Import Context.
 
   Lemma fill_ssubst:
@@ -222,19 +76,22 @@ Module ContextProperties (R:Replacement) (S:ReplacementCalculus R)
 End ContextProperties.
 
 Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) (M:Monad R S T) (MP:MonadStepProperties R S T M). 
+    (T:StagedCalculus) (DG:DataGathering R S) 
+    (DGP:DataGatheringPredicates R S DG)
+    (DGR:DataGatheringRequirements R S DG DGP)
+    (M:Monad R S T DG) (MP:MonadStepProperties R S T DG DGP DGR M). 
 
   Module Translation := MP.Translation.
-  Module TrSP := TranslationStaticPropertiesImpl R S T M MP.Translation.
-  Module ContextProperties := ContextProperties R S T M MP TrSP.
+  Module TrSP := TranslationStaticPropertiesImpl R S T DG DGP DGR M MP.Translation.
+  Module ContextProperties := ContextProperties R S T DG DGP DGR M MP TrSP.
   Module StaticProperties := TrSP.
   Module CalculusProperties := CalculusProperties R S.
   Module BindingSetProperties := BindingSetProperties R S.CRaw.BindingSet.
-  Module AdminSubstProperties := AdminSubstProperties R S T M MP TrSP.
+  Module AdminSubstProperties := AdminSubstProperties R S T DG DGP DGR M MP TrSP.
   Module EqSubstProperties3 := AdminSubstProperties.E3.
   Module EqSubstProperties2 := AdminSubstProperties.E2.
   Module EqSubstProperties := AdminSubstProperties.E.
-  Module DGValid := DGValid R S T M MP.
+  Module DGValid := DataGatheringProperties R S DG DGP DGR.
   
   Import EqSubstProperties3.
   Import EqSubstProperties2.
@@ -244,6 +101,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
   Import Translation.
   Import S.
   Import M.
+  Import DG.
 
   Lemma ssubst_fill_hole:
     forall (h:var) (e v:T.expr) (c:Context.t) (dg:dg_t) (n:nat),
@@ -868,12 +726,10 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       specialize (admin_stack_ssubst_merge_2 bs (dg_eapp_l dg) (dg_eapp_r dg) dgs dgs e1_1 e1_2) ; intros AdminSsubst2.
       destruct (trans e1_1).
       cases (trans e1_2 bs (dg_eapp_r dg) dgs) as e eqn:TransE2.
-      (*destruct (trans e1_2).*)
       destruct t.
  
         (* Case EApp e1 e2, n = 0, e1 -> e1' *)
         destruct t0 ; [|exfalso ; generalize DpthLength3 DpthLength4 H ; clear ; intros ; simpl in *|-* ; omega] ; simpl.
-        (*rewrite_eq E.Translation.phi phi ; rewrite_eq E.Translation.trans trans ; *)
         unfold trans_expr in IHe1_1.
         assert(dg = dg_empty) as Eq1.
         rewrite DpthLength3 in *|-* ; simpl in DGProp.
@@ -881,7 +737,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         assert(0 <= 0) as Eq3 ; [omega|].
         specialize (H4 0 Eq3 R.rho_O).
         simpl in H4 ; subst ; auto ~.
-        subst ; rewrite MP.dg_eapp_l_empty in *|-*.
+        subst ; rewrite DGR.dg_eapp_l_empty in *|-*.
         assert(depth e3 = 0) as DepthE3.
         destruct Dpth1 ; rewrite DpthLength3 in *|-*.
         simpl in H2 ; omega.
@@ -899,7 +755,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         rewrite H4.
         remember (S.CRaw.svalueb 0 e3) ; destruct b ; symmetry in Heqb.
         apply CalculusProperties.svalueb_iff in Heqb.
-        rewrite MP.dg_eapp_r_empty in *|-*.
+        rewrite DGR.dg_eapp_r_empty in *|-*.
         apply Rel_step with (e1:=bind dg_empty e0
         (fun v2 => cast_eapp dg_empty (phi e3 bs dg_empty nil) v2)).
         specialize (MP.astep_bind_1 e3 e e2 bs (trans_mem M1) (trans_mem M2)
@@ -910,7 +766,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         subst ; auto ~.
         rewrite <- TransE2 ; constructor.
         
-        rewrite MP.dg_eapp_r_empty in *|-* ; rewrite <- TransE2.
+        rewrite DGR.dg_eapp_r_empty in *|-* ; rewrite <- TransE2.
         apply Rel_step with (e1:=bind dg_empty e2 (fun v1 => bind dg_empty e0 
           (fun v2 => cast_eapp dg_empty v1 v2))).
         apply MP.astep_bind_app ; auto ~.
@@ -1153,10 +1009,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
             exists x0.
             destruct H4 ; destruct H5 ; destruct H6 ; 
             destruct H7 ; subst ; repeat(split) ; auto ~.
-            (*rewrite trans_memory_depth_0 with (bs2:=bs) in H4 ; auto ~.
-            rewrite trans_memory_depth_0 with (bs1:=(map_iter_booker e1_2 bs 0)) (bs2:=bs) in H4 ; auto ~.
-            *)
-            (*tauto ~. *)
             rewrite H6 ; rewrite H7 ; auto ~.
             omega.
             intros ; rewrite H7 ; auto ~.
@@ -1194,7 +1046,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           simpl in Merge1 ; destruct t0 ; inversion Merge1.
           cases (Context.shift (t::t1)) as t eqn:Merge2.
           cases (Context.shift t0) as t eqn:Merge3.
-          (* rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi. *)
           destruct t4 ; [exfalso |] ; auto ~ ; simpl.
           destruct p.
           specialize (svalue_phi e3 (map_iter_booker e1_2 bs 0) (dg_eapp_l dg) dgs) ; 
@@ -1397,7 +1248,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         rewrite trans_depth_0_2 with (bs1:=map_iter_booker e0 bs 0) (bs2:=map_iter_booker e1_2 bs 0) (dgs2:=nil) in *|-* ;
         [|generalize H ; clear ; intros ; auto ~].
         destruct (trans e1_1).
-        (*rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi.*)
         destruct t ; [|exfalso ; simpl in *|-* ; omega] ; simpl.
         simpl in *|-*.
         rewrite DpthLength4 in *|-*.
@@ -1405,7 +1255,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         apply CalculusProperties.svalueb_iff ; auto ~.
         rewrite SValuebTrue.
         unfold trans_expr in IHe1_2.
-        rewrite <- MP.dg_eapp_r_empty in IHe1_2.
+        rewrite <- DGR.dg_eapp_r_empty in IHe1_2.
         destruct (trans e0).
         inversion IHe1_2 ; subst.
         apply Rel_step with (e1:=bind dg_empty e3
@@ -1420,7 +1270,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           e1_2 e0 M1 M2 MemDepth0 H6 e1_1 bs 0) ; intros BKTrans.
         specialize (eq_ssubst_gt e1_1 (map_iter_booker e1_2 bs 0) (dg_eapp_l dg) dgs) ; intros EqSsubstEq.
         specialize (AdminSsubst e0).
-        (* rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi. *)
         rewrite plus_0_r in *|-*.
         assert(depth e1_1 < depth e1_2) as D1.
         simpl in DpthLength4 ; rewrite DpthLength4 in H2.
@@ -1579,15 +1428,11 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         assert(0 <= 0) as Eq3 ; [omega|].
         specialize (H4 0 Eq3 R.rho_O).
         simpl in H4 ; subst ; reflexivity.
-      (*rewrite_eq MP.Translation.trans trans ; 
-      rewrite_eq MP.Translation.phi phi ; *)
       simpl in SValuePhi1.
       specialize (trans_ssubst_source e e1_2 bs dg_empty nil x StageSet.empty 0) ; intros TSS.
-      rewrite trans_depth_0_2 with (bs2:=(map_iter_booker e1_2 bs 0)) (dgs2:=dgs) in TSS ; 
-      (*rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ; *) auto ~.
-      rewrite MP.dg_eapp_r_empty, MP.dg_eapp_l_empty, MP.dg_eabs_empty in *|-*.
+      rewrite trans_depth_0_2 with (bs2:=(map_iter_booker e1_2 bs 0)) (dgs2:=dgs) in TSS ; auto ~.
+      rewrite DGR.dg_eapp_r_empty, DGR.dg_eapp_l_empty, DGR.dg_eabs_empty in *|-*.
       cases (trans e (map_iter_booker e1_2 bs 0) dg_empty dgs) as e eqn:TransE1.
-      (*destruct (trans e).*)
       rewrite H in DpthLength1 ; destruct t ;
       [clear DpthLength1 |inversion DpthLength1].
       specialize (depth_length e1_2 bs dg_empty dgs) ; intros DpthLength2.
@@ -1604,7 +1449,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       destruct TSS ; auto ~.
       apply DGValid.dg_valid_dgs_nil.
       unfold trans_expr ; 
-      (*rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ; *) 
       rewrite H2 ; auto ~.
       assert(e0 = trans_expr e nil dg_empty nil) ; [|subst].
       unfold trans_expr ; rewrite trans_depth_0_2 with (bs2:=nil) (dgs2:=nil) in TransE1 ; auto ~ ; try(omega).
@@ -1627,17 +1471,15 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         assert(0 <= 0) as Eq3 ; [omega|].
         specialize (H4 0 Eq3 R.rho_O).
         simpl in H4 ; subst ; reflexivity.
-      (*rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ; *) simpl trans in SValuePhi1 ;
+      simpl trans in SValuePhi1 ;
       specialize (trans_ssubst_source e e1_2 bs dg_empty nil x StageSet.empty 0) ; intros Ssubst2.
       specialize (trans_ssubst_source (S.ssubst 0 StageSet.empty x e e1_2) 
         (CRaw.EFix f x e) bs dg_empty nil f StageSet.empty 0) ; intros Ssubst1.
       simpl in Ssubst1.
       rewrite trans_depth_0_2 with (e:=e) (bs2:=(map_iter_booker e1_2 bs 0)) (dgs2:=dgs) in Ssubst1 ; auto ~.
-      rewrite trans_depth_0_2 with (bs2:=(map_iter_booker e1_2 bs 0)) (dgs2:=dgs) in Ssubst2 ; 
-      (* rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ; *) auto ~.
-      rewrite MP.dg_eapp_r_empty, MP.dg_eapp_l_empty, MP.dg_efix_empty in *|-*.
+      rewrite trans_depth_0_2 with (bs2:=(map_iter_booker e1_2 bs 0)) (dgs2:=dgs) in Ssubst2 ; auto ~.
+      rewrite DGR.dg_eapp_r_empty, DGR.dg_eapp_l_empty, DGR.dg_efix_empty in *|-*.
       cases (trans e (map_iter_booker e1_2 bs 0) dg_empty dgs) as e eqn:TransE1.
-      (*destruct (trans e).*)
       rewrite H in DpthLength1 ; destruct t ;
       [clear DpthLength1 |inversion DpthLength1].
       specialize (depth_length e1_2 bs dg_empty dgs) ; intros DpthLength2.
@@ -1694,7 +1536,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       destruct DGProp ; destruct H0.
       specialize (H2 0) ; simpl in H2 ; apply H2 ; try(omega).
       apply R.rho_O.
-      rewrite MP.dg_eref_empty.
+      rewrite DGR.dg_eref_empty.
       destruct (trans e3).
       constructor ; [auto ~ | intros ; constructor].
 
@@ -1740,7 +1582,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       specialize (H3 0) ; simpl in H3 ; apply H3 ; try(omega).
       apply R.rho_O.
       apply Rel_step with (e1:=ret dg_empty (cast_eloc dg_empty (CRaw.Memory.fresh M1))).
-      rewrite MP.dg_eref_empty.
+      rewrite DGR.dg_eref_empty.
       apply MP.astep_bind_2 ; auto ~.
       rewrite phi_depth_0_2 with (bs2:=nil) (dgs2:=nil) ; auto ~.
       unfold trans_mem ; rewrite trans_mem_set ; auto ~.
@@ -1766,7 +1608,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       apply DGValid.dg_valid_dgs_empty in DGProp ; auto.
       apply Rel_step with (e1:=bind dg_empty e0 (fun v => cast_ederef dg_empty v)) ; auto ~.
       apply MP.astep_bind_ederef ; assumption.
-      rewrite MP.dg_ederef_empty.
+      rewrite DGR.dg_ederef_empty.
       destruct (trans e3).
       constructor ; [auto ~ | intros ; constructor].
 
@@ -1804,20 +1646,17 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       simpl.
       assert(dg = dg_empty) ; [|subst].
       apply DGValid.dg_valid_dgs_empty in DGProp ; auto.
-      rewrite MP.dg_ederef_empty in *|-*.
+      rewrite DGR.dg_ederef_empty in *|-*.
       apply Rel_step with (e1:=trans_expr (CRaw.Memory.get l M2) bs dg_empty nil).
       assert(phi (CRaw.ELoc l) bs dg_empty nil = (cast_eloc dg_empty l)) as Phi1.
       reflexivity.
       rewrite <- Phi1.
       apply MP.astep_bind_2 with (v:=CRaw.ELoc l) (bs:=bs) ; try(constructor).
       rewrite svalue_phi.
-      (*rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ;*)
       rewrite trans_mem_get ; auto ~.
       simpl.
       rewrite trans_memory_depth_0 with (bs2:=nil) ; auto.
       apply MP.astep_ederef ; auto ~.
-      (*rewrite trans_mem_length ; auto ~.*)
-      (* rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ; *)
       apply CalculusProperties.memory_svalue_get ; auto ~.
       simpl ; constructor.
 
@@ -1865,7 +1704,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         assert(0 <= 0) as Eq3 ; [omega|].
         specialize (H4 0 Eq3 R.rho_O).
         simpl in H4 ; subst ; auto ~.
-        subst ; rewrite MP.dg_eassign_l_empty in *|-*.
+        subst ; rewrite DGR.dg_eassign_l_empty in *|-*.
         assert(depth e3 = 0) as DepthE3.
         destruct Dpth1 ; rewrite DpthLength3 in *|-*.
         simpl in H2 ; omega.
@@ -1883,7 +1722,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         rewrite H4.
         remember (S.CRaw.svalueb 0 e3) ; destruct b ; symmetry in Heqb.
         apply CalculusProperties.svalueb_iff in Heqb.
-        rewrite MP.dg_eassign_r_empty in *|-*.
+        rewrite DGR.dg_eassign_r_empty in *|-*.
         apply Rel_step with (e1:=bind dg_empty e0
         (fun v2 => cast_eassign dg_empty (phi e3 bs dg_empty nil) v2)).
         specialize (MP.astep_bind_1 e3 e e2 bs (trans_mem M1) (trans_mem M2)
@@ -1894,7 +1733,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         subst ; auto ~.
         rewrite <- TransE2 ; constructor.
         
-        rewrite MP.dg_eassign_r_empty in *|-* ; rewrite <- TransE2.
+        rewrite DGR.dg_eassign_r_empty in *|-* ; rewrite <- TransE2.
         apply Rel_step with (e1:=bind dg_empty e2 (fun v1 => bind dg_empty e0 
           (fun v2 => cast_eassign dg_empty v1 v2))).
         apply MP.astep_bind_assign ; auto ~.
@@ -2383,7 +2222,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         apply CalculusProperties.svalueb_iff ; auto ~.
         rewrite SValuebTrue.
         unfold trans_expr in IHe1_2.
-        rewrite <- MP.dg_eassign_r_empty in IHe1_2.
+        rewrite <- DGR.dg_eassign_r_empty in IHe1_2.
         destruct (trans e0).
         inversion IHe1_2 ; subst.
         apply Rel_step with (e1:=bind dg_empty e3
@@ -2553,7 +2392,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       rewrite H in *|-*.
       assert(dg = dg_empty) ; [|subst].
       apply DGValid.dg_valid_dgs_empty in DGProp ; auto.
-      rewrite MP.dg_eassign_r_empty in *|-*.
+      rewrite DGR.dg_eassign_r_empty in *|-*.
       destruct (trans e2).
       destruct t ;
       [|simpl in DpthLength2 ; inversion DpthLength2] ; clear DpthLength2.
@@ -2561,7 +2400,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       rewrite phi_depth_0_2 with (bs2:=nil) (dgs2:=nil) ; auto ~ ; try(omega).
       apply Rel_step with (e1:=ret dg_empty (phi e2 nil dg_empty nil)).
       apply MP.astep_bind_2 ; auto ~.
-      rewrite MP.dg_eassign_l_empty in *|-*.
+      rewrite DGR.dg_eassign_l_empty in *|-*.
       apply MP.astep_assign_loc ; auto ~.
       rewrite trans_depth_0 with (bs2:=nil) ; auto ; try(omega).
       rewrite <- svalue_phi ; auto.
@@ -2690,7 +2529,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
                (cast_eabs dg_empty (cast_var (hole_var v))
                (Context.fill dg_empty t (ret dg_empty (cast_ebox dg_empty e2)))) v0)).
             assert(cast_eabs dg_empty = cast_eabs (dg_eapp_l dg_empty)) as Eq1.
-              rewrite MP.dg_eapp_l_empty ; reflexivity.
+              rewrite DGR.dg_eapp_l_empty ; reflexivity.
             rewrite Eq1 ; clear Eq1.
             apply MP.astep_bind_app_eabs.
             assumption.
@@ -2741,8 +2580,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           destruct t1 ; [|destruct (Context.shift (t1 :: t2))] ; 
           inversion Shift1 ; subst.
           rewrite DpthLength in *|-* ; simpl in *|-*.
-          (*rewrite_eq E.Translation.Context.fill Context.fill ;
-          rewrite_eq E.Translation.booker booker.*)
           apply FillSubst ; simpl ; auto ~.
           clear ; omega.
 
@@ -2797,15 +2634,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           rewrite DpthLength in *|-* ; simpl in *|- * ; 
           generalize H3 ; clear ; intros ; omega.
 
-          (*rewrite trans_memory_depth_0 with (bs2:=0::bs) ; auto ~.
-          rewrite trans_memory_depth_0 with (bs1:=bs) (bs2:=0::bs) ; auto ~.
-          apply CalculusProperties.depth_sstep_eq in H1 ; auto ~.
-          destruct H1 ; assumption.
-          intros ; auto ~.
-          apply H5 ; auto ~.
-          rewrite DpthLength in *|-* ; simpl in *|- * ; 
-          generalize H3 ; clear ; intros ; omega.*)
-
     (* Case EUnbox *)
     destruct bs ; [inversion BSLength|] ; simpl.
     destruct dgs ; [ destruct DGProp ;
@@ -2816,38 +2644,37 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
     specialize (booker_length e1 bs d dgs) ; intros BKLength1.
     specialize (IHe1 bs d dgs).
     cases (trans e1 bs d dgs) as e eqn:TransE1.
+    assert(DGValid.valid_dgs (depth e1) d dgs) as DGValid1.
+        apply DGValid.valid_dgs_eunbox in DGProp ; auto.
     inversion Step ; subst.
-
-      (* Proven until now *)
 
       (* Case EUnbox -> EUnbox *)
       apply le_S_n in BSLength.
-      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
-      specialize (depth_length e3 bs) ; intros DpthLength2.
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1 DGValid1).
+      specialize (depth_length e3 bs d dgs) ; intros DpthLength2.
       specialize (CalculusProperties.depth_sstep_eq M1 e1 M2 e3 MemDepth0 H1) ; 
       intros DpthStep ; simpl.
       destruct t.
 
         (* Case n = 1 *)
         unfold trans_expr in *|-* ;
-        rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ;
         simpl in *|-*.
-        cases (trans e3 bs) as e eqn:TransE3.
+        rewrite DpthLength1 in *|-*.
+        assert(d = dg_empty) ; [|subst].
+          apply DGValid.dg_valid_dgs_empty in DGValid1 ; auto.
+        cases (trans e3 bs dg_empty dgs) as e eqn:TransE3.
         exists e1.
-        rewrite trans_depth_0 with (bs2:=bs) ; auto ~.
+        rewrite trans_depth_0_2 with (bs2:=0::nil) (dgs2:=nil) in TransE1 ; auto ~.
         rewrite <- TransE1.
         split ; auto ~.
         right.
         exists e3.
         destruct DpthStep.
-        rewrite DpthLength1 in H ; apply le_n_0_eq in H.
-        rewrite trans_depth_0 with (bs2:=bs) ; auto ~.
-        rewrite <- TransE3.
-        rewrite trans_memory_depth_0 with (bs2:=bs) ; auto ~.
-        rewrite trans_memory_depth_0 with (bs1:=n::bs) (bs2:=bs) ; auto ~.
+        apply le_n_0_eq in H.
+        rewrite trans_depth_0_2 with (bs2:=0::nil) (dgs2:=nil) in TransE3, IHe1 ; auto ~.
+        rewrite <- TransE3 in IHe1 |- *.
         repeat(split ; auto ~).
         intros.
-        rewrite DpthLength1 in H2.
         destruct m ; auto ~.
         destruct m ; auto ~.
         exfalso ; generalize H2 ; clear ; intros ; omega.
@@ -2855,40 +2682,39 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         inversion DpthLength2 ; auto ~.
 
         (* Case n > 1 *)
-        rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ;
         cases (Context.shift (t :: t0)) as t eqn:Shift1.
         destruct t1 ; simpl in *|-*.
         assumption.
-        destruct p ; cases (trans e3 bs) as e eqn:TransE3.
+        destruct p ; cases (trans e3 bs d dgs) as e eqn:TransE3.
         destruct IHe1.
         exists x.
         destruct H ; split ; auto ~.
         destruct H0 ; [left | right] ; destruct H0.
 
           (* Case svalue *)
-          destruct H2 ; destruct H3 ; destruct H4.
+          destruct H2 ; destruct H3 ; destruct H4 ; destruct H5.
           repeat(split ; auto ~).
           destruct bs.
           rewrite DpthLength1 in BSLength ; inversion BSLength.
           destruct t1.
-          destruct t2 ; simpl in *|-* ; inversion H3 ; subst ;
-          constructor ; rewrite BKLength1 in H4 ; simpl in H4.
+          destruct t2 ; simpl in *|-* ; inversion H4 ; subst ;
+          constructor ; rewrite BKLength1 in H5 ; simpl in H5.
           assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
           simpl ; rewrite plus_0_r ; reflexivity.
           simpl tl in Tmp1.
           rewrite Tmp1.
           rewrite Tmp1.
           apply ContextStaticProperties.CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
-            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil) dg_empty nil))
             (b1:=n0) (b2:=n) ; auto ~.
           unfold admin_ssubst ; intros ; simpl.
           rewrite DpthLength1 ; simpl.
-          rewrite DpthLength1 in H4 ; simpl in H4.
-          unfold admin_ssubst in H4 ; simpl in H4.
+          rewrite DpthLength1 in H5 ; simpl in H5.
+          unfold admin_ssubst in H5 ; simpl in H5.
           destruct t0.
           simpl in *|-*.
-          apply H4 ; auto ~.
-          rewrite DpthLength1 in H2 ; simpl in H2 ; auto ~.
+          apply H5 ; auto ~.
+          rewrite DpthLength1 in H3 ; simpl in H2 ; auto ~.
           simpl in *|-*.
           destruct t1.
           inversion Shift1.
@@ -2905,13 +2731,13 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           rewrite Tmp1.
           rewrite Tmp1.
           apply ContextStaticProperties.CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
-            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil) dg_empty nil))
             (b1:=n0) (b2:=n) ; auto ~.
           constructor ; assumption.
 
           destruct t0.
           inversion Shift1 ; subst.
-          simpl in *|-* ; inversion H3.
+          simpl in *|-* ; inversion H4.
           constructor ; auto ~.
           assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
           simpl ; rewrite plus_0_r ; reflexivity.
@@ -2919,7 +2745,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           rewrite Tmp1.
           rewrite Tmp1.
           apply ContextStaticProperties.CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
-            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil) dg_empty nil))
             (b1:=n0) (b2:=n) ; auto ~.
           destruct t0 ; [inversion Shift1 |].
           destruct (Context.shift (t0 :: t2)) ; inversion Shift1 ; subst.
@@ -2929,7 +2755,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
 
           cases (Context.unshift t2 (p :: t1)) as t eqn:Shift2.
           destruct t2 ; simpl in Shift2 ; inversion Shift2.
-          inversion H3 ; subst.
+          inversion H4 ; subst.
           constructor ; auto ~.
           assert(forall e:T.expr, (e,n) = (e, n + (length (tl (0::nil)))))%nat as Tmp1.
           simpl ; rewrite plus_0_r ; reflexivity.
@@ -2938,16 +2764,16 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           rewrite Tmp1.
           
           apply ContextStaticProperties.CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
-            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil) dg_empty nil))
             (b1:=n0) (b2:=n) ; auto ~.
-          rewrite BKLength1 in H4.
+          rewrite BKLength1 in H5.
           simpl in *|-*.
-          rewrite DpthLength1 in H4. 
+          rewrite DpthLength1 in H5. 
           rewrite DpthLength1 ; 
-          unfold admin_ssubst in H4 ; unfold admin_ssubst ; intros ;
+          unfold admin_ssubst in H5 ; unfold admin_ssubst ; intros ;
           simpl in *|-*.
           destruct t0 ; simpl in *|-*.
-          apply H4 ; auto ~.
+          apply H5 ; auto ~.
           assert(t4 = t).
           destruct t3 ; simpl.
           inversion Shift1 ; subst.
@@ -2967,9 +2793,9 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           rewrite Tmp1.
           
           apply ContextStaticProperties.CongrCSubst_cons with (u1:=e) (u2:=e2) (c1:=nil)  
-            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil)))
+            (c2:=nil) (n:=depth e1) (v:=(phi x (0 :: nil) dg_empty nil))
             (b1:=n0) (b2:=n) ; auto ~.
-          rewrite BKLength1 in H4.
+          rewrite BKLength1 in H5.
           simpl in *|-*.
           assert(t4 = t).
           destruct t0 ; simpl.
@@ -2993,14 +2819,14 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           assert(ltb n (n+1) = true).
           clear ; unfold ltb ;
           apply leb_iff ; omega.
-          rewrite H8, andb_true_l.
+          rewrite H9, andb_true_l.
           rewrite BindingSetProperties.rho_false_mem ; auto ~.
           constructor.
           rewrite StageSetProperties.remove_mem_1 ; auto ~.
           apply StageSetProperties.add_mem_3.
           assert(beq_nat (hole_var v) (hole_var n) = false).
           apply beq_nat_false_iff ; unfold hole_var ; omega.
-          rewrite H8, andb_false_l.
+          rewrite H9, andb_false_l.
           constructor.
 
           (* patch *)
@@ -3011,9 +2837,6 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
           destruct H0 ; destruct H2 ; destruct H3 ; 
           destruct H4 ; subst ; auto ~.
           repeat(split ; auto ~).
-          rewrite trans_memory_depth_0 with (bs2:=bs) ; auto ~.
-          destruct DpthStep.
-          rewrite trans_memory_depth_0 with (bs1:=n::bs) (bs2:=bs) ; auto ~.
           intros.
           destruct m ; auto ~.
           rewrite H4 ; simpl ; auto ~ ; generalize H ; clear ; intros ; omega.
@@ -3024,54 +2847,79 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
       specialize (CalculusProperties.depth_svalue e2 0) ; intros.
       destruct H0 ; specialize (H2 H1).
       apply le_S_n, le_n_0_eq in H2.
+      assert(d=dg_empty) ; [|subst].
+        rewrite <- H in DGValid1.
+        apply DGValid.dg_valid_dgs_empty in DGValid1 ; auto.
       rewrite trans_depth_0 with (bs2:=0::bs) ; auto ~.
-      specialize (depth_length e2 (0::bs)) ; intros DpthLength3.
-      assert((let (e8, _) := trans e2 (0::bs) in e8) = trans_expr e2 (0::bs)) as TransExpr.
+      specialize (depth_length e2 (0::bs) dg (dg_empty::dgs)) ; intros DpthLength3.
+      assert((let (e8, _) := trans e2 (0::bs) dg (dg_empty::dgs) in e8) = trans_expr e2 (0::bs) dg (dg_empty::dgs)) as TransExpr.
       unfold trans_expr ; reflexivity.
-      cases (trans e2 (0::bs)) as e eqn:TransE3.
+      cases (trans e2 (0::bs) dg (dg_empty::dgs)) as e eqn:TransE3.
       rewrite <- H2 in DpthLength3 ; destruct t ; [|inversion DpthLength3].
       exists (CRaw.EBox e2).
       unfold trans_expr ; simpl.
-      rewrite trans_depth_0 with (bs2:=0::bs) ; auto ~.
-      rewrite <- TransE3.
-      inversion TransE1 ; subst.
-      split ; auto ~ ; left.
+      
+      rewrite trans_depth_0_2 with (bs2:=0::bs) (dgs2:=dg_empty::dgs) ; auto ~.
+      
+      split.
+      destruct (trans e2 (0 :: bs) (dg_ebox dg_empty) (dg_empty :: dgs)) ;
+      destruct t ; inverts TransE1 ;  auto.
+
+      left.
       repeat(split ; auto ~).
       constructor ; auto ~.
       constructor.
 
+      rewrite MP.dg_svalue_trans with (dg:=dg) ; auto.
+      destruct (trans e2 (0 :: bs) dg (dg_empty :: dgs)).
       unfold admin_ssubst ; intros.
       rewrite MP.ssubst_eunbox.
       rewrite MP.ssubst_evar.
       rewrite <- beq_nat_refl, andb_true_l ; simpl.
       rewrite BindingSetProperties.rho_O_true ; auto ~.
-      constructor.
-      apply H1.
+      inverts TransE3.
+      assert(e1 = trans_expr e2 (0 :: nil) dg (dg_empty :: dgs)).
+        subst ; unfold trans_expr in *|-*.
+        rewrite trans_depth_0_2 with (bs2:=0::nil) (dgs2:=dg_empty::dgs) ; auto ~.
+      clear H5 ; subst.
+      constructor ; auto.
+      rewrite <- H2 in DGProp ; simpl in DGProp ; auto.
       rewrite StageSetProperties.remove_mem_3 ; auto ~.
       specialize (StageSetProperties.ub_pred ss 1) ; intros.
       simpl in H5 ; rewrite H4 in H5 ; symmetry in H5 ; auto ~.
+      destruct DGProp.
+      destruct H4.
+      inverts H4 ; auto.
 
       (* patch *)
       intros VL ; inversion VL.
 
     (* Case ERun *)
-    specialize (depth_length e1 bs) ; intros DpthLength.
+    specialize (depth_length e1 bs (dg_erun dg) dgs) ; intros DpthLength.
     inversion Step ; subst.
-    specialize (IHe1 bs).
-    destruct (trans e1).
+    specialize (IHe1 bs (dg_erun dg) dgs).
+    destruct (trans e1 bs (dg_erun dg) dgs).
+    assert(DGValid.valid_dgs (depth e1) (dg_erun dg) dgs) as Valid1.
+    apply DGValid.valid_dgs_trans with (dg1:=dg) ; try(assumption) ; repeat(constructor).
     destruct t ; intros.
 
       (* SubCase ERun, n=0, e -> e' *)
-      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1 Valid1).
       unfold trans_expr in *|-* ; simpl in *|-*.
+      assert(dg=dg_empty) ; [|subst].
+        rewrite DpthLength in DGProp.
+        destruct DGProp ; destruct H0.
+        specialize (H2 0) ; simpl in H2 ; apply H2 ; try(omega).
+        apply R.rho_O.
       inversion IHe1 ; subst.
-      apply Rel_step with (e1:=bind e0 (fun v => cast_erun v)) ; auto ~.
+      apply Rel_step with (e1:=bind dg_empty e0 (fun v => cast_erun dg_empty v)) ; auto ~.
       apply MP.astep_bind_erun ; assumption.
+      rewrite DGR.dg_erun_empty.
       destruct (trans e3).
       constructor ; [auto ~ | intros ; constructor].
 
       (* SubCase ERun, n>0 *)
-      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1 Valid1).
       destruct (Context.shift (t :: t0)).
       destruct t1 ; simpl in *|-* ; auto ~.
       destruct p ; destruct (trans e3) ; intros.
@@ -3084,7 +2932,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         destruct H2 ; destruct H3 ; destruct H4 ; subst.
         repeat(split ; auto ~).
         unfold admin_ssubst ; intros.
-        rewrite MP.ssubst_bind with (f2:=fun v0 => cast_erun v0).
+        rewrite MP.ssubst_bind with (f2:=fun v0 => cast_erun dg v0).
         constructor ; auto ~.
         intros ; constructor.
         intros.
@@ -3101,54 +2949,67 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         rewrite H4 ; auto ~.
 
       (* SubCase ERun, n=0, svalue 0 e *)
-      rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ;
       simpl in *|-*.
-      specialize (depth_length e2 (0::bs)) ; intros DpthLength2.
-      specialize (length_svalue e2 (0::bs)) ; intros SValueLength.
-      specialize (svalue_phi (CRaw.EBox e2) bs) ; intros SValuePhi.
+      specialize (depth_length e2 (0::bs) (dg_ebox (dg_erun dg)) (dg_erun dg :: dgs)) ; intros DpthLength2.
+      specialize (length_svalue e2 (0::bs) 0 (dg_ebox (dg_erun dg)) (dg_erun dg :: dgs)) ; intros SValueLength.
+      specialize (svalue_phi (CRaw.EBox e2) bs (dg_erun dg) dgs) ; intros SValuePhi.
       unfold trans_expr in SValuePhi ; simpl trans_expr in *|-*.
-      rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ;
       simpl trans in *|-*.
-      destruct (trans e2 (0::bs)).
+      destruct (trans e2 (0::bs) (dg_ebox (dg_erun dg)) (dg_erun dg :: dgs)).
       rewrite <- H in DpthLength ; destruct t ; simpl.
       clear IHe1 ; subst.
-      apply Rel_step with (e1:=trans_expr e2 bs).
+      assert(dg=dg_empty) ; [|subst].
+        rewrite DpthLength2 in DGProp.
+        destruct DGProp ; destruct H2.
+        specialize (H3 0) ; simpl in H3 ; apply H3 ; try(omega).
+        apply R.rho_O.
+      apply Rel_step with (e1:=trans_expr e2 bs dg_empty nil).
       assert(svalue 0 (CRaw.EBox e2)) as SValue0Box.
       constructor ; apply SValueLength ; auto ~.
       rewrite SValuePhi ; auto ~.
+      rewrite DGR.dg_erun_empty in *|-*.
       apply MP.astep_bind_2 ; auto ~.
       unfold trans_expr.
-      specialize (MP.astep_erun (trans_mem M2 bs) e2 bs) ; intros AStepERun.
-      assert(phi (CRaw.EBox e2) bs = 
-        let (e0,_) := trans e2 (0::bs) in M.cast_ebox e0).
+      specialize (MP.astep_erun M2 e2) ; intros AStepERun.
+      assert(phi (CRaw.EBox e2) bs dg_empty dgs = 
+        let (e0,_) := trans e2 (0::bs) (dg_ebox dg_empty) (dg_empty::dgs) in 
+        M.cast_ebox dg_empty e0).
         reflexivity.
-      rewrite trans_depth_0 with (bs2:=bs) in H0 ; auto ~.
-      unfold trans_expr in AStepERun.
-      destruct (trans e2 bs).
-      rewrite H0.
-      apply AStepERun ; auto ~.
+      unfold trans_expr in AStepERun ; simpl in *|-*.
+      rewrite trans_depth_0_2 with (bs2:=nil) (dgs2:=dg_empty::nil) ; auto ~.
+      destruct (trans e2 nil (dg_ebox dg_empty) (dg_empty :: nil)).
+      rewrite trans_depth_0_2 with (bs2:=nil) (dgs2:=nil) ; auto ~.
       constructor.
       apply SValueLength in H1.
       exfalso ; generalize H1 ; clear ; simpl ; intros ; omega.
 
     (* Case ELift *)
-    specialize (depth_length e1 bs) ; intros DpthLength.
+    specialize (depth_length e1 bs (dg_elift dg) dgs) ; intros DpthLength.
     inversion Step ; subst.
-    specialize (IHe1 bs).
-    destruct (trans e1).
+    specialize (IHe1 bs (dg_elift dg) dgs).
+    destruct (trans e1 bs (dg_elift dg) dgs).
+    assert(DGValid.valid_dgs (depth e1) (dg_elift dg) dgs) as Valid1.
+      apply DGValid.valid_dgs_trans with (dg1:=dg) ; try(assumption) ; repeat(constructor).
     destruct t ; intros.
 
       (* SubCase ELift, n=0, e -> e' *)
-      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1 Valid1).
       unfold trans_expr in *|-* ; simpl in *|-*.
       inversion IHe1 ; subst.
-      apply Rel_step with (e1:=bind e0 (fun v => cast_elift v)) ; auto ~.
+      assert(dg=dg_empty) ; [|subst].
+        rewrite DpthLength in DGProp.
+        destruct DGProp ; destruct H0.
+        specialize (H2 0) ; simpl in H2 ; apply H2 ; try(omega).
+        apply R.rho_O.
+      apply Rel_step with (e1:=bind dg_empty e0 
+        (fun v => cast_elift dg_empty v)) ; auto ~.
       apply MP.astep_bind_elift ; assumption.
+      rewrite DGR.dg_elift_empty.
       destruct (trans e3).
       constructor ; [auto ~ | intros ; constructor].
 
       (* SubCase ELift, n>0 *)
-      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1).
+      specialize (IHe1 e3 M1 M2 MemSvalue0 MemDepth0 BSLength H1 Valid1).
       destruct (Context.shift (t :: t0)).
       destruct t1 ; simpl in *|-* ; auto ~.
       destruct p ; destruct (trans e3) ; intros.
@@ -3161,7 +3022,7 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         destruct H2 ; destruct H3 ; destruct H4 ; subst.
         repeat(split ; auto ~).
         unfold admin_ssubst ; intros.
-        rewrite MP.ssubst_bind with (f2:=fun v0 => cast_elift v0).
+        rewrite MP.ssubst_bind with (f2:=fun v0 => cast_elift dg v0).
         constructor ; auto ~.
         intros ; constructor.
         intros.
@@ -3178,40 +3039,57 @@ Module TranslationStepProperties (R:Replacement) (S:ReplacementCalculus R)
         rewrite H4 ; auto ~.
 
       (* SubCase ELift, n=0, svalue 0 e *)
-      specialize (svalue_phi e1 bs H1) ; intros SValuePhi.
+      specialize (svalue_phi e1 bs (dg_erun dg) dgs H1) ; intros SValuePhi.
       unfold trans_expr in SValuePhi.
       unfold trans_expr.
+      assert(dg=dg_empty) ; [|subst].
+        rewrite <- H in DGProp.
+        destruct DGProp ; destruct H2.
+        specialize (H3 0) ; simpl in H3 ; apply H3 ; try(omega).
+        apply R.rho_O.
       simpl.
-      rewrite trans_depth_0 with (bs1:=0::bs) (bs2:=bs) ; 
-      rewrite_eq MP.Translation.trans trans ; rewrite_eq MP.Translation.phi phi ;
-      auto ~.
-      destruct (trans e1 bs).
+      rewrite trans_depth_0 with (bs1:=0::bs) (bs2:=bs) ; auto ~.
+      rewrite DGR.dg_erun_empty in *|-*.
+      rewrite DGR.dg_elift_empty in *|-*.
+      destruct (trans e1 bs dg_empty dgs).
       rewrite <- H in DpthLength ; destruct t ; [|inversion DpthLength].
       clear IHe1 ; subst.
-      apply Rel_step with (e1:=ret (cast_ebox (ret (phi e1 bs)))).
+      apply Rel_step with (e1:=ret dg_empty (cast_ebox dg_empty 
+        (ret (dg_ebox dg_empty) (phi e1 bs (dg_ebox dg_empty) (dg_empty::dgs))))).
       apply MP.astep_bind_2 ; auto ~.
+      rewrite phi_depth_0_2 with (bs2:=nil) (dgs2:=nil) ; auto ~.
+      rewrite phi_depth_0_2 with (bs1:=bs) (bs2:=nil) (dgs2:=dg_empty::nil) ; auto ~.
       apply MP.astep_elift ; auto ~.
+
+      specialize(svalue_phi e1 bs (dg_ebox dg_empty) (dg_empty::nil) H1) ; intros.
+      specialize (depth_length e1 bs (dg_ebox dg_empty) (dg_empty::nil)) ; intros DpthLength3.
+      unfold trans_expr in H0 ; destruct (trans e1 bs (dg_ebox dg_empty) (dg_empty :: nil)).
+      rewrite phi_depth_0_2 with (bs2:=bs) (dgs2:=dg_empty::nil) ; auto ~.
+      destruct t ; [| exfalso ; simpl in *|-* ; omega].
+      rewrite H0.
       simpl ; constructor.
   Qed.
 
+  Definition trans_expr (e:S.expr) := trans_expr e (0::nil) dg_empty nil.
+
   Theorem sstep_rstep_O:
     forall (e1 e2:S.expr) (M1 M2:S.Memory.t),
-    let bs := 0::nil in
     depth e1 = 0 ->
     memory_svalue 0 M1 ->
     memory_depth M1 = 0 ->
     S.sstep 0 (M1, e1) (M2, e2) -> 
-    rstep (trans_mem M1 bs, trans_expr e1 bs) 
-      (trans_mem M2 bs, trans_expr e2 bs).
+    rstep (trans_mem M1, trans_expr e1) 
+      (trans_mem M2, trans_expr e2).
   Proof.
     intros.
-    specialize (sstep_rstep e1 bs e2 M1 M2 H0) ; intros.
+    specialize (sstep_rstep e1 (0::nil) dg_empty nil e2 M1 M2 H0) ; intros.
     simpl in H3.
-    specialize (depth_length e1 bs) ; intros.
-    unfold trans_expr ; destruct (trans e1).
+    specialize (depth_length e1 (0::nil) dg_empty nil) ; intros.
+    unfold trans_expr, MP.Translation.trans_expr in *|-* ; destruct (trans e1).
     rewrite H in H4 ; destruct t ; [|inversion H4].
     rewrite H in *|-*.
     apply H3 ; auto ~.
+    apply DGValid.dg_valid_dgs_nil.
   Qed.
 
 End TranslationStepProperties.

@@ -17,9 +17,11 @@ Require Import "Calculus/MultiStaged/Properties".
 Require Import "Calculus/MultiStaged/Monad".
 Require Import "Calculus/MultiStaged/Translation".
 Require Import "Calculus/MultiStaged/MonadStepProperties".
+Require Import "Calculus/MultiStaged/DataGathering".
 
-Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
-  (T:StagedCalculus) (M:Monad R S T) (C:Context R S T M).
+Module Type ContextStaticProperties (R:Replacement) 
+  (S:ReplacementCalculus R) (T:StagedCalculus) 
+  (DG:DataGathering R S) (M:Monad R S T DG) (C:Context R S T DG M).
 
   Import M.
   Import C.
@@ -357,18 +359,24 @@ Module Type ContextStaticProperties (R:Replacement) (S:ReplacementCalculus R)
 End ContextStaticProperties.
 
 Module ContextStaticPropertiesImpl (R:Replacement) (S:ReplacementCalculus R)
-  (T:StagedCalculus) (M:Monad R S T) (C:Context R S T M).
-  Include ContextStaticProperties R S T M C.
+  (T:StagedCalculus) (DG:DataGathering R S) 
+  (M:Monad R S T DG) (C:Context R S T DG M).
+  Include ContextStaticProperties R S T DG M C.
 End ContextStaticPropertiesImpl.
 
-Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) (M:Monad R S T) (Tr:Translation R S T M).
+Module Type TranslationStaticProperties (R:Replacement) 
+  (S:ReplacementCalculus R) (T:StagedCalculus) 
+  (DG:DataGathering R S) (DGP:DataGatheringPredicates R S DG)
+  (DGR:DataGatheringRequirements R S DG DGP)
+  (M:Monad R S T DG) (Tr:Translation R S T DG DGP DGR M).
 
   Module CalculusProperties := CalculusProperties R S.
-  Module ContextStaticProperties := ContextStaticPropertiesImpl R S T M Tr.Context.
+  Module ContextStaticProperties := 
+    ContextStaticPropertiesImpl R S T DG M Tr.Context.
   Import Tr.
   Import S.
   Import M.
+  Import DG.
 
   Tactic Notation "try_specialize_1" ident(IHe) ident(bs) 
     ident(dg) ident(dgs) ident(v) ident(v0) tactic(t) :=
@@ -1811,6 +1819,7 @@ Module Type TranslationStaticProperties (R:Replacement) (S:ReplacementCalculus R
 End TranslationStaticProperties.
 
 Module TranslationStaticPropertiesImpl (R:Replacement) (S:ReplacementCalculus R)
-    (T:StagedCalculus) (M:Monad R S T) (Tr:Translation R S T M).
-  Include TranslationStaticProperties R S T M Tr.
+    (T:StagedCalculus) (DG:DataGathering R S) (DGP:DataGatheringPredicates R S DG)
+  (DGR:DataGatheringRequirements R S DG DGP) (M:Monad R S T DG) (Tr:Translation R S T DG DGP DGR M).
+  Include TranslationStaticProperties R S T DG DGP DGR M Tr.
 End TranslationStaticPropertiesImpl.

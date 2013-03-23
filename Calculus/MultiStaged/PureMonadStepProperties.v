@@ -17,20 +17,24 @@ Require Import "Calculus/MultiStaged/Properties".
 Require Import "Calculus/MultiStaged/Monad".
 Require Import "Calculus/MultiStaged/PureMonad".
 Require Import "Calculus/MultiStaged/Translation".
+Require Import "Calculus/MultiStaged/DataGathering".
 
 Module Type PureMonadStepProperties (R:Replacement) (S:ReplacementCalculus R)
-  (T:StagedCalculus) (PM:PureMonad R S T).
+  (T:StagedCalculus) (EDG:EmptyDataGathering R S)
+  (DGP:DataGatheringPredicates R S EDG)
+  (EDGR:EmptyDataGatheringRequirements R S EDG DGP) (PM:PureMonad R S T).
 
-  Module M := PureToMonadImpl R S T PM.
-  Module Translation := TranslationImpl R S T M.
+  Module M := PureToMonadImpl R S T PM EDG.
+  Module Translation := TranslationImpl R S T EDG DGP EDGR M.
   Import Translation.
   Import T.
   Import PM.
+  Import EDG.
 
-  Definition phi (e:S.expr) (bs:list nat) := phi e bs M.dg_empty nil.
-  Definition trans (e:S.expr) (bs:list nat) := trans e bs M.dg_empty nil.
-  Definition trans_expr (e:S.expr) (bs:list nat) := trans_expr e bs M.dg_empty nil.
-  Definition trans_mem (M:S.Memory.t) (bs:list nat) := trans_mem M bs M.dg_empty nil.
+  Definition phi (e:S.expr) (bs:list nat) := phi e bs dg_empty nil.
+  Definition trans (e:S.expr) (bs:list nat) := trans e bs dg_empty nil.
+  Definition trans_expr (e:S.expr) (bs:list nat) := trans_expr e bs dg_empty nil.
+  Definition trans_mem (M:S.Memory.t) (bs:list nat) := trans_mem M bs dg_empty nil.
 
   (** Substitution Properties *)
 
